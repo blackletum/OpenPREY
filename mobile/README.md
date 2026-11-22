@@ -7,11 +7,20 @@ The imported openQ4 adapter sources use this repository's GPL-3.0-or-later
 license. Their original attribution is retained in each source file.
 
 Android builds default to a standalone SDL3 host and export `SDL_main` from
-`libquake4.so`. An SDLActivity-based application must load SDL3 first, supply
-the native library directory through `OPENQ4_NATIVE_LIBS`, and pass the user's
-Quake 4 installation directory with `+set fs_basepath`. Saves default to SDL's
-app-private internal storage, or `USER_FILES/quake4` when supplied by a host.
-Both single-player and multiplayer modules use the unified `baseoq4` directory.
+`libopenpr06.so`. An SDLActivity-based application must load SDL3 first, supply
+the native library directory through `OPENQ4_NATIVE_LIBS`, and pass the folder
+that holds the user's PREY `base/` with `+set fs_basepath`. Saves default to
+SDL's app-private internal storage, or `USER_FILES/quake4` when supplied by a
+host. The unified `libgame_<arch>.so` module serves single player and
+multiplayer, with openPR06's content in `basepr/`.
+
+`quake4_bridge.h` and `touch_interface_quake4.cpp` keep their names: the
+`Quake4_*` functions are the C ABI the external SigmaTouch host links against,
+and every action they post (`_attack`, `_zoom`, `_weaponWheel`, `_showScores`
+and the movement buttons) exists in Prey's usercmd table
+(`src/framework/UsercmdGen.cpp`). SigmaTouch builds still pass
+`ENGINE_NAME="quake4"` to that host; an openPR06 SigmaTouch host would need its
+own name and has not been built.
 
 SigmaTouch is optional and selected with `OPENQ4_SIGMATOUCH` by the build system.
 The host supplies Clibs_OpenTouch, MobileTouchControls, its existing touch art,

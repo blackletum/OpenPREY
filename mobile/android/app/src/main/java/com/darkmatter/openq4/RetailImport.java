@@ -168,7 +168,7 @@ final class RetailImport {
         if (external == null) throw new Failure(Code.DESTINATION_UNAVAILABLE, "", null);
         File root = external.getCanonicalFile();
         requireDirectory(root);
-        File data = new File(root, "q4base"), work = new File(root, ".openq4-import");
+        File data = new File(root, RetailData.DIRECTORY), work = new File(root, ".openq4-import");
         requireDirectory(data);
         requireDirectory(work);
         Map<String, File> existing = destinations(data);
@@ -191,7 +191,7 @@ final class RetailImport {
                         progress(observer, Phase.CHECKING_EXISTING, name, completed, planned.size(), bytes, total);
                         return true;
                     });
-                    healthy = installed.checksum == known.checksum;
+                    healthy = known.checksum != 0 && installed.checksum == known.checksum;
                 } catch (InterruptedIOException cancelled) {
                     throw cancelled;
                 } catch (IOException damaged) {
@@ -254,7 +254,9 @@ final class RetailImport {
             } catch (IOException error) {
                 throw new Failure(Code.INVALID_ARCHIVE, name, error);
             }
-            if (known != null && known.required && result.checksum != known.checksum) {
+            // A retail layout archive must be the official copy; patch packs are presence-only.
+            if (known != null && known.checksum != 0 && (known.required || RetailData.core(name))
+                    && result.checksum != known.checksum) {
                 throw new Failure(Code.WRONG_VERSION, name, null);
             }
             // Cancellation before promotion leaves the previous file intact.

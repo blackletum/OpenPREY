@@ -39,8 +39,8 @@ public final class RetailImportTest {
         Scenario(String name) throws Exception {
             Path base=Files.createDirectory(root.resolve(name));
             external=base.resolve("external").toFile();
-            data=Files.createDirectories(external.toPath().resolve("q4base"));
-            save=Files.createDirectories(base.resolve("private/saves/baseoq4/savegames")).resolve("campaign.save");
+            data=Files.createDirectories(external.toPath().resolve("base"));
+            save=Files.createDirectories(base.resolve("private/saves/basepr/savegames")).resolve("campaign.save");
             Files.writeString(save,"keep this save exactly");
             config=data.resolve("autoexec.cfg");Files.writeString(config,"keep this setting exactly");
         }

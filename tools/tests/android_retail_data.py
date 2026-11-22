@@ -43,7 +43,7 @@ public final class RetailDataTest {
             new RetailData.Expected("pak002.pk4",checksum,true),
             new RetailData.Expected("pak023.pk4",checksum,false),
             new RetailData.Expected("zpak_english.pk4",checksum,false));
-        Path data=Files.createDirectory(root.resolve("q4base"));
+        Path data=Files.createDirectory(root.resolve("base"));
         File directory=data.toFile();
         RetailData.Report report=RetailData.scan(directory,catalogue,null);
         require(!report.ready() && issue(report,RetailData.Code.MISSING_REQUIRED,"pak001.pk4",true) &&
@@ -64,17 +64,15 @@ public final class RetailDataTest {
             }
             return true;
         });
+        // Prey: absent optional media and languages are never reported.
         require(report.ready() && report.verified.size()==2 && calls[0]>4 && state[0]==state[1] &&
-            issue(report,RetailData.Code.MISSING_OPTIONAL,"pak023.pk4",false) &&
-            issue(report,RetailData.Code.MISSING_LANGUAGE,"",false),"optional/language absence incorrectly blocks core data");
-        Files.copy(stored.toPath(),data.resolve("zpak_english_01.pk4"));
-        require(issue(RetailData.scan(directory,catalogue,null),RetailData.Code.MISSING_LANGUAGE,"",false),
-            "language patch mistaken for dialogue base");
+            report.issues.isEmpty(),"optional absence or a Quake 4 language warning reported");
         Files.copy(stored.toPath(),data.resolve("ZPAK_FRENCH.PK4"));
         report=RetailData.scan(directory,catalogue,null);
         require(report.ready() && !issue(report,RetailData.Code.MISSING_LANGUAGE,"",false) &&
             issue(report,RetailData.Code.UNRECOGNIZED_ARCHIVE,"ZPAK_FRENCH.PK4",false),
-            "valid alternate locale rejected or falsely claimed known checksum");
+            "unknown archive rejected or falsely claimed known checksum");
+        Files.delete(data.resolve("ZPAK_FRENCH.PK4"));
         Files.copy(root.resolve("reversed.pk4"),data.resolve("pak023.pk4"));
         report=RetailData.scan(directory,catalogue,null);
         require(report.ready() && issue(report,RetailData.Code.CHECKSUM_MISMATCH,"pak023.pk4",false),
@@ -106,7 +104,7 @@ public final class RetailDataTest {
                 }
             };
             report=RetailData.scan(excessive,catalogue,null);
-            require(!report.ready() && issue(report,RetailData.Code.LIMIT,"q4base",true),"unbounded folder inventory");
+            require(!report.ready() && issue(report,RetailData.Code.LIMIT,"base",true),"unbounded folder inventory");
         }
         if(!System.getProperty("os.name").startsWith("Windows")) {
             Path link=Files.createSymbolicLink(data.resolve("pak023.pk4"),stored.toPath());
@@ -145,20 +143,55 @@ public final class RetailDataTest {
             }
             return true;
         });
-        require(changed[0] && !report.ready() && issue(report,RetailData.Code.CHANGED_FILE,"q4base",true),
+        require(changed[0] && !report.ready() && issue(report,RetailData.Code.CHANGED_FILE,"base",true),
             "directory changed during verification was accepted");
-        // The normal entry point must use the real required catalogue.
+        // The normal entry point must use the real catalogue: PAK001.PK4 and
+        // pak002.pk4 select the classic CD layout, whose other members are
+        // missing and whose pak001.pk4 is not the official archive.
         report=RetailData.scan(directory,null);
-        require(!report.ready() && issue(report,RetailData.Code.MISSING_REQUIRED,"pak022.pk4",true) &&
+        require(!report.ready() && issue(report,RetailData.Code.MISSING_REQUIRED,"pak000.pk4",true) &&
+            issue(report,RetailData.Code.MISSING_REQUIRED,"pak004.pk4",true) &&
+            !issue(report,RetailData.Code.MISSING_REQUIRED,"pak_data.pk4",true) &&
             issue(report,RetailData.Code.CHECKSUM_MISMATCH,"PAK001.PK4",true),"production scan bypassed baseline");
+        layouts(root,stored,checksum);
         if(!retail.isEmpty()) {
             report=RetailData.scan(new File(retail),null);
             require(report.ready(),"actual media failed complete required-set scan");
             require(report.issues.isEmpty(),"actual media unexpectedly warned: "+report.issues.size());
             System.out.println("verified complete retail set: "+report.verified.size()+" archives");
         }
-        System.out.println("PASS: native catalogue/language parity; required, optional, alternate-language and ignored-code selection; "+
+        System.out.println("PASS: native catalogue/language parity; required, optional, unknown-archive and ignored-code selection; Prey CD/digital layouts; "+
             "case aliases, damaged optional media, missing files, whole-set changes, progress and cancellation/retry");
+    }
+    /** Prey's two retail layouts, with the real names and a stand-in checksum. */
+    static void layouts(Path root,File stored,int checksum) throws Exception {
+        List<RetailData.Expected> catalogue=new ArrayList<>();
+        for(RetailData.Expected item:RetailData.OFFICIAL)
+            catalogue.add(new RetailData.Expected(item.name,item.checksum==0?0:checksum,item.required));
+        require(RetailData.layout(List.of()).equals(RetailData.LAYOUTS.get(0)),"empty folder does not report the CD layout");
+        Path data=Files.createDirectory(root.resolve("layouts"));File directory=data.toFile();
+        for(String name:List.of("pak_data.pk4","pak_sound.pk4","pak_en_v.pk4"))Files.copy(stored.toPath(),data.resolve(name));
+        RetailData.Report report=RetailData.scan(directory,catalogue,null);
+        require(!report.ready() && issue(report,RetailData.Code.MISSING_REQUIRED,"pak_en_t.pk4",true) &&
+            !issue(report,RetailData.Code.MISSING_REQUIRED,"pak000.pk4",true),"partial digital layout misdiagnosed");
+        Files.copy(stored.toPath(),data.resolve("PAK_EN_T.PK4"));
+        Files.copy(stored.toPath(),data.resolve("pak000.pk4"));
+        Files.writeString(data.resolve("pak005.pk4"),"presence-only patch media");
+        report=RetailData.scan(directory,catalogue,null);
+        require(!report.ready() && issue(report,RetailData.Code.INVALID_ARCHIVE,"pak005.pk4",true),"unreadable patch pack accepted");
+        Files.copy(stored.toPath(),data.resolve("pak005.pk4"),StandardCopyOption.REPLACE_EXISTING);
+        report=RetailData.scan(directory,catalogue,null);
+        require(report.ready() && report.issues.isEmpty(),"complete digital layout with a partial CD set or a patch pack not ready");
+        Files.copy(root.resolve("reversed.pk4"),data.resolve("pak000.pk4"),StandardCopyOption.REPLACE_EXISTING);
+        report=RetailData.scan(directory,catalogue,null);
+        require(report.ready() && issue(report,RetailData.Code.CHECKSUM_MISMATCH,"pak000.pk4",false),
+            "modified archive of the unused layout blocked a complete layout");
+        Files.copy(root.resolve("reversed.pk4"),data.resolve("pak_sound.pk4"),StandardCopyOption.REPLACE_EXISTING);
+        report=RetailData.scan(directory,catalogue,null);
+        require(!report.ready() && issue(report,RetailData.Code.CHECKSUM_MISMATCH,"pak_sound.pk4",true),
+            "modified archive of the selected layout accepted");
+        require(RetailData.core("PAK_DATA.PK4") && RetailData.core("pak003.pk4") && !RetailData.core("pak005.pk4"),
+            "retail layout membership");
     }
     static void invalid(File file,Pk4Checksum.Problem expected,boolean full) throws Exception {
         try { Pk4Checksum.read(file,full,null);throw new AssertionError("accepted invalid archive: "+file); }
@@ -291,9 +324,19 @@ int main(){std::string path;while(std::getline(std::cin,path)){
         create('deflated.pk4',zipfile.ZIP_DEFLATED)
         create('reversed.pk4',zipfile.ZIP_STORED,True)
         with zipfile.ZipFile(scratch/'empty.pk4','w'):pass
-        archives=[scratch/name for name in ('stored.pk4','deflated.pk4','reversed.pk4','empty.pk4')]
+        # Retail PREY's pak_data.pk4 has an empty entry marked DEFLATED with no
+        # deflate stream (compressed size 0); Python writes a 2-byte final block.
+        with zipfile.ZipFile(scratch/'empty-deflated.pk4','w') as archive:
+            archive.writestr('af/empty.af',b'')
+        streamless=bytearray((scratch/'empty-deflated.pk4').read_bytes())
+        for signature,offset in ((b'PK',8),(b'PK',10)):
+            position=0
+            while (position:=streamless.find(signature,position))>=0:
+                struct.pack_into('<H',streamless,position+offset,8);position+=4
+        (scratch/'empty-deflated.pk4').write_bytes(streamless)
+        archives=[scratch/name for name in ('stored.pk4','deflated.pk4','reversed.pk4','empty.pk4','empty-deflated.pk4')]
         engine=(ROOT/'src/framework/FileSystem.cpp').read_text()
-        official_rows=re.findall(r'\{\s*"([^"]+\.pk4)",\s*(0x[0-9a-f]+),\s*(true|false),',engine)
+        official_rows=re.findall(r'\{\s*"([^"]+\.pk4)",\s*(0x[0-9a-f]+|0),\s*(true|false),',engine)
         official={name.lower():int(value,16) for name,value,_ in official_rows}
         (scratch/'official.tsv').write_text(''.join(f'{name}\t{int(value,16):08x}\t{required}\n'
             for name,value,required in official_rows))
@@ -313,7 +356,7 @@ int main(){std::string path;while(std::getline(std::cin,path)){
                                  capture_output=True,text=True,check=True).stdout.splitlines()
         assert len(checksums)==len(archives) and checksums[0]==checksums[1] and checksums[0]!=checksums[2]
         for (path,_),value in zip(archive_data,checksums):
-            if path.name.lower() in official:assert int(value,16)==official[path.name.lower()],path.name
+            if official.get(path.name.lower()):assert int(value,16)==official[path.name.lower()],path.name
         (scratch/'archives.tsv').write_text(''.join(f'{path}\t{value}\t{size}\n'
             for (path,size),value in zip(archive_data,checksums)))
         (scratch/'invalid.pk4').write_bytes(b'not a zip archive'*4)

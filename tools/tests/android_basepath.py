@@ -23,7 +23,7 @@ struct Cvar {
 } fs_basepath;
 struct Common { void Warning(const char*,...) {} void Printf(const char*,...) {} } commonStorage;
 static Common* common=&commonStorage;
-static const char* BASE_GAMEDIR="q4base";
+static const char* BASE_GAMEDIR="base";
 static int discoveryCalls=0;
 static bool discover=false;
 static bool FS_HasGameFilesAtBasePath(const char* path) { return std::string(path)=="/retail"; }

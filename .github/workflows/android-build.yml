@@ -4,9 +4,15 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Engine release version to package (for example 0.14.001)
+        description: Engine release version to package (for example 0.15.0)
         required: true
         type: string
+      signing:
+        description: release (the maintainer's ANDROID_RELEASE_* secrets and pinned certificate) or ci (a throwaway per-run key; never distribute)
+        required: true
+        type: choice
+        options: [release, ci]
+        default: release
   workflow_call:
     inputs:
       version:
@@ -17,15 +23,22 @@ on:
         required: false
         type: string
         default: ''
+      signing:
+        description: release or ci; see workflow_dispatch
+        required: false
+        type: string
+        default: release
+    # Required for signing: release. openPR06 has none yet; see
+    # docs/dev/android-build.md, Release signing.
     secrets:
       ANDROID_RELEASE_KEYSTORE_BASE64:
-        required: true
+        required: false
       ANDROID_RELEASE_STORE_PASSWORD:
-        required: true
+        required: false
       ANDROID_RELEASE_KEY_PASSWORD:
-        required: true
+        required: false
       ANDROID_RELEASE_KEY_ALIAS:
-        required: true
+        required: false
 
 permissions:
   contents: read
@@ -36,7 +49,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
-      OPENQ4_ANDROID_VERSION: ${{ inputs.version }}
+      OPENPR06_ANDROID_VERSION: ${{ inputs.version }}
+      ANDROID_SIGNING: ${{ inputs.signing || 'release' }}
       ANDROID_NDK_VERSION: 30.0.16248370
       GRADLE_USER_HOME: ${{ github.workspace }}/.tmp/android-release/gradle-home
     steps:
@@ -80,10 +94,10 @@ jobs:
         run: |
           set -euo pipefail
           if [ -n "${{ inputs.content_packs_artifact }}" ]; then
-            export OPENQ4_PREBUILT_CONTENT_PACKS="${RUNNER_TEMP}/content-packs"
+            export OPENPR06_PREBUILT_CONTENT_PACKS="${RUNNER_TEMP}/content-packs"
           fi
           bash tools/build/build_android_release.sh
-      - name: Sign and verify release APK
+      - name: Sign and verify APK
         env:
           ANDROID_RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
           ANDROID_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_STORE_PASSWORD }}
@@ -95,22 +109,41 @@ jobs:
           umask 077
           key_file="${GITHUB_WORKSPACE}/.tmp/android-release/release.p12"
           trap 'rm -f -- "${key_file}"' EXIT
-          printf '%s' "${ANDROID_RELEASE_KEYSTORE_BASE64}" | base64 --decode > "${key_file}"
           tools_dir="${ANDROID_HOME}/build-tools/35.0.0"
-          apk="${GITHUB_WORKSPACE}/.tmp/android-release/output/openq4-${OPENQ4_ANDROID_VERSION}-android-arm64-experimental.apk"
-          "${tools_dir}/zipalign" -P 16 -f 4 \
-            builddir/android-apk/app/outputs/apk/release/app-release-unsigned.apk "${apk}"
-          "${tools_dir}/apksigner" sign --ks "${key_file}" \
-            --ks-key-alias "${ANDROID_RELEASE_KEY_ALIAS}" \
-            --ks-pass env:ANDROID_RELEASE_STORE_PASSWORD --key-pass env:ANDROID_RELEASE_KEY_PASSWORD \
-            --v4-signing-enabled false "${apk}"
-          python tools/build/verify_android_apk.py --apk "${apk}" \
-            --stage .install/android/arm64-v8a --version "${OPENQ4_ANDROID_VERSION}" \
-            --build-tools "${tools_dir}" --certificate mobile/android/release-signing-cert.pem
+          output="${GITHUB_WORKSPACE}/.tmp/android-release/output"
+          case "${ANDROID_SIGNING}" in
+            release)
+              certificate=mobile/android/release-signing-cert.pem
+              if [ -z "${ANDROID_RELEASE_KEYSTORE_BASE64}" ] || [ ! -f "${certificate}" ]; then
+                echo "::error::Release signing needs the ANDROID_RELEASE_* secrets and ${certificate}; see docs/dev/android-build.md (Release signing)."
+                exit 1
+              fi
+              printf '%s' "${ANDROID_RELEASE_KEYSTORE_BASE64}" | base64 --decode > "${key_file}"
+              apk="${output}/openpr06-${OPENPR06_ANDROID_VERSION}-android-arm64-experimental.apk"
+              ;;
+            ci)
+              # A key that lives for this job only: it proves the APK signs and
+              # verifies, and no device can be updated from it later.
+              export ANDROID_RELEASE_KEY_ALIAS=openpr06-ci
+              ANDROID_RELEASE_STORE_PASSWORD="$(openssl rand -hex 24)"
+              export ANDROID_RELEASE_STORE_PASSWORD ANDROID_RELEASE_KEY_PASSWORD="${ANDROID_RELEASE_STORE_PASSWORD}"
+              keytool -genkeypair -noprompt -storetype PKCS12 -keystore "${key_file}"                 -alias "${ANDROID_RELEASE_KEY_ALIAS}" -keyalg RSA -keysize 3072 -validity 2                 -dname 'CN=openPR06 CI throwaway key'                 -storepass:env ANDROID_RELEASE_STORE_PASSWORD -keypass:env ANDROID_RELEASE_KEY_PASSWORD
+              certificate="${GITHUB_WORKSPACE}/.tmp/android-release/ci-signing-cert.pem"
+              keytool -exportcert -rfc -keystore "${key_file}" -alias "${ANDROID_RELEASE_KEY_ALIAS}"                 -storepass:env ANDROID_RELEASE_STORE_PASSWORD -file "${certificate}"
+              apk="${output}/openpr06-${OPENPR06_ANDROID_VERSION}-android-arm64-ci-signed-not-for-distribution.apk"
+              ;;
+            *)
+              echo "::error::Unknown signing mode '${ANDROID_SIGNING}' (release or ci)."
+              exit 1
+              ;;
+          esac
+          "${tools_dir}/zipalign" -P 16 -f 4             builddir/android-apk/app/outputs/apk/release/app-release-unsigned.apk "${apk}"
+          "${tools_dir}/apksigner" sign --ks "${key_file}"             --ks-key-alias "${ANDROID_RELEASE_KEY_ALIAS}"             --ks-pass env:ANDROID_RELEASE_STORE_PASSWORD --key-pass env:ANDROID_RELEASE_KEY_PASSWORD             --v4-signing-enabled false "${apk}"
+          python tools/build/verify_android_apk.py --apk "${apk}"             --stage .install/android/arm64-v8a --version "${OPENPR06_ANDROID_VERSION}"             --build-tools "${tools_dir}" --certificate "${certificate}"
       - name: Upload signed APK and corresponding dependency sources
         uses: actions/upload-artifact@v7
         with:
-          name: openq4-release-${{ inputs.version }}-android-arm64
+          name: openpr06-${{ inputs.signing == 'ci' && 'ci-signed' || 'release' }}-${{ inputs.version }}-android-arm64
           path: |
             .tmp/android-release/output/*.apk
             .tmp/android-release/output/*-dependency-sources.tar.xz

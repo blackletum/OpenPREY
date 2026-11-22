@@ -50,8 +50,8 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools/build"))
 from verify_android_apk import verify_payload, verify_tools
 
-PACKAGE = "com.darkmatter.openq4.emulator"
-SAVE_ROOT = "files/saves/baseoq4"
+PACKAGE = "com.darkmatter.openpr06.emulator"
+SAVE_ROOT = "files/saves/basepr"
 SLOT = "AndroidEmulatorSmoke"
 CAPTURES = ("emulator-spawn.tga", "emulator-moved.tga", "emulator-restored.tga")
 ROTATE_CAPTURES = ("emulator-spawn.tga", "emulator-portrait.tga", "emulator-moved.tga", "emulator-restored.tga")
@@ -354,14 +354,14 @@ devmap game/airdefense1""")
 
 def parallax_lab_files(lab: Path | None) -> dict[str, bytes]:
     """The parallax laboratory's generated assets and compiled map, keyed by
-    their path under baseoq4 (the app's save path is a search path)."""
+    their path under basepr (the app's save path is a search path)."""
     if lab is None:
         raise ValueError("Parallax mode needs --lab, a prepared parallax laboratory runtime")
     manifest = json.loads((lab / "parallax-lab.json").read_text(encoding="utf-8"))
     if manifest.get("id") != "openq4-parallax-laboratory":
         raise ValueError("--lab is not a parallax laboratory runtime")
-    names = [name for name in manifest["sha256"] if name.startswith("baseoq4/")]
-    compiled = sorted((lab / "baseoq4" / "maps" / "tools").glob("openq4_parallax_lab.*"))
+    names = [name for name in manifest["sha256"] if name.startswith("basepr/")]
+    compiled = sorted((lab / "basepr" / "maps" / "tools").glob("openq4_parallax_lab.*"))
     names += [p.relative_to(lab).as_posix() for p in compiled if p.suffix != ".map"]
     if not any(name.endswith(".proc") for name in names):
         raise ValueError("--lab has no compiled map; run renderer_parallax_occlusion.py --prepare")
@@ -370,7 +370,7 @@ def parallax_lab_files(lab: Path | None) -> dict[str, bytes]:
         data = (lab / name).read_bytes()
         if name in manifest["sha256"] and hashlib.sha256(data).hexdigest() != manifest["sha256"][name]:
             raise ValueError(f"Laboratory file does not match its manifest: {name}")
-        files[name.removeprefix("baseoq4/")] = data
+        files[name.removeprefix("basepr/")] = data
     return files
 
 
@@ -595,7 +595,7 @@ class Probe:
         deadline = time.monotonic() + 60
         save = None
         while time.monotonic() < deadline:
-            log = self.read("logs/openq4.log") or b""
+            log = self.read("logs/openpr06.log") or b""
             save = self.read(f"savegames/{SUSPEND_SLOT}.save")
             if b"Saving 'Suspended' as the app goes to the background" in log and save:
                 break
@@ -683,7 +683,7 @@ class Probe:
             temporary.unlink(missing_ok=True)
 
     def collect(self):
-        for name in ("logs/openq4.log", "openQ4Config.cfg"):
+        for name in ("logs/openpr06.log", "openPR06Config.cfg"):
             data = self.read(name)
             if data is not None:
                 (self.out / Path(name).name).write_bytes(data)
@@ -748,7 +748,7 @@ class Probe:
         uid = self.adb("shell", "run-as", PACKAGE, "id", "-u").stdout.decode().strip()
         if not re.fullmatch(r"1\d{4}", uid):
             raise ValueError("Expected an application UID in the emulator's primary user")
-        retail = f"/sdcard/Android/data/{PACKAGE}/files/q4base"
+        retail = f"/sdcard/Android/data/{PACKAGE}/files/base"
         self.adb("shell", "mkdir", "-p", retail)
         # Root adbd otherwise creates an inaccessible root-owned 2770 directory
         # on recent Android FUSE. Give only this app's test copies to its UID.
@@ -758,7 +758,7 @@ class Probe:
         assets = [p for p in sorted(self.args.assets.iterdir()) if p.is_file()
                   and re.fullmatch(r"(?:pak\d{3}|zpak_english(?:_\d{2})?)\.pk4", p.name)]
         if not assets or not (self.args.assets / "pak001.pk4").is_file():
-            raise ValueError("Expected an installed retail q4base directory")
+            raise ValueError("Expected an installed retail base directory")
         for index, path in enumerate(assets, 1):
             checksum = sha(path)
             remote = retail + "/" + path.name
@@ -799,10 +799,10 @@ class Probe:
                 raise ValueError(f"Existing test file must be reviewed before reuse: {name}")
         if self.xr_files:
             self.prepare_xr_runtime(uid)
-        self.before_config = self.read("openQ4Config.cfg")
+        self.before_config = self.read("openPR06Config.cfg")
         if self.before_config is not None:
-            (self.out / "before-openQ4Config.cfg").write_bytes(self.before_config)
-        old_log = self.read("logs/openq4.log")
+            (self.out / "before-openPR06Config.cfg").write_bytes(self.before_config)
+        old_log = self.read("logs/openpr06.log")
         if old_log is not None:
             (self.out / "before-openq4.log").write_bytes(old_log)
         self.prepared = True
@@ -812,9 +812,9 @@ class Probe:
             self.write_setup({"touch_settings": LIFECYCLE_TOUCH, "touch_layout": LIFECYCLE_LAYOUT})
             self.report["touch_layout_record"] = LIFECYCLE_LAYOUT
         if old_log is not None:
-            if self.read("logs/openq4.log") != old_log:
+            if self.read("logs/openpr06.log") != old_log:
                 raise ValueError("Log changed during preparation")
-            self.adb("shell", "run-as", PACKAGE, "rm", self.path("logs/openq4.log"))
+            self.adb("shell", "run-as", PACKAGE, "rm", self.path("logs/openpr06.log"))
         for name, data in self.lab_files.items():
             existing = self.read(name)
             if existing is not None and existing != data:
@@ -850,7 +850,7 @@ class Probe:
                     self.pids.append(pid)
                 elif pid != self.pid:
                     raise ValueError("Native game process was replaced")
-            data = self.read("logs/openq4.log") or b""
+            data = self.read("logs/openpr06.log") or b""
             if re.search(rb"(?:^|\n)(?:ERROR:|FATAL:|Fatal)", data):
                 self.collect()
                 raise ValueError("Engine reported a fatal error; inspect openq4.log")
@@ -885,7 +885,7 @@ class Probe:
                 # session, so a reconnect's map load is the marker). Give a lost
                 # connection time to show before ending the client, which would play on.
                 time.sleep(15)
-                (self.out / "resumed-openq4.log").write_bytes(self.read("logs/openq4.log") or data)
+                (self.out / "resumed-openq4.log").write_bytes(self.read("logs/openpr06.log") or data)
                 self.adb("shell", "am", "force-stop", PACKAGE)
                 self.wait_for_pid(False, 30)
                 break
@@ -1265,9 +1265,9 @@ class Probe:
                 self.adb("shell", "run-as", PACKAGE, "rm", self.path(name))
                 retired[name] = hashlib.sha256(data).hexdigest()
         if self.before_config is not None:
-            self.put("openQ4Config.cfg", self.before_config)
-        elif self.read("openQ4Config.cfg") is not None:
-            self.adb("shell", "run-as", PACKAGE, "rm", self.path("openQ4Config.cfg"))
+            self.put("openPR06Config.cfg", self.before_config)
+        elif self.read("openPR06Config.cfg") is not None:
+            self.adb("shell", "run-as", PACKAGE, "rm", self.path("openPR06Config.cfg"))
         self.report["retired_test_files"] = retired
         self.report["original_config_restored"] = True
         self.restore_rotation_setup()

@@ -42,13 +42,13 @@ public final class PrivateExportTest {
     public static void main(String[] args)throws Exception {
         Path root=Path.of(args[0]),files=root.resolve("private"),cache=root.resolve("cache");
         byte[] save=new byte[180000];new Random(42).nextBytes(save);
-        Path source=files.resolve("saves/baseoq4/savegames/Campaign.save");write(source,save);
-        write(files.resolve("saves/baseoq4/savegames/Campaign.txt"),"Saved mission".getBytes());
-        write(files.resolve("saves/baseoq4/savegames/Campaign.tga"),new byte[]{1,2,3});
+        Path source=files.resolve("saves/basepr/savegames/Campaign.save");write(source,save);
+        write(files.resolve("saves/basepr/savegames/Campaign.txt"),"Saved mission".getBytes());
+        write(files.resolve("saves/basepr/savegames/Campaign.tga"),new byte[]{1,2,3});
         write(files.resolve("saves/q4xbase/savegames/été.save"),"Awakening save".getBytes(java.nio.charset.StandardCharsets.UTF_8));
-        write(files.resolve("saves/baseoq4/logs/openq4.log"),"diagnostic log\n".getBytes());
-        write(files.resolve("saves/baseoq4/logs/fatal.txt"),"fatal details\n".getBytes());
-        write(files.resolve("saves/baseoq4/openq4.cfg"),"private settings not selected".getBytes());
+        write(files.resolve("saves/basepr/logs/openq4.log"),"diagnostic log\n".getBytes());
+        write(files.resolve("saves/basepr/logs/fatal.txt"),"fatal details\n".getBytes());
+        write(files.resolve("saves/basepr/openq4.cfg"),"private settings not selected".getBytes());
         write(files.resolve("packages/keep.pk4"),"not game saves".getBytes());
         Path keep=cache.resolve("openq4-exports/keep.txt");write(keep,"unrelated cache".getBytes());
         Path abandoned=cache.resolve("openq4-exports/export-abandoned.zip.part");write(abandoned,new byte[100]);
@@ -62,9 +62,9 @@ public final class PrivateExportTest {
         try{StorageSession.INSTANCE.beginSetup();throw new AssertionError("import overlapped a live export");}catch(StorageSession.Busy expected){}
         Files.copy(snapshot.file.toPath(),root.resolve("saves.zip"));
         try(ZipFile archive=new ZipFile(snapshot.file)) {
-            require(archive.size()==5 && archive.getEntry("baseoq4/openq4.cfg")==null && archive.getEntry("baseoq4/logs/openq4.log")==null,
+            require(archive.size()==5 && archive.getEntry("basepr/openq4.cfg")==null && archive.getEntry("basepr/logs/openq4.log")==null,
                 "save export included unrelated data");
-            require(Arrays.equals(archive.getInputStream(archive.getEntry("baseoq4/savegames/Campaign.save")).readAllBytes(),save),"save bytes changed");
+            require(Arrays.equals(archive.getInputStream(archive.getEntry("basepr/savegames/Campaign.save")).readAllBytes(),save),"save bytes changed");
         }
         snapshot.close();snapshot.close();available();noTemporary(cache);
         try(PrivateExport.Snapshot logs=PrivateExport.create(files.toFile(),cache.toFile(),PrivateExport.Kind.LOGS,null)) {
@@ -72,7 +72,7 @@ public final class PrivateExportTest {
         }
         available();noTemporary(cache);
         Object diagnosticsOwner=StorageSession.INSTANCE.beginSetup();
-        Path diagnostic=files.resolve("saves/baseoq4/logs/setup.log");
+        Path diagnostic=files.resolve("saves/basepr/logs/setup.log");
         try {
             IOException firstCause=new IOException("provider failure\n"+"é".repeat(8192));
             IOException secondCause=new IOException("nested cause",firstCause);firstCause.initCause(secondCause);
@@ -138,8 +138,8 @@ public final class PrivateExportTest {
             failure(PrivateExport.Code.UNSAFE_PATH,()->PrivateExport.create(files.toFile(),cache.toFile(),PrivateExport.Kind.SAVES,null));Files.delete(reserved);available();
             Path staleLink=cache.resolve("openq4-exports/export-link.zip.part");Files.createSymbolicLink(staleLink,source);
             failure(PrivateExport.Code.UNSAFE_PATH,()->PrivateExport.create(files.toFile(),cache.toFile(),PrivateExport.Kind.SAVES,null));Files.delete(staleLink);available();
-            Path linkedFiles=root.resolve("linked-diagnostics");Files.createDirectories(linkedFiles.resolve("saves/baseoq4"));
-            Files.createSymbolicLink(linkedFiles.resolve("saves/baseoq4/logs"),diagnostic.getParent());
+            Path linkedFiles=root.resolve("linked-diagnostics");Files.createDirectories(linkedFiles.resolve("saves/basepr"));
+            Files.createSymbolicLink(linkedFiles.resolve("saves/basepr/logs"),diagnostic.getParent());
             byte[] previousLog=Files.readAllBytes(diagnostic);
             Object owner=StorageSession.INSTANCE.beginSetup();
             try{require(!SetupDiagnostics.record(linkedFiles.toFile(),"must not escape",null),"diagnostics followed link");}

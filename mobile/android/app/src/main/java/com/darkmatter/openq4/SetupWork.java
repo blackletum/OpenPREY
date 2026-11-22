@@ -44,7 +44,7 @@ final class SetupWork implements SetupTask.Work<RetailData.Report> {
                         progress.update(importPhase(phase), name, completed, files, bytes, total)).report;
                 } finally { documents = null; }
             } else {
-                report = RetailData.scan(new File(external, "q4base"), expected, (phase, name, completed, files, bytes, total) ->
+                report = RetailData.scan(new File(external, RetailData.DIRECTORY), expected, (phase, name, completed, files, bytes, total) ->
                     progress.update(phase == RetailData.Phase.INSPECTING ? SetupTask.Phase.CHECKING_DATA :
                                     SetupTask.Phase.VERIFYING_DATA, name, completed, files, bytes, total));
             }

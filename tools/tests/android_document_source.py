@@ -196,22 +196,22 @@ public final class DocumentSourceTest {
         for(Uri uri:Arrays.asList(null,new Uri("file",ROOT,ROOT,"tree"),new Uri("content",ROOT,ROOT,"document")))
             failed(RetailImport.Code.SOURCE_UNAVAILABLE,()->new DocumentSource(provider(payload),uri));
 
-        Provider nested=provider(payload);nested.listings.put(ROOT,List.<Object[]>of(directory("base-id","Q4BASE")));
+        Provider nested=provider(payload);nested.listings.put(ROOT,List.<Object[]>of(directory("base-id","BASE")));
         nested.listings.put("base-id",List.<Object[]>of(file("nested-file","pak001.pk4",null)));nested.bytes.put("nested-file",payload);
         try(DocumentSource source=new DocumentSource(nested,TREE)) {
             List<RetailImport.Entry> entries=source.entries();require(entries.size()==1 && entries.get(0).bytes==-1,"unknown size not retained");
-            require(nested.queried.equals(List.of(ROOT,"base-id")),"installation root did not select immediate q4base");
+            require(nested.queried.equals(List.of(ROOT,"base-id")),"installation root did not select immediate base");
         }
         nested.allClosed();
         Provider direct=provider(payload);direct.listings.put(ROOT,List.of(
-            file("opaque:/one with spaces","pak001.pk4",null),directory("nested","q4base")));
+            file("opaque:/one with spaces","pak001.pk4",null),directory("nested","base")));
         direct.omitOptional=true;
         try(DocumentSource source=new DocumentSource(direct,TREE)) {
             require(source.entries().get(0).bytes==-1 && direct.queried.equals(List.of(ROOT)),"direct data or absent optional columns mishandled");
         }
         direct.allClosed();
-        Provider deep=provider(payload);deep.listings.put(ROOT,List.<Object[]>of(directory("first-level","q4base")));
-        deep.listings.put("first-level",List.<Object[]>of(directory("second-level","q4base")));
+        Provider deep=provider(payload);deep.listings.put(ROOT,List.<Object[]>of(directory("first-level","base")));
+        deep.listings.put("first-level",List.<Object[]>of(directory("second-level","base")));
         try(DocumentSource source=new DocumentSource(deep,TREE)) {
             require(source.entries().isEmpty() && deep.queried.size()==2,"folder search recursed without a bound");
         }
@@ -223,7 +223,7 @@ public final class DocumentSourceTest {
                 case 1: bad.listings.clear();break;
                 case 2: bad.listings.put(ROOT,List.of(file("same","pak001.pk4",1L),file("same","pak002.pk4",1L)));
                         expected=RetailImport.Code.DUPLICATE_NAME;break;
-                case 3: bad.listings.put(ROOT,List.of(directory("one","q4base"),directory("two","Q4BASE")));
+                case 3: bad.listings.put(ROOT,List.of(directory("one","base"),directory("two","BASE")));
                         expected=RetailImport.Code.DUPLICATE_NAME;break;
                 case 4: Object[] virtual=file("virtual","pak001.pk4",1L);virtual[4]=DocumentsContract.Document.FLAG_VIRTUAL_DOCUMENT;
                         bad.listings.put(ROOT,List.<Object[]>of(virtual));break;
@@ -295,8 +295,8 @@ public final class DocumentSourceTest {
             require(result.report.ready() && result.copied==2,"document-to-installation integration failed");
         }
         complete.allClosed();
-        require(Arrays.equals(Files.readAllBytes(root.resolve("external/q4base/pak002.pk4")),payload),"imported provider bytes differ");
-        System.out.println("PASS: selected-tree/read-only URI use; bounded flat/q4base enumeration; opaque IDs; "+
+        require(Arrays.equals(Files.readAllBytes(root.resolve("external/base/pak002.pk4")),payload),"imported provider bytes differ");
+        System.out.println("PASS: selected-tree/read-only URI use; bounded flat/base enumeration; opaque IDs; "+
             "unknown metadata; revoked/null/virtual providers; cursor/descriptor cleanup; cancellation during query/open/read; "+
             "and real document-source/importer integration");
     }

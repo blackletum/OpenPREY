@@ -153,7 +153,7 @@ public final class DocumentExportTest {
     public static void main(String[] args)throws Exception {
         Path root=Path.of(args[0]);Context app=new Context();app.files=root.resolve("private").toFile();app.cache=root.resolve("cache").toFile();
         Context activity=new Context();activity.application=app;
-        Path save=app.files.toPath().resolve("saves/baseoq4/savegames/Test.save");Files.createDirectories(save.getParent());
+        Path save=app.files.toPath().resolve("saves/basepr/savegames/Test.save");Files.createDirectories(save.getParent());
         byte[] original=new byte[190000];new Random(77).nextBytes(original);Files.write(save,original);
         Provider first=provider(app);Progress progress=new Progress();DocumentExport.Result result=work(activity).run(progress);
         Output output=(Output)first.output;

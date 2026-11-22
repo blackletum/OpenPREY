@@ -29,46 +29,63 @@ final class RetailData {
         }
     }
 
-    // Keep this startup baseline in agreement with FileSystem.cpp. The host
-    // test compares every name, value and required flag against that table.
+    /** The retail game directory under the chosen install root (BASE_GAMEDIR). */
+    static final String DIRECTORY = "base";
+
+    // Keep this startup baseline in agreement with FileSystem.cpp's
+    // officialPk4s. The host test compares every name, value and required flag
+    // against that table. A zero checksum is presence-only, as in the engine.
+    // No single archive is required: Prey has two complete retail layouts.
     static final List<Expected> OFFICIAL = Collections.unmodifiableList(Arrays.asList(
-        new Expected("pak001.pk4", 0xf2cbc998, true),
-        new Expected("pak002.pk4", 0x7f8d80d1, true),
-        new Expected("pak003.pk4", 0x1b57b207, true),
-        new Expected("pak004.pk4", 0x385aa578, true),
-        new Expected("pak005.pk4", 0x60d50a1d, true),
-        new Expected("pak006.pk4", 0x9099ed11, true),
-        new Expected("pak007.pk4", 0xaf301fff, true),
-        new Expected("pak008.pk4", 0x4ac6f6d9, true),
-        new Expected("pak009.pk4", 0x36030c7d, true),
-        new Expected("pak010.pk4", 0x4b80fbda, true),
-        new Expected("pak011.pk4", 0x8acf4cfa, true),
-        new Expected("pak012.pk4", 0xbe4120b0, true),
-        new Expected("pak013.pk4", 0x6ad67f40, true),
-        new Expected("pak014.pk4", 0xee51cd59, true),
-        new Expected("pak015.pk4", 0xf5bf4e0c, true),
-        new Expected("pak016.pk4", 0x2196f58c, true),
-        new Expected("pak017.pk4", 0x91118a35, true),
-        new Expected("pak018.pk4", 0x98a14f03, true),
-        new Expected("pak019.pk4", 0xbc82ac79, true),
-        new Expected("pak020.pk4", 0xce74cda5, true),
-        new Expected("pak021.pk4", 0x2ba6e70c, true),
-        new Expected("pak022.pk4", 0x4e390eec, true),
-        new Expected("pak023.pk4", 0x7c1fd3a5, false),
-        new Expected("pak024.pk4", 0x5546d551, false),
-        new Expected("pak025.pk4", 0xcaeec1fd, false),
-        new Expected("q4cmp_pak001.pk4", 0xd0813943, false),
-        new Expected("zpak_english.pk4", 0x5868f530, false),
-        new Expected("zpak_english_01.pk4", 0xd9f04b8b, false),
-        new Expected("zpak_english_02.pk4", 0x9dbd91fd, false),
-        new Expected("zpak_english_03.pk4", 0x02eb6ad8, false),
-        new Expected("zpak_english_04.pk4", 0xd3fefaa1, false),
-        new Expected("zpak_english_05.pk4", 0x8596af60, false),
-        new Expected("zpak_spanish.pk4", 0xb706e2b8, false)
+        new Expected("pak000.pk4", 0x7dc00ede, false),
+        new Expected("pak001.pk4", 0xd06647b1, false),
+        new Expected("pak002.pk4", 0x57dce443, false),
+        new Expected("pak003.pk4", 0x263006fe, false),
+        new Expected("pak004.pk4", 0xcc075380, false),
+        new Expected("pak_data.pk4", 0xbe295ead, false),
+        new Expected("pak_sound.pk4", 0xe0c27ee2, false),
+        new Expected("pak_en_v.pk4", 0x952b910e, false),
+        new Expected("pak_en_t.pk4", 0x6625f12d, false),
+        new Expected("pak005.pk4", 0, false),
+        new Expected("pak006.pk4", 0, false),
+        new Expected("pak020.pk4", 0, false),
+        new Expected("pak040.pk4", 0, false),
+        new Expected("game00.pk4", 0, false),
+        new Expected("game01.pk4", 0, false),
+        new Expected("game02.pk4", 0, false),
+        new Expected("game03.pk4", 0, false)
     ));
 
-    // The engine recognizes these unsuffixed names as base dialogue media.
-    // Localized editions without a recorded checksum still get payload checks.
+    // FileSystem.cpp's requiredClassicPk4s and requiredDigitalPk4s: the CD/DVD
+    // layout and the consolidated digital one. Either complete set is ready.
+    static final List<List<String>> LAYOUTS = Collections.unmodifiableList(Arrays.asList(
+        Collections.unmodifiableList(Arrays.asList("pak000.pk4", "pak001.pk4", "pak002.pk4", "pak003.pk4", "pak004.pk4")),
+        Collections.unmodifiableList(Arrays.asList("pak_data.pk4", "pak_sound.pk4", "pak_en_v.pk4", "pak_en_t.pk4"))
+    ));
+
+    /**
+     * The layout the engine validates: a complete one, else the one with the
+     * most members present (the classic set on a tie), so diagnostics name the
+     * smallest repair. Mirrors idFileSystemLocal's layout detection.
+     */
+    static List<String> layout(java.util.Collection<String> present) {
+        int classic = 0, digital = 0;
+        for (String name : LAYOUTS.get(0)) if (present.contains(name)) ++classic;
+        for (String name : LAYOUTS.get(1)) if (present.contains(name)) ++digital;
+        boolean useDigital = digital == LAYOUTS.get(1).size() ||
+            (classic != LAYOUTS.get(0).size() && digital > classic);
+        return LAYOUTS.get(useDigital ? 1 : 0);
+    }
+
+    static boolean core(String name) {
+        String lower = name.toLowerCase(Locale.ROOT);
+        for (List<String> set : LAYOUTS) if (set.contains(lower)) return true;
+        return false;
+    }
+
+    // FileSystem.cpp's fsLanguagePackOrder, kept for parity with the engine.
+    // Prey has no zpak_<language> dialogue archives, so a scan never warns
+    // about a missing language (the engine's check is Quake 4 only).
     static final List<String> LANGUAGES = Collections.unmodifiableList(Arrays.asList(
         "english", "spanish", "french", "italian", "german", "russian", "polish",
         "korean", "japanese", "chinese", "brazilian", "czech", "hungarian", "turkish", "ukrainian"
@@ -211,15 +228,15 @@ final class RetailData {
         Map<String, File> files = inventory(root, issues);
         boolean invalidInventory = !issues.isEmpty();
         Map<String, Expected> catalogue = new TreeMap<>();
+        for (Expected item : expected) catalogue.put(item.name, item);
+        // Only the selected retail layout is required; the other layout and
+        // the presence-only patch packs vary by edition and are not reported.
+        List<String> layout = layout(files.keySet());
+        List<String> selected = new ArrayList<>();
+        for (String name : layout) if (catalogue.containsKey(name)) selected.add(name);
         for (Expected item : expected) {
-            catalogue.put(item.name, item);
-            if (!files.containsKey(item.name)) {
-                if (item.required) {
-                    issues.add(new Issue(Code.MISSING_REQUIRED, item.name, true, item.checksum, null));
-                } else if (!item.name.startsWith("zpak_")) {
-                    // Do not warn about every language the player did not select.
-                    issues.add(new Issue(Code.MISSING_OPTIONAL, item.name, false));
-                }
+            if (!files.containsKey(item.name) && (item.required || selected.contains(item.name))) {
+                issues.add(new Issue(Code.MISSING_REQUIRED, item.name, true, item.checksum, null));
             }
         }
         if (invalidInventory) return new Report(verified, issues);
@@ -254,7 +271,6 @@ final class RetailData {
         final long allBytes = total;
         long done = 0;
         int finished = 0;
-        boolean language = false;
         for (Archive archive : planned) {
             final long previousBytes = done;
             final int previousCount = finished;
@@ -278,12 +294,13 @@ final class RetailData {
                     throw new Pk4Checksum.Invalid(Pk4Checksum.Problem.CHANGED_FILE, name);
                 }
                 Expected known = catalogue.get(name);
-                if (known != null && full.checksum != known.checksum) {
-                    issues.add(new Issue(Code.CHECKSUM_MISMATCH, file.getName(), known.required, known.checksum, full.checksum));
+                if (known != null && known.checksum != 0 && full.checksum != known.checksum) {
+                    // A modified archive of the selected layout fails the engine's startup check.
+                    issues.add(new Issue(Code.CHECKSUM_MISMATCH, file.getName(),
+                        known.required || selected.contains(name), known.checksum, full.checksum));
                 } else if (known == null) {
                     issues.add(new Issue(Code.UNRECOGNIZED_ARCHIVE, file.getName(), false));
                 }
-                language |= !baseLanguage(name).isEmpty();
                 verified.add(archive);
             } catch (InterruptedIOException cancelled) {
                 throw cancelled;
@@ -303,7 +320,6 @@ final class RetailData {
         for (Archive archive : verified) {
             if (!archive.unchanged()) issues.add(new Issue(Code.CHANGED_FILE, archive.file.getName(), true));
         }
-        if (!language) issues.add(new Issue(Code.MISSING_LANGUAGE, "", false));
         progress(observer, Phase.VERIFYING, "", finished, planned.size(), done, total);
         return new Report(verified, issues);
     }

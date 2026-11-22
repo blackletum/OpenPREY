@@ -4,7 +4,12 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 project_root="$(pwd)"
 task_root="${project_root}/.tmp/android-release"
-version="${OPENQ4_ANDROID_VERSION:?Set OPENQ4_ANDROID_VERSION}"
+# OPENQ4_ANDROID_VERSION is accepted as a legacy migration input.
+version="${OPENPR06_ANDROID_VERSION:-${OPENQ4_ANDROID_VERSION:-}}"
+if [ -z "${version}" ]; then
+    echo 'Set OPENPR06_ANDROID_VERSION' >&2
+    exit 1
+fi
 if [[ ! "${version}" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
     echo 'Android release version must have three numeric components.' >&2
     exit 1
@@ -31,8 +36,9 @@ python tools/build/prepare_android_deps.py --ndk "${ANDROID_NDK_HOME}" \
 python tools/build/android_cross.py --ndk "${ANDROID_NDK_HOME}" --api 24 --out "${task_root}/arm64.ini"
 # A release build ships the same content packs as every other platform.
 prebuilt_args=()
-if [ -n "${OPENQ4_PREBUILT_CONTENT_PACKS:-}" ]; then
-    prebuilt_args=("-Dprebuilt_content_packs=${OPENQ4_PREBUILT_CONTENT_PACKS}")
+prebuilt_packs="${OPENPR06_PREBUILT_CONTENT_PACKS:-${OPENQ4_PREBUILT_CONTENT_PACKS:-}}"
+if [ -n "${prebuilt_packs}" ]; then
+    prebuilt_args=("-Dprebuilt_content_packs=${prebuilt_packs}")
 fi
 bash tools/build/meson_setup.sh setup builddir/android-arm64 \
     --cross-file "${task_root}/arm64.ini" --buildtype=release -Db_ndebug=true \
@@ -50,7 +56,7 @@ gradle --no-daemon -p mobile/android --project-cache-dir="${task_root}/gradle-pr
 
 # Include the actual patched SDL tree, untouched OpenAL source and the build
 # recipes. Rebuilders can replace libraries and sign their own APK.
-source_package="${task_root}/output/openq4-${version}-android-dependency-sources.tar.xz"
+source_package="${task_root}/output/openpr06-${version}-android-dependency-sources.tar.xz"
 tar -cJf "${source_package}" \
     -C "${task_root}/sources" "openal-soft-${openal_version}.tar.gz" \
     -C "${project_root}/subprojects" "${sdl_dir}" \

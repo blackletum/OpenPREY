@@ -19,6 +19,9 @@ import zipfile
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
+# A public certificate used only as a pinned identity; openPR06 has no release
+# certificate yet (docs/dev/android-build.md, Release signing).
+FIXTURE_CERTIFICATE = Path(__file__).with_name('android_fixture_signing_cert.pem')
 sys.path.insert(0, str(ROOT / "tools/build"))
 import android_cross
 import prepare_android_deps
@@ -54,10 +57,11 @@ def staged_package(stage: Path, variant: str) -> tuple[dict[str, bytes], dict[st
     files.update({
         'android-build.json': json.dumps({'format': 1, 'variant': variant, 'abi': abi,
                                           'androidApi': 24, 'sdlVersion': '3.4.18'}).encode(),
-        'baseoq4/mod.json': b'{"version":"0.14.000","requiredopenQ4Version":"0.14.000"}',
-        'baseoq4/pak0.pk4': pack.getvalue(), 'baseoq4/pak1.pk4': b'second pack', 'baseoq4/pak2.pk4': b'third pack',
+        'basepr/mod.json': b'{"version":"0.14.000","requiredopenPR06Version":"0.14.000"}',
+        'basepr/pak0.pk4': pack.getvalue(), 'basepr/pak1.pk4': b'second pack', 'basepr/pak2.pk4': b'third pack',
         'LICENSE': b'engine license', 'LICENSING.md': b'component licenses', 'CONTRIBUTORS.md': b'credits',
-        'licenses/QUAKE-4-SDK-EULA.rtf': b'SDK EULA', 'licenses/MD4.txt': b'MD4 notice',
+        'licenses/PREY-SDK-EULA.rtf': b'SDK EULA', 'licenses/MD4.txt': b'MD4 notice',
+        'licenses/OFL-1.1.txt': b'Talon UI Condensed notice',
         'licenses/sdl3/LICENSE.txt': b'SDL', 'licenses/openal-soft/COPYING': b'OpenAL',
         'licenses/android-ndk/NOTICE.toolchain': b'NDK',
     })
@@ -69,7 +73,7 @@ def staged_package(stage: Path, variant: str) -> tuple[dict[str, bytes], dict[st
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
         entries[f'lib/{abi}/' + name[4:] if name.startswith('lib/') else 'assets/' + name] = data
-    manifest = package_manifest(stage / 'baseoq4')
+    manifest = package_manifest(stage / 'basepr')
     entries['assets/openq4-package-manifest.txt'] = manifest
     entries['assets/openq4-package-version.txt'] = hashlib.sha256(manifest).hexdigest().encode()
     entries.update({'assets/' + name: data for name, data in faces.items()})
@@ -112,16 +116,16 @@ class AndroidBuildTests(unittest.TestCase):
                 probe.adb = mock.Mock(return_value=subprocess.CompletedProcess([], code, stdout, stderr))
                 if expected is None:
                     with self.assertRaisesRegex(RuntimeError, 'Private-file test failed'):
-                        probe.private_test('-f', 'files/saves/baseoq4/autoexec.cfg')
+                        probe.private_test('-f', 'files/saves/basepr/autoexec.cfg')
                 else:
-                    self.assertIs(probe.private_test('-f', 'files/saves/baseoq4/autoexec.cfg'), expected)
+                    self.assertIs(probe.private_test('-f', 'files/saves/basepr/autoexec.cfg'), expected)
                 # Exercise the actual shell builtin on older Android, where
                 # directly executing `test` through run-as fails.
                 self.assertIn('sh', probe.adb.call_args.args)
                 self.assertIn('-c', probe.adb.call_args.args)
         probe.adb = mock.Mock(return_value=subprocess.CompletedProcess([], 1, b'', b'permission denied'))
         with self.assertRaisesRegex(RuntimeError, 'Retail-file test failed'):
-            probe.remote_sha('/sdcard/Android/data/com.darkmatter.openq4.emulator/files/q4base/pak001.pk4')
+            probe.remote_sha('/sdcard/Android/data/com.darkmatter.openpr06.emulator/files/base/pak001.pk4')
 
     def test_emulator_preflight_rejects_gles2_before_install_or_data_writes(self) -> None:
         probe = android_emulator_smoke.Probe.__new__(android_emulator_smoke.Probe)
@@ -214,16 +218,18 @@ class AndroidBuildTests(unittest.TestCase):
                 verify_android_apk.verify_payload(apk, stage, '0.14.000')
             notice.write_bytes(files['licenses/MD4.txt'])
             for name, replacement, message in (
-                ('lib/arm64-v8a/libquake4.so', b'old binary', 'differs from validated stage'),
-                ('lib/arm64-v8a/libgame-sp_arm64.so', None, 'seven matching'),
-                ('assets/baseoq4/pak0.pk4', b'old data', 'differs from validated stage'),
+                ('lib/arm64-v8a/libopenpr06.so', b'old binary', 'differs from validated stage'),
+                ('lib/arm64-v8a/libgame_arm64.so', None, 'six matching'),
+                ('lib/arm64-v8a/libgame-sp_arm64.so', android_library(), 'six matching'),
+                ('assets/basepr/pak0.pk4', b'old data', 'differs from validated stage'),
                 ('assets/licenses/openal-soft/COPYING', None, 'asset set differs'),
-                ('assets/licenses/QUAKE-4-SDK-EULA.rtf', None, 'asset set differs'),
+                ('assets/licenses/PREY-SDK-EULA.rtf', None, 'asset set differs'),
+                ('assets/licenses/OFL-1.1.txt', None, 'asset set differs'),
                 ('assets/licenses/MD4.txt', None, 'asset set differs'),
-                ('assets/fonts/marine.ttf', None, 'asset set differs'),
-                ('assets/fonts/lowpixel.ttf', b'wrong face', 'typeface differs'),
+                ('assets/fonts/menu.ttf', None, 'asset set differs'),
+                ('assets/fonts/talon-ui-condensed.ttf', b'wrong face', 'typeface differs'),
                 ('assets/fonts/extra.ttf', b'unexpected face', 'asset set differs'),
-                ('assets/q4base/pak001.pk4', b'retail data', 'asset set differs'),
+                ('assets/base/pak001.pk4', b'retail data', 'asset set differs'),
                 ('assets/openq4-package-version.txt', b'wrong revision', 'extraction revision'),
                 ('assets/openq4-package-manifest.txt', b'wrong manifest', 'extraction manifest'),
                 ('assets/openq4-package-manifest.txt', None, 'asset set differs'),
@@ -257,19 +263,19 @@ class AndroidBuildTests(unittest.TestCase):
                 verify_android_apk.verify_payload(apk, stage, '0.14.000')
             for name, value in (
                 ('lib/x86_64/libopenxr_loader.so', android_library(machine=62)),
-                ('lib/x86_64/libgame-sp_arm64.so', android_library()),
-                ('lib/arm64-v8a/libquake4.so', android_library()),
+                ('lib/x86_64/libgame_arm64.so', android_library()),
+                ('lib/arm64-v8a/libopenpr06.so', android_library()),
             ):
                 write_apk(apk, dict(entries, **{name: value}))
-                with self.assertRaisesRegex(ValueError, 'seven matching'):
+                with self.assertRaisesRegex(ValueError, 'six matching'):
                     verify_android_apk.verify_payload(apk, stage, '0.14.000', 'emulator')
             write_apk(apk, entries)
             # Correct filenames are not evidence of the target instruction set.
-            library = stage / 'lib/libquake4.so'
+            library = stage / 'lib/libopenpr06.so'
             library.write_bytes(android_library())
             with self.assertRaisesRegex(ValueError, 'x86-64'):
                 verify_android_apk.verify_payload(apk, stage, '0.14.000', 'emulator')
-            library.write_bytes(files['lib/libquake4.so'])
+            library.write_bytes(files['lib/libopenpr06.so'])
             extra = stage / 'lib/libdebug_runtime.so'
             extra.write_bytes(android_library(machine=62))
             with self.assertRaisesRegex(ValueError, 'Stage must contain exactly'):
@@ -303,12 +309,12 @@ class AndroidBuildTests(unittest.TestCase):
             verify_android_apk.verify_payload(apk, stage, '0.14.000')
 
     def test_release_apk_manifest_and_signer_gates(self) -> None:
-        certificate = ROOT / 'mobile/android/release-signing-cert.pem'
+        certificate = FIXTURE_CERTIFICATE
         cert_digest = hashlib.sha256(ssl.PEM_cert_to_DER_cert(certificate.read_text())).hexdigest()
         good = [
             f'Verified using v2 scheme (APK Signature Scheme v2): true\nSigner #1 certificate SHA-256 digest: {cert_digest}\n',
             '',
-            "package: name='com.darkmatter.openq4' versionCode='14000' versionName='0.14.000'\nsdkVersion:'24'\ntargetSdkVersion:'35'\nnative-code: 'arm64-v8a'\nlaunchable-activity: name='com.darkmatter.openq4.LauncherActivity'\n",
+            "package: name='com.darkmatter.openpr06' versionCode='14000' versionName='0.14.000'\nsdkVersion:'24'\ntargetSdkVersion:'35'\nnative-code: 'arm64-v8a'\nlaunchable-activity: name='com.darkmatter.openq4.LauncherActivity'\n",
             'A: android:extractNativeLibs(0x010104ea)=(type 0x12)0xffffffff',
         ]
         for index, replacement, message in (
@@ -336,12 +342,12 @@ class AndroidBuildTests(unittest.TestCase):
     def test_emulator_manifest_requires_separate_debug_identity_and_pinned_certificate(self) -> None:
         # The fixture certificate is just a pinned identity here; no private
         # signing key is used by this test.
-        certificate = ROOT / 'mobile/android/release-signing-cert.pem'
+        certificate = FIXTURE_CERTIFICATE
         cert_digest = hashlib.sha256(ssl.PEM_cert_to_DER_cert(certificate.read_text())).hexdigest()
         good = [
             f'Verified using v2 scheme (APK Signature Scheme v2): true\nSigner #1 certificate SHA-256 digest: {cert_digest}\n',
             '',
-            "package: name='com.darkmatter.openq4.emulator' versionCode='14000' versionName='0.14.000'\nsdkVersion:'24'\ntargetSdkVersion:'35'\nnative-code: 'x86_64'\nlaunchable-activity: name='com.darkmatter.openq4.LauncherActivity'\napplication-debuggable\n",
+            "package: name='com.darkmatter.openpr06.emulator' versionCode='14000' versionName='0.14.000'\nsdkVersion:'24'\ntargetSdkVersion:'35'\nnative-code: 'x86_64'\nlaunchable-activity: name='com.darkmatter.openq4.LauncherActivity'\napplication-debuggable\n",
             'A: android:extractNativeLibs(0x010104ea)=(type 0x12)0xffffffff',
         ]
         for variant, index, replacement, message in (
@@ -349,7 +355,7 @@ class AndroidBuildTests(unittest.TestCase):
             ('phone', -1, '', 'manifest mismatch'),
             ('emulator', 0, good[0].replace(cert_digest, '0' * 64), 'pinned diagnostic certificate'),
             ('emulator', 0, good[0].replace(': true', ': false'), 'valid v2 signature'),
-            ('emulator', 2, good[2].replace('.openq4.emulator', '.openq4'), 'manifest mismatch'),
+            ('emulator', 2, good[2].replace('.openpr06.emulator', '.openpr06'), 'manifest mismatch'),
             ('emulator', 2, good[2].replace("'x86_64'", "'arm64-v8a'"), 'manifest mismatch'),
             ('emulator', 2, good[2].replace("sdkVersion:'24'", "sdkVersion:'28'"), 'manifest mismatch'),
             ('emulator', 2, good[2].replace('application-debuggable', ''), 'diagnostic debuggable build'),
@@ -476,7 +482,7 @@ class AndroidBuildTests(unittest.TestCase):
         for token in (verify_android_apk.HEADSET_FEATURE, verify_android_apk.HEADSET_PERMISSION,
                       *verify_android_apk.HEADSET_CATEGORIES, verify_android_apk.HEADSET_DEVICES):
             self.assertIn(token, gradle)
-        self.assertIn("applicationId emulator ? 'com.darkmatter.openq4.emulator' :\n"
+        self.assertIn("applicationId emulator ? '" + verify_android_apk.VARIANT_TABLE['emulator'].package + "' :\n"
                       "            (questBuild ? '" + verify_android_apk.VARIANT_TABLE['quest'].package
                       + "' : '" + verify_android_apk.VARIANT_TABLE['phone'].package + "')", gradle.replace('\r\n', '\n'))
         self.assertIn(f"def headsetMarker = '{verify_android_apk.HEADSET_MARKER}'", gradle)
@@ -500,7 +506,7 @@ class AndroidBuildTests(unittest.TestCase):
                       meson)
 
     def test_quest_manifest_declares_an_immersive_headset_app(self) -> None:
-        certificate = ROOT / 'mobile/android/release-signing-cert.pem'
+        certificate = FIXTURE_CERTIFICATE
         cert_digest = hashlib.sha256(ssl.PEM_cert_to_DER_cert(certificate.read_text())).hexdigest()
         android = 'http://schemas.android.com/apk/res/android'
         feature = ('    E: uses-feature (line=5)\n'
@@ -518,10 +524,10 @@ class AndroidBuildTests(unittest.TestCase):
                        '      E: activity (line=15)\n')
         tree = lambda *parts: f'N: android={android}\n  E: manifest (line=2)\n' + ''.join(parts)
         quest_tree = tree(feature, permission, application, devices, '          E: intent-filter (line=28)\n', immersive)
-        badging = ("package: name='com.darkmatter.openq4.quest' versionCode='14000' versionName='0.14.000'\nsdkVersion:'24'\n"
+        badging = ("package: name='com.darkmatter.openpr06.quest' versionCode='14000' versionName='0.14.000'\nsdkVersion:'24'\n"
                    "targetSdkVersion:'35'\nnative-code: 'arm64-v8a'\nlaunchable-activity: name='com.darkmatter.openq4.LauncherActivity'\n")
         signer = f'Verified using v2 scheme (APK Signature Scheme v2): true\nSigner #1 certificate SHA-256 digest: {cert_digest}\n'
-        phone_badging = badging.replace('.openq4.quest', '.openq4')
+        phone_badging = badging.replace('.openpr06.quest', '.openpr06')
         for variant, outputs, message in (
             ('quest', [signer, '', badging, quest_tree], ''),
             ('phone', [signer, '', badging, quest_tree], 'manifest mismatch'),

@@ -1,19 +1,81 @@
 # Android, GLES and Sigma Touch
 
-> **Development status:** This document describes the current source tree and its evidence, not the contents of the latest available 0.13.2 package. The 0.14.0 release was withdrawn. See [release status](https://github.com/themuffinator/openQ4/blob/main/docs/user/release-status.md).
+> **Development status:** This document describes the current source tree. openPR06 has not published an Android package; see [openPR06 status](#openpr06-status).
 
 The Android platform, GLES renderer and Sigma Touch adapter originate in
 [emileb's Android branch](https://github.com/emileb/openQ4/tree/android) and
 [GLES shader variants branch](https://github.com/emileb/openQ4/tree/gles-shader-variants).
 Credit for this port belongs to **emileb**. openQ4 adapts his implementation to
-the current engine, renderer API, multiplayer module and package checks.
+the current engine, renderer API, multiplayer module and package checks, and
+openPR06 adapts openQ4's host to PREY (2006).
+
+## openPR06 status
+
+As of 22 November 2026 the Android build produces a verified arm64 APK for
+PREY: a push-triggered CI probe of `.github/workflows/android-build.yml`
+(`signing: ci`) ran `tools/build/build_android_release.sh` (Meson native build,
+Gradle `assembleRelease`), signed the APK with a throwaway key and passed
+`tools/build/verify_android_apk.py`. What changed from openQ4's host:
+
+- The GLES module (`librenderer-gles_arm64.so`) supplies its own
+  `R_ARBProgramUsesInteractionInputs`, `R_LoadARBProgramsForStartup` and
+  `R_PrecacheLevelMaterialPrograms` (`src/renderer/GLES/gles_Backend.cpp`):
+  it classifies retail PREY interaction programs as the GL module does, and has
+  no ARB programs to preload. It does not draw those interaction stages.
+- The client library is `libopenpr06.so`, the game module the unified
+  `libgame_arm64.so`, the content directory `basepr/`, and the application IDs
+  `com.darkmatter.openpr06` (`.emulator`, `.quest`).
+- Setup imports a PREY `base/` folder and checks it as the engine does: the
+  CD/DVD layout (`pak000.pk4` to `pak004.pk4`) or the digital one
+  (`pak_data.pk4`, `pak_sound.pk4`, `pak_en_v.pk4`, `pak_en_t.pk4`), with the
+  checksums from `officialPk4s` in `src/framework/FileSystem.cpp`. Retail
+  `pak_data.pk4` contains an empty entry stored as DEFLATED without a deflate
+  stream, which Java's `ZipFile` cannot inflate; `Pk4Checksum` accepts that
+  shape. `tools/tests/android_retail_data.py --retail-root <Prey>/base` passes
+  on the digital layout.
+- Setup uses the Prey menu faces (`fonts/menu.ttf`, Talon UI Condensed) and
+  Interface Atlas colours.
+- Upstream names stay where renaming would only break merges or external
+  ABIs: the `com.darkmatter.openq4` Java package and class names, the
+  `-Popenq4*` Gradle properties, the `OPENQ4_*` host environment variables, the
+  `openq4-package-*` manifest files and the SigmaTouch `Quake4_*` bridge
+  ([mobile/README.md](../../mobile/README.md)).
+
+Remaining before a release lane: the signing secrets below, and every device
+check. No openPR06 APK has been installed on a device.
+
+### Release signing
+
+`android-build.yml` signs with `signing: release` by default. openPR06 has no
+release key, so that mode fails until the maintainer:
+
+1. creates an Android release key (PKCS#12) and keeps an independent secure
+   backup; every later update must be signed with the same key;
+2. adds the repository Actions secrets `ANDROID_RELEASE_KEYSTORE_BASE64` (the
+   keystore, base64-encoded), `ANDROID_RELEASE_STORE_PASSWORD`,
+   `ANDROID_RELEASE_KEY_PASSWORD` and `ANDROID_RELEASE_KEY_ALIAS`;
+3. commits the key's public certificate as
+   `mobile/android/release-signing-cert.pem`
+   (`keytool -exportcert -rfc -keystore <file> -alias <alias>`).
+
+Then `manual-release.yml` can mirror openQ4's `android` job: call
+`./.github/workflows/android-build.yml` with the release version and
+content-pack artifact, `signing: release` and `secrets: inherit`, and require
+its APK and dependency-source archive before publishing.
+
+`signing: ci` builds without secrets: it signs with a key generated for that
+job and names the APK `...-ci-signed-not-for-distribution.apk`. Use it to test
+the lane (for example from a push-triggered probe workflow on a throwaway
+`ci-probe/*` branch, since `workflow_dispatch` needs the workflow on `main`);
+never publish its output.
 
 ## Supported build shape
 
 Android targets `arm64-v8a`, Android API 24 or later, SDL3 and OpenGL ES 3.0.
-The native application is `libquake4.so`. The renderer is
-`librenderer-gles_arm64.so`; the in-tree `src/game/` and `src/mpgame/` supply
-`libgame-sp_arm64.so` and `libgame-mp_arm64.so`. Both modes use `baseoq4/`.
+The native application is `libopenpr06.so`. The renderer is
+`librenderer-gles_arm64.so`; the in-tree Prey game library (`src/game/`,
+`src/Prey/`, `src/preyengine/`) builds the unified `libgame_arm64.so` for both
+single player and multiplayer. Both modes use `basepr/`.
 Android has no dedicated-server target. Desktop defaults remain unchanged.
 
 Meson is the engine's build entry point on Android as on desktop. The port's
@@ -78,13 +140,14 @@ cross file requests 16 KiB ELF segment alignment for engine and modules.
 
 ## Packaging
 
-Manual Releases now calls the reusable Android APK workflow and requires its
-signed APK plus matching dependency source archive before publishing. Android
+openQ4's Manual Releases calls the reusable Android APK workflow and requires
+its signed APK plus matching dependency source archive before publishing;
+openPR06's does not yet (see [Release signing](#release-signing)). Android
 retains an experimental support tier, independent of GitHub's overall
 prerelease flag. See the standalone guide for signing and upgrade details.
 
 Installation goes to `.install/android/arm64-v8a/`: native modules in `lib/`,
-generated packs and `mod.json` in `baseoq4/`. Copy dependency runtime libraries
+generated packs and `mod.json` in `basepr/`. Copy dependency runtime libraries
 from the prefix alongside the native modules in the host's `jniLibs/arm64-v8a/`.
 Use a host that exposes an extracted native library directory for runtime module
 loading. Keep the application's SDL Java sources and native SDL library from the
@@ -102,7 +165,7 @@ checks to load a mismatched package. This integration retains the normal full
 pack contents; emileb's reduced CMake-only pak1 recipe is not applied because the
 current renderer and content can evolve independently.
 
-Players must provide their own installed Quake 4 base PK4 assets. Retail assets
+Players must provide their own installed PREY `base/` PK4 assets. Retail assets
 are not included in a build or an APK. The host must provide filesystem paths
 that allow the engine to read those assets and write its save/configuration data.
 Automated MP launches must explicitly pass `+set ui_autoJoin 1`; interactive
@@ -129,7 +192,7 @@ Package that stage with `-Popenq4Abi=x86_64`,
 the matching SDL source argument and an absolute project-cache directory from
 the standalone build instructions. Gradle writes
 `builddir/android-apk-emulator/app/outputs/apk/debug/app-debug.apk`.
-The application ID is `com.darkmatter.openq4.emulator`, with its own private
+The application ID is `com.darkmatter.openpr06.emulator`, with its own private
 saves and external files directory. Its localized launcher name identifies
 the emulator build. No release APK or release bundle task is enabled for this
 ABI; the phone release workflow and certificate policy remain unchanged.
@@ -137,7 +200,7 @@ ABI; the phone release workflow and certificate policy remain unchanged.
 For verification, pass `--variant emulator` to
 `tools/build/verify_android_apk.py`, with the exact staged version, SDK build
 tools and the public certificate for the diagnostic signing key. It requires a
-debuggable emulator package, API 24, exactly seven matching x86_64 libraries,
+debuggable emulator package, API 24, exactly six matching x86_64 libraries,
 16 KiB alignment and the same content/notices checks. The default verifier
 continues to require a nondebuggable ARM64 phone release and rejects this APK.
 An ABI label alone does not qualify a binary: ELF machine/API and every
@@ -189,7 +252,7 @@ The standalone headset build is the phone build declared as an immersive
 OpenXR app (AND-05). Configure an arm64-v8a build with `-Dandroid_headset=true`
 (the build refuses x86_64): it stages package variant `quest`, installs the
 `openq4-headset` marker and links the Khronos OpenXR loader into
-`libquake4.so`. Package that stage with `-Popenq4Quest=true`:
+`libopenpr06.so`. Package that stage with `-Popenq4Quest=true`:
 
 ```sh
 gradle -p mobile/android --project-cache-dir=<checkout>/.tmp/android-gradle-project \
@@ -223,8 +286,8 @@ engine chooses the refresh rate (`XR_FB_display_refresh_rate`,
 names the frame thread (`XR_KHR_android_thread_settings`).
 
 `verify_android_apk.py --variant quest` then requires its own application ID,
-`com.darkmatter.openq4.quest` (never the phone's, so neither APK replaces the
-other), a nondebuggable release signature, the same seven ARM64 libraries,
+`com.darkmatter.openpr06.quest` (never the phone's, so neither APK replaces the
+other), a nondebuggable release signature, the same six ARM64 libraries,
 the marker asset, and a manifest that requires head tracking, requests the
 OpenXR runtime permission, opens the game with the immersive OpenXR and Quest
 categories and names its supported headsets. Phone and emulator APKs must

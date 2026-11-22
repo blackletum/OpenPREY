@@ -80,8 +80,8 @@ final class DocumentSource implements RetailImport.Source, Closeable {
                 }
                 if (DocumentsContract.Document.MIME_TYPE_DIR.equals(type)) {
                     // Accept the installation root as a convenience only when
-                    // it contains no direct PK4s and exactly one q4base folder.
-                    if (name.equalsIgnoreCase("q4base")) {
+                    // it contains no direct PK4s and exactly one base folder.
+                    if (name.equalsIgnoreCase(RetailData.DIRECTORY)) {
                         if (result.childBase != null) throw new RetailImport.Failure(RetailImport.Code.DUPLICATE_NAME, name, null);
                         result.childBase = id;
                     }

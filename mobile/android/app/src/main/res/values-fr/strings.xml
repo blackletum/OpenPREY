@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name_emulator">Émulateur openQ4</string>
-    <string name="setup_title">Configuration d’openQ4</string>
+    <string name="app_name_emulator">Émulateur openPR06</string>
+    <string name="setup_title">Configuration d’openPR06</string>
     <string name="setup_language">Langue</string>
     <string name="setup_sample">Préparez les fichiers du jeu, puis retournez au front.</string>
     <string name="setup_continue">Continuer</string>
     <string name="setup_data">Données du jeu</string>
-    <string name="setup_data_help">Choisissez le dossier q4base de votre propre installation de Quake 4 1.4.2. openQ4 copie et vérifie les archives ; les originaux restent en place. Vous pouvez utiliser un sous-dossier de Téléchargements ou un lecteur USB connecté. Cette application ne contient pas les données du jeu.</string>
+    <string name="setup_data_help">Choisissez le dossier base de votre propre installation de PREY. openPR06 copie et vérifie les archives ; les originaux restent en place. Vous pouvez utiliser un sous-dossier de Téléchargements ou un lecteur USB connecté. Cette application ne contient pas les données du jeu.</string>
     <string name="setup_choose">Choisir le dossier du jeu</string>
     <string name="setup_check">Vérifier les fichiers installés</string>
     <string name="setup_retry">Réessayer la dernière opération</string>
@@ -17,7 +17,7 @@
     <string name="setup_ready">Les fichiers du jeu sont prêts.</string>
     <string name="setup_needs_data">Les fichiers du jeu nécessitent votre attention. Suivez les indications ci-dessous, puis relancez la vérification.</string>
     <string name="setup_idle">Choisissez un dossier à importer ou vérifiez les fichiers déjà copiés dans cette application.</string>
-    <string name="setup_no_data">Les fichiers installés sont indisponibles. Choisissez votre dossier q4base de Quake 4 pour les importer, ou reconnectez le stockage qui les contient.</string>
+    <string name="setup_no_data">Les fichiers installés sont indisponibles. Choisissez votre dossier base de PREY pour les importer, ou reconnectez le stockage qui les contient.</string>
     <string name="setup_size_bytes">%1$,d o</string>
     <string name="setup_issue_problem">Nécessaire : %1$s</string>
     <string name="setup_issue_warning">Avertissement : %1$s</string>
@@ -40,19 +40,19 @@
     <string name="setup_file_count">Archives terminées : %1$d / %2$d</string>
     <string name="setup_bytes">%1$s sur %2$s</string>
     <string name="setup_eta">Temps restant estimé pour cette étape : %1$d s</string>
-    <string name="setup_missing_required">%1$s est manquant. Copiez-le depuis votre installation de Quake 4 1.4.2.</string>
+    <string name="setup_missing_required">%1$s est manquant. Copiez-le depuis votre installation de PREY.</string>
     <string name="setup_missing_optional">L’archive facultative %1$s est manquante. Le contenu associé peut être indisponible.</string>
-    <string name="setup_missing_language">Aucune archive de langue de base trouvée. Copiez les fichiers de langue zpak de votre installation pour entendre les dialogues.</string>
-    <string name="setup_wrong_version">%1$s diffère de l’archive officielle. Remplacez-le par une copie vérifiée de Quake 4 1.4.2.</string>
+    <string name="setup_missing_language">Aucune archive de langue de base trouvée. Copiez les archives de langue de votre installation pour entendre les dialogues.</string>
+    <string name="setup_wrong_version">%1$s diffère de l’archive officielle. Remplacez-le par une copie vérifiée de votre installation de PREY.</string>
     <string name="setup_unknown_archive">%1$s réussit le contrôle d’intégrité, mais ne figure pas dans le catalogue officiel des sommes de contrôle.</string>
     <string name="setup_damaged_archive">%1$s est endommagé ou non pris en charge. Copiez une archive originale intacte, puis réessayez.</string>
     <string name="setup_duplicate">Plusieurs archives portent le nom %1$s. Conservez une copie vérifiée, puis réessayez.</string>
     <string name="setup_changed">%1$s a changé pendant la vérification. Terminez sa copie avant de réessayer.</string>
     <string name="setup_unreadable">Impossible de lire %1$s. Reconnectez le stockage ou choisissez une copie accessible, puis réessayez.</string>
-    <string name="setup_limits">Le dossier ou l’archive dépasse les limites prises en charge. Choisissez un dossier contenant les archives originales de Quake 4.</string>
+    <string name="setup_limits">Le dossier ou l’archive dépasse les limites prises en charge. Choisissez un dossier contenant les archives originales de PREY.</string>
     <string name="setup_storage_unavailable">Le stockage de l’application est indisponible. Reconnectez-le, vérifiez les paramètres de stockage de l’application dans Android, puis réessayez.</string>
     <string name="setup_no_space">Espace insuffisant : %1$s nécessaires, %2$s disponibles pour le prochain fichier. Libérez de l’espace, puis réessayez.</string>
-    <string name="setup_invalid_name">Le nom de fichier %1$s n’est pas pris en charge. Choisissez le dossier q4base original.</string>
+    <string name="setup_invalid_name">Le nom de fichier %1$s n’est pas pris en charge. Choisissez le dossier base original.</string>
     <string name="setup_copy_failed">Impossible de copier %1$s. Vérifiez la connexion à la source et l’espace libre, puis réessayez.</string>
     <string name="setup_commit_failed">Impossible de remplacer %1$s. Vérifiez le stockage de l’application, puis réessayez. L’archive précédente a été conservée.</string>
     <string name="setup_prepare_failed">Impossible de préparer les fichiers inclus. Libérez de l’espace et réessayez. Si le problème persiste, mettez l’application à jour avec le même distributeur ou certificat de signature ; gardez l’application installée pour conserver vos sauvegardes.</string>
@@ -61,8 +61,8 @@
     <string name="setup_export_help">Créez une copie ZIP de vos parties enregistrées, avec leurs descriptions et aperçus, ou exportez les journaux de diagnostic. Choisissez la destination dans le sélecteur de fichiers Android. Les originaux restent dans l’application. Les journaux peuvent contenir des chemins locaux et des adresses de serveurs ; vérifiez-les avant de les partager.</string>
     <string name="setup_export_saves">Copier les parties enregistrées</string>
     <string name="setup_export_logs">Exporter les journaux</string>
-    <string name="setup_saves_filename">openQ4-sauvegardes.zip</string>
-    <string name="setup_logs_filename">openQ4-journaux.zip</string>
+    <string name="setup_saves_filename">openPR06-sauvegardes.zip</string>
+    <string name="setup_logs_filename">openPR06-journaux.zip</string>
     <string name="setup_no_document_picker">Le sélecteur de fichiers du système est indisponible. Activez l’application Fichiers d’Android, puis réessayez.</string>
     <string name="setup_export_picker_cancelled">Aucune destination d’exportation n’a été choisie. Vos fichiers sont inchangés.</string>
     <string name="setup_export_no_grant">Impossible d’ouvrir la destination en écriture. Réessayez avec un emplacement accessible. Vos fichiers originaux sont inchangés.</string>

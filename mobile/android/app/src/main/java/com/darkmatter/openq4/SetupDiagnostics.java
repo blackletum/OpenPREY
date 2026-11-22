@@ -20,7 +20,7 @@ final class SetupDiagnostics {
 
     static boolean record(File files, String message, Throwable error) {
         try {
-            File directory = new File(files.getCanonicalFile(), "saves/baseoq4/logs");
+            File directory = new File(files.getCanonicalFile(), "saves/basepr/logs");
             unlinked(directory);
             if (!directory.isDirectory() && !directory.mkdirs()) return false;
             unlinked(directory);

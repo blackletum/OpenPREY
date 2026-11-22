@@ -141,6 +141,14 @@ final class Pk4Checksum {
                 long verified = 0;
                 progress(progress, 0, total);
                 for (ZipEntry entry : entries) {
+                    // Retail PREY's pak_data.pk4 stores an empty file as DEFLATED
+                    // with no deflate stream at all (af/monster_girlfriend_x.af).
+                    // Minizip reads it; Java's Inflater reports a truncated stream.
+                    // An empty entry has nothing to inflate: its CRC must be zero.
+                    if (entry.getSize() == 0 && entry.getCompressedSize() == 0) {
+                        if (entry.getCrc() != 0) throw new Invalid(Problem.CORRUPT_ENTRY, entry.getName());
+                        continue;
+                    }
                     CRC32 actual = new CRC32();
                     long count = 0;
                     try (InputStream input = zip.getInputStream(entry)) {

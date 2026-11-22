@@ -45,7 +45,8 @@ if host_system == 'android'
   else
     error('Android supports arm64-v8a phones and diagnostic x86_64 emulators only.')
   endif
-  engine_client_binary_name = 'quake4'
+  # SDLActivity loads lib<name>.so; OpenQ4Activity.getLibraries() names it.
+  engine_client_binary_name = 'openpr06'
 endif
 
 if host_cpu_family != 'x86_64' and not (host_system == 'linux' and host_cpu_family == 'aarch64')

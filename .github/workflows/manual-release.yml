@@ -13,9 +13,9 @@ name: openPR06 Manual Release
 # gates for either yet, so there is no first-class selector.
 #
 # Not carried over from openQ4:
-# - No Android APK. openPR06's Android host is still openQ4's (baseoq4,
-#   com.darkmatter.openq4, the quake4 bridge) and the repository has no
-#   Android release-signing secrets.
+# - No Android APK yet. android-build.yml builds and verifies openPR06's APK,
+#   but the repository has no Android release-signing secrets or certificate;
+#   docs/dev/android-build.md (Release signing) lists what the lane needs.
 # - No Discord step. discord-release.yml reacts to published releases on its
 #   own, and a release created with GITHUB_TOKEN does not trigger it anyway.
 # - No standalone content-pack job or assets. pak0, pak1 and pak2
