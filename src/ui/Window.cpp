@@ -48,6 +48,7 @@ If you have questions concerning this license or the applicable additional terms
 #include "LevelEditorWindow.h"
 #include "MarkerWindow.h"
 #include "FieldWindow.h"
+#include "ObituaryWindow.h"
 
 #include "GameSSDWindow.h"
 #include "GameBearShootWindow.h"
@@ -4885,6 +4886,18 @@ bool idWindow::Parse( idParser *src, bool rebuild) {
 			idListWindow *win = new idListWindow(dc, gui);
 		  	SaveExpressionParseState();
 			win->Parse(src, rebuild);	
+		  	RestoreExpressionParseState();
+			AddChild(win);
+			win->SetParent(this);
+			dwt.simp = NULL;
+			dwt.win = win;
+			drawWindows.Append(dwt);
+		}
+		else if ( token == "obituaryDef" ) {
+			// openPR06: the graphical obituary feed (ObituaryWindow.h).
+			idObituaryWindow *win = new idObituaryWindow(dc, gui);
+		  	SaveExpressionParseState();
+			win->Parse(src, rebuild);
 		  	RestoreExpressionParseState();
 			AddChild(win);
 			win->SetParent(this);

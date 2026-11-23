@@ -3045,6 +3045,7 @@ void idGameLocal::InitConsoleCommands( void ) {
 	// multiplayer server commands
 	cmdSystem->AddCommand( "serverMapRestart",		idGameLocal::MapRestart_f,	CMD_FL_GAME,				"restart the current game" );
 	cmdSystem->AddCommand( "serverForceReady",	idMultiplayerGame::ForceReady_f,CMD_FL_GAME,				"force all players ready" );
+	cmdSystem->AddCommand( "testObituary",			idMultiplayerGame::TestObituary_f, CMD_FL_GAME|CMD_FL_CHEAT,	"show a death in the obituary feed and chat locally: testObituary <killed|teamkill|suicide|died|telefrag> <victim> [killer] [projectile]" );
 	cmdSystem->AddCommand( "serverNextMap",			idGameLocal::NextMap_f,		CMD_FL_GAME,				"change to the next map" );
 
 	// localization help commands

@@ -53,8 +53,89 @@ const char *idMultiplayerGame::MPGuis[] = {
 	"guis/mpmain.gui",
 	"guis/mpmsgmode.gui",
 	"guis/netmenu.gui",
+	"guis/obituaries.gui",		// openPR06
 	NULL
 };
+
+// openPR06: the graphical obituary feed. Deaths draw as "killer [weapon] victim"
+// lines at the HUD's top left (guis/obituaries.gui, src/ui/ObituaryWindow.h)
+// instead of chat lines; the console and the menu's chat history keep the text.
+idCVar hud_graphicalObits( "hud_graphicalObits", "1", CVAR_GAME | CVAR_ARCHIVE | CVAR_BOOL, "show multiplayer deaths as a graphical feed at the top left of the HUD instead of chat lines" );
+
+// Each projectile's icon (and corner badge for an alternate fire), by entityDef
+// name, then by its death message for a mod's projectile that reuses one. A
+// def's own "mtr_obituary" / "mtr_obituaryBadge" (bare names under
+// guis/assets/hud/obits/) override both.
+typedef struct obituaryIcon_s {
+	const char *	projectile;
+	const char *	deathMessage;
+	const char *	icon;
+	const char *	badge;
+} obituaryIcon_t;
+
+static const obituaryIcon_t obituaryIcons[] = {
+	{ "projectile_wrench",				"#str_08001",	"wrench",			NULL },
+	{ "projectile_arrow",				"#str_08000",	"bow",				NULL },
+	{ "projectile_rifle",				"#str_08002",	"rifle",			NULL },
+	{ "projectile_riflesniper",			"#str_08003",	"rifle",			"scope" },
+	{ "projectile_crawler",				"#str_08004",	"crawler",			NULL },
+	{ "projectile_stickycrawler",		"#str_08005",	"crawler",			"mine" },
+	{ "projectile_autocannon",			"#str_08006",	"autocannon",		NULL },
+	{ "projectile_autocannon_grenade",	"#str_08007",	"autocannon",		"grenade" },
+	{ "projectile_acidspray",			"#str_08008",	"acidsprayer",		NULL },
+	{ "projectile_acidcartridge",		NULL,			"acidsprayer",		"grenade" },
+	{ "projectile_rocket",				"#str_08009",	"rocketlauncher",	NULL },
+	{ "projectile_plasma",				"#str_08010",	"leechgun",			"plasma" },
+	{ "projectile_railgun",				"#str_08011",	"leechgun",			"bolt" },
+	{ "projectile_sunbeam",				"#str_08012",	"leechgun",			"sun" },
+};
+static const int numObituaryIcons = sizeof( obituaryIcons ) / sizeof( obituaryIcons[ 0 ] );
+
+// The feed's own glyphs, and every name above, for the precache.
+static const char *obituaryGlyphs[] = {
+	"wrench", "bow", "rifle", "crawler", "autocannon", "acidsprayer", "rocketlauncher", "leechgun",
+	"skull", "telefrag", "generic",
+	"scope", "mine", "grenade", "plasma", "bolt", "sun", "skull_badge",
+	NULL
+};
+
+static idStr ObituaryMaterial( const char *name ) {
+	return name != NULL && name[ 0 ] ? va( "guis/assets/hud/obits/%s", name ) : "";
+}
+
+static void ObituaryIconsFor( int projectileDefNum, idStr &icon, idStr &badge ) {
+	icon.Clear();
+	badge.Clear();
+	if ( !projectileDefNum ) {
+		return;
+	}
+	const idDeclEntityDef *def = static_cast<const idDeclEntityDef *>( declManager->DeclByIndex( DECL_ENTITYDEF, projectileDefNum, false ) );
+	if ( def == NULL ) {
+		return;
+	}
+	const char *own = def->dict.GetString( "mtr_obituary" );
+	if ( own[ 0 ] ) {
+		icon = ObituaryMaterial( own );
+		badge = ObituaryMaterial( def->dict.GetString( "mtr_obituaryBadge" ) );
+		return;
+	}
+	const char *deathMessage = def->dict.GetString( "str_deathmessage" );
+	const obituaryIcon_t *match = NULL;
+	for ( int i = 0; i < numObituaryIcons && match == NULL; i++ ) {
+		if ( !idStr::Icmp( def->GetName(), obituaryIcons[ i ].projectile ) ) {
+			match = &obituaryIcons[ i ];
+		}
+	}
+	for ( int i = 0; i < numObituaryIcons && match == NULL && deathMessage[ 0 ]; i++ ) {
+		if ( obituaryIcons[ i ].deathMessage != NULL && !idStr::Icmp( deathMessage, obituaryIcons[ i ].deathMessage ) ) {
+			match = &obituaryIcons[ i ];
+		}
+	}
+	if ( match != NULL ) {
+		icon = ObituaryMaterial( match->icon );
+		badge = ObituaryMaterial( match->badge );
+	}
+}
 
 const char *idMultiplayerGame::ThrottleVars[] = {
 	"ui_spectate",
@@ -88,12 +169,14 @@ idMultiplayerGame::idMultiplayerGame() {
 	scoreBoard = NULL;
 	spectateGui = NULL;
 	guiChat = NULL;
+	guiObits = NULL;
 	mainGui = NULL;
 #ifdef _GUITEST_SERVERWAIT
 	serverWaitGui = NULL; //HUMANHEAD rww
 #endif
 	mapList = NULL;
 	chatHistoryList = NULL;		// HUMANHEAD pdm
+	chatListIndex = 0;
 	msgmodeGui = NULL;
 	lastGameType = GAME_SP;
 	Clear();
@@ -158,6 +241,7 @@ void idMultiplayerGame::Reset() {
 	scoreBoard = uiManager->FindGui( "guis/scoreboard.gui", true, false, true );
 	spectateGui = uiManager->FindGui( "guis/spectate.gui", true, false, true );
 	guiChat = uiManager->FindGui( "guis/chat.gui", true, false, true );
+	guiObits = uiManager->FindGui( "guis/obituaries.gui", true, false, true );
 	mainGui = uiManager->FindGui( "guis/mpmain.gui", true, false, true );
 #ifdef _GUITEST_SERVERWAIT
 	serverWaitGui = uiManager->FindGui( "guis/mpserverwait.gui", true, false, true ); //HUMANHEAD rww
@@ -245,6 +329,7 @@ void idMultiplayerGame::Clear() {
 	scoreBoard = NULL;
 	spectateGui = NULL;
 	guiChat = NULL;
+	guiObits = NULL;
 	mainGui = NULL;
 #ifdef _GUITEST_SERVERWAIT
 	serverWaitGui = NULL; //HUMANHEAD rww
@@ -2398,6 +2483,7 @@ bool idMultiplayerGame::Draw( int clientNum ) {
 		// use the hud of the local player
 		viewPlayer->playerView.RenderPlayerView( player->hud );
 	}
+	DrawObituaries();		// openPR06
 
 	if ( currentMenu ) {
 #if 0
@@ -2710,6 +2796,10 @@ void idMultiplayerGame::ClearChatData() {
 //	HUMANHEAD pdm: Reworked for our chat system
 	chatHistoryIndex	= 0;
 //	HUMANHEAD END
+	chatListIndex = 0;
+	if ( guiObits ) {
+		guiObits->HandleNamedEvent( "obitReset" );
+	}
 }
 
 /*
@@ -2724,28 +2814,43 @@ void idMultiplayerGame::AddChatLine( const char *fmt, ... ) {
 	va_start( argptr, fmt );
 	vsprintf( temp, fmt, argptr );
 	va_end( argptr );
-	
-	gameLocal.Printf( "%s\n", temp.c_str() );
+
+	AddChatLineText( temp, true );
+}
+
+/*
+===============
+idMultiplayerGame::AddChatLineText
+	openPR06: a line with notify false reaches the console and the menu's
+	chat history but not the HUD's transient chat lines (chat.gui): the
+	obituaries, while the graphical feed shows them
+===============
+*/
+void idMultiplayerGame::AddChatLineText( const char *line, bool notify ) {
+	gameLocal.Printf( "%s\n", line );
 
 	if (!chatHistoryList) { //HUMANHEAD rww - can be null if session has shut down
 		return;
 	}
 
 //	HUMANHEAD pdm: Reworked for our chat system
-	int safeIndex = chatHistoryIndex % NUM_CHAT_HISTORY_LINES;
-	chatHistory[ safeIndex ].line = temp;
-	chatHistory[ safeIndex ].startTime = gameLocal.time;
+	if ( notify ) {
+		int safeIndex = chatHistoryIndex % NUM_CHAT_HISTORY_LINES;
+		chatHistory[ safeIndex ].line = line;
+		chatHistory[ safeIndex ].startTime = gameLocal.time;
+		chatHistoryIndex++;
+	}
 
 	if (chatHistoryList->Num() >= MAX_HISTORY_LIST) {					// Don't let the list get out of control
 		chatHistoryList->Clear();
 	}
-	chatHistoryList->Add(chatHistoryIndex % MAX_HISTORY_LIST, temp);	// Wrap around after MAX_HISTORY_LIST entries
-	chatHistoryList->SetSelection(chatHistoryIndex % MAX_HISTORY_LIST);
+	chatHistoryList->Add(chatListIndex % MAX_HISTORY_LIST, line);	// Wrap around after MAX_HISTORY_LIST entries
+	chatHistoryList->SetSelection(chatListIndex % MAX_HISTORY_LIST);
 	if (mainGui) {
 		mainGui->HandleNamedEvent("viewBottom");
 	}
 
-	chatHistoryIndex++;
+	chatListIndex++;
 //	HUMANHEAD END
 }
 
@@ -3064,7 +3169,8 @@ const char *idMultiplayerGame::DeathStringForProjectile(int projectileDefNum) {
 	return common->GetLanguageDict()->GetString( "#str_04292" );
 }
 
-void idMultiplayerGame::PrintDeathMessageEvent( int to, msg_evt_t evt, int parm1, int parm2, int inflictorDef ) {
+void idMultiplayerGame::PrintDeathMessageEvent( int to, msg_evt_t evt, int parm1, int parm2, int inflictorDef, bool broadcast ) {
+	idStr line;		// openPR06: built here, then sent to chat or to the graphical feed
 	switch ( evt ) {
 		//HUMANHEAD rww - reworked all of these AddChatLine calls to allow for our coloring-based-on-kill-involvement junk
 		char *formatting;
@@ -3076,7 +3182,7 @@ void idMultiplayerGame::PrintDeathMessageEvent( int to, msg_evt_t evt, int parm1
 			else {
 				formatting = "%s^0%s";
 			}
-			AddChatLine( formatting, gameLocal.userInfo[ parm1 ].GetString( "ui_name" ), common->GetLanguageDict()->GetString( "#str_04293" ) );
+			sprintf( line, formatting, gameLocal.userInfo[ parm1 ].GetString( "ui_name" ), common->GetLanguageDict()->GetString( "#str_04293" ) );
 			break;
 		case MSG_KILLED:
 			assert( parm1 >= 0 && parm2 >= 0 );
@@ -3089,7 +3195,7 @@ void idMultiplayerGame::PrintDeathMessageEvent( int to, msg_evt_t evt, int parm1
 			else {
 				formatting = "%s^0%s%s^0";
 			}
-			AddChatLine( formatting, gameLocal.userInfo[ parm1 ].GetString( "ui_name" ), DeathStringForProjectile(inflictorDef), gameLocal.userInfo[ parm2 ].GetString( "ui_name" ) );
+			sprintf( line, formatting, gameLocal.userInfo[ parm1 ].GetString( "ui_name" ), DeathStringForProjectile(inflictorDef), gameLocal.userInfo[ parm2 ].GetString( "ui_name" ) );
 			break;
 		case MSG_KILLEDTEAM:
 			assert( parm1 >= 0 && parm2 >= 0 );
@@ -3102,7 +3208,7 @@ void idMultiplayerGame::PrintDeathMessageEvent( int to, msg_evt_t evt, int parm1
 			else {
 				formatting = "%s^0%s%s^0";
 			}
-			AddChatLine( formatting, gameLocal.userInfo[ parm1 ].GetString( "ui_name" ), common->GetLanguageDict()->GetString( "#str_04291" ), gameLocal.userInfo[ parm2 ].GetString( "ui_name" ) );
+			sprintf( line, formatting, gameLocal.userInfo[ parm1 ].GetString( "ui_name" ), common->GetLanguageDict()->GetString( "#str_04291" ), gameLocal.userInfo[ parm2 ].GetString( "ui_name" ) );
 			break;
 		case MSG_TELEFRAGGED:
 			assert( parm1 >= 0 && parm2 >= 0 );
@@ -3115,7 +3221,7 @@ void idMultiplayerGame::PrintDeathMessageEvent( int to, msg_evt_t evt, int parm1
 			else {
 				formatting = "%s^0%s%s^0";
 			}
-			AddChatLine( formatting, gameLocal.userInfo[ parm1 ].GetString( "ui_name" ), common->GetLanguageDict()->GetString( "#str_04290" ), gameLocal.userInfo[ parm2 ].GetString( "ui_name" ) );
+			sprintf( line, formatting, gameLocal.userInfo[ parm1 ].GetString( "ui_name" ), common->GetLanguageDict()->GetString( "#str_04290" ), gameLocal.userInfo[ parm2 ].GetString( "ui_name" ) );
 			break;
 		case MSG_DIED:
 			assert( parm1 >= 0 );
@@ -3125,14 +3231,23 @@ void idMultiplayerGame::PrintDeathMessageEvent( int to, msg_evt_t evt, int parm1
 			else {
 				formatting = "%s^0%s";
 			}
-			AddChatLine( formatting, gameLocal.userInfo[ parm1 ].GetString( "ui_name" ), common->GetLanguageDict()->GetString( "#str_04289" ) );
+			sprintf( line, formatting, gameLocal.userInfo[ parm1 ].GetString( "ui_name" ), common->GetLanguageDict()->GetString( "#str_04289" ) );
 			break;
 		default:
 			gameLocal.DPrintf( "PrintDeathMessageEvent: unknown message type %d\n", evt );
 			return;
 	}
 
-	if ( !gameLocal.isClient ) {
+	// openPR06: with the graphical feed on, the line leaves the HUD's chat lines
+	// for an icon line at the top left; the console and the menu's history keep it.
+	if ( guiObits != NULL && hud_graphicalObits.GetBool() ) {
+		AddChatLineText( line, false );
+		PushObituary( evt, parm1, parm2, inflictorDef );
+	} else {
+		AddChatLineText( line, true );
+	}
+
+	if ( broadcast && !gameLocal.isClient ) {
 		idBitMsg outMsg;
 		byte msgBuf[1024];
 		outMsg.Init( msgBuf, sizeof( msgBuf ) );
@@ -3145,6 +3260,127 @@ void idMultiplayerGame::PrintDeathMessageEvent( int to, msg_evt_t evt, int parm1
 	}
 }
 //HUMANHEAD END
+
+/*
+================
+idMultiplayerGame::PushObituary
+	openPR06: hands one death to the graphical feed (guis/obituaries.gui).
+	A kill shows the killer's weapon; a suicide the skull, or the weapon with
+	a skull badge; a death without a killer the skull, or what killed; a
+	telefrag the portal; a kill by anything else the generic mark.
+================
+*/
+void idMultiplayerGame::PushObituary( msg_evt_t evt, int victim, int killer, int inflictorDef ) {
+	if ( guiObits == NULL || victim < 0 || victim >= MAX_CLIENTS ) {
+		return;
+	}
+	idStr icon, badge;
+	ObituaryIconsFor( inflictorDef, icon, badge );
+	switch ( evt ) {
+		case MSG_SUICIDE:
+			killer = -1;
+			if ( icon.Length() ) {
+				badge = ObituaryMaterial( "skull_badge" );
+			} else {
+				icon = ObituaryMaterial( "skull" );
+				badge.Clear();
+			}
+			break;
+		case MSG_DIED:
+			killer = -1;
+			if ( !icon.Length() ) {
+				icon = ObituaryMaterial( "skull" );
+			}
+			break;
+		case MSG_TELEFRAGGED:
+			icon = ObituaryMaterial( "telefrag" );
+			badge.Clear();
+			break;
+		default:
+			if ( !icon.Length() ) {
+				icon = ObituaryMaterial( "generic" );
+			}
+			break;
+	}
+	if ( killer >= MAX_CLIENTS ) {
+		killer = -1;
+	}
+
+	const bool teams = gameLocal.gameType == GAME_TDM;
+	int self = 0;
+	if ( killer >= 0 && killer == gameLocal.localClientNum ) {
+		self |= 1;
+	}
+	if ( victim == gameLocal.localClientNum ) {
+		self |= 2;
+	}
+	guiObits->SetStateString( "obit_killer", killer >= 0 ? gameLocal.userInfo[ killer ].GetString( "ui_name" ) : "" );
+	guiObits->SetStateString( "obit_victim", gameLocal.userInfo[ victim ].GetString( "ui_name" ) );
+	guiObits->SetStateString( "obit_icon", icon );
+	guiObits->SetStateString( "obit_badge", badge );
+	guiObits->SetStateInt( "obit_killerTeam", teams && killer >= 0 ? ( idStr::Icmp( gameLocal.userInfo[ killer ].GetString( "ui_team" ), "Red" ) == 0 ) : -1 );
+	guiObits->SetStateInt( "obit_victimTeam", teams ? ( idStr::Icmp( gameLocal.userInfo[ victim ].GetString( "ui_team" ), "Red" ) == 0 ) : -1 );
+	guiObits->SetStateInt( "obit_self", self );
+	guiObits->SetStateInt( "obit_time", gameLocal.time );
+	guiObits->HandleNamedEvent( "obitPush" );
+}
+
+/*
+================
+idMultiplayerGame::TestObituary_f
+	openPR06: a death shown here only, for captures and tests without a fight:
+	testObituary <killed|teamkill|suicide|died|telefrag> <victim> [killer] [projectile entityDef]
+	(client numbers; "-" for no projectile). Nothing reaches the network or the scores.
+================
+*/
+void idMultiplayerGame::TestObituary_f( const idCmdArgs &args ) {
+	static const char *kinds[] = { "killed", "teamkill", "suicide", "died", "telefrag" };
+	static const msg_evt_t events[] = { MSG_KILLED, MSG_KILLEDTEAM, MSG_SUICIDE, MSG_DIED, MSG_TELEFRAGGED };
+	if ( !gameLocal.isMultiplayer || args.Argc() < 3 ) {
+		common->Printf( "usage: testObituary <killed|teamkill|suicide|died|telefrag> <victim> [killer] [projectile] (multiplayer)\n" );
+		return;
+	}
+	int kind = -1;
+	for ( int i = 0; i < 5; i++ ) {
+		if ( !idStr::Icmp( args.Argv( 1 ), kinds[ i ] ) ) {
+			kind = i;
+		}
+	}
+	const int victim = atoi( args.Argv( 2 ) );
+	int killer = args.Argc() > 3 ? atoi( args.Argv( 3 ) ) : -1;
+	if ( kind < 0 || victim < 0 || victim >= MAX_CLIENTS || killer >= MAX_CLIENTS ) {
+		common->Printf( "testObituary: unknown kind or client\n" );
+		return;
+	}
+	if ( events[ kind ] == MSG_SUICIDE || events[ kind ] == MSG_DIED ) {
+		killer = -1;
+	} else if ( killer < 0 ) {
+		common->Printf( "testObituary: %s needs a killer\n", kinds[ kind ] );
+		return;
+	}
+	int inflictorDef = 0;
+	if ( args.Argc() > 4 && idStr::Cmp( args.Argv( 4 ), "-" ) ) {
+		const idDeclEntityDef *def = gameLocal.FindEntityDef( args.Argv( 4 ), false );
+		if ( def == NULL ) {
+			common->Printf( "testObituary: no entityDef '%s'\n", args.Argv( 4 ) );
+			return;
+		}
+		inflictorDef = def->Index();
+	}
+	gameLocal.mpGame.PrintDeathMessageEvent( -1, events[ kind ], victim, killer, inflictorDef, false );
+}
+
+/*
+================
+idMultiplayerGame::DrawObituaries
+	openPR06: over the HUD, under the menus and the scoreboard; hidden with the HUD
+================
+*/
+void idMultiplayerGame::DrawObituaries( void ) {
+	if ( guiObits != NULL && hud_graphicalObits.GetBool() && g_showHud.GetBool() ) {
+		guiObits->Redraw( gameLocal.time );
+	}
+}
 
 /*
 ================
@@ -4341,6 +4577,10 @@ void idMultiplayerGame::Precache( void ) {
 	while ( MPGuis[ i ] ) {
 		uiManager->FindGui( MPGuis[ i ], true );
 		i++;
+	}
+	// openPR06: the obituary feed's icons, so the first kill of a match draws without a load
+	for ( i = 0; obituaryGlyphs[ i ]; i++ ) {
+		declManager->FindMaterial( ObituaryMaterial( obituaryGlyphs[ i ] ) );
 	}
 }
 

@@ -1,0 +1,237 @@
+// The multiplayer obituary feed's icons (guis/obituaries.gui, src/ui/ObituaryWindow.h),
+// written by tools/ui/obituary_icons.py; idMultiplayerGame::PushObituary picks them.
+// White silhouettes on a dark keyline, tinted by the feed through `colored`.
+
+guis/assets/hud/obits/wrench {
+	noshadows
+	sort gui
+	{
+		blend blend
+		map guis/assets/hud/obits/wrench.tga
+		clamp
+		nopicmip
+		highquality
+		colored
+	}
+}
+
+guis/assets/hud/obits/bow {
+	noshadows
+	sort gui
+	{
+		blend blend
+		map guis/assets/hud/obits/bow.tga
+		clamp
+		nopicmip
+		highquality
+		colored
+	}
+}
+
+guis/assets/hud/obits/rifle {
+	noshadows
+	sort gui
+	{
+		blend blend
+		map guis/assets/hud/obits/rifle.tga
+		clamp
+		nopicmip
+		highquality
+		colored
+	}
+}
+
+guis/assets/hud/obits/crawler {
+	noshadows
+	sort gui
+	{
+		blend blend
+		map guis/assets/hud/obits/crawler.tga
+		clamp
+		nopicmip
+		highquality
+		colored
+	}
+}
+
+guis/assets/hud/obits/autocannon {
+	noshadows
+	sort gui
+	{
+		blend blend
+		map guis/assets/hud/obits/autocannon.tga
+		clamp
+		nopicmip
+		highquality
+		colored
+	}
+}
+
+guis/assets/hud/obits/acidsprayer {
+	noshadows
+	sort gui
+	{
+		blend blend
+		map guis/assets/hud/obits/acidsprayer.tga
+		clamp
+		nopicmip
+		highquality
+		colored
+	}
+}
+
+guis/assets/hud/obits/rocketlauncher {
+	noshadows
+	sort gui
+	{
+		blend blend
+		map guis/assets/hud/obits/rocketlauncher.tga
+		clamp
+		nopicmip
+		highquality
+		colored
+	}
+}
+
+guis/assets/hud/obits/leechgun {
+	noshadows
+	sort gui
+	{
+		blend blend
+		map guis/assets/hud/obits/leechgun.tga
+		clamp
+		nopicmip
+		highquality
+		colored
+	}
+}
+
+guis/assets/hud/obits/skull {
+	noshadows
+	sort gui
+	{
+		blend blend
+		map guis/assets/hud/obits/skull.tga
+		clamp
+		nopicmip
+		highquality
+		colored
+	}
+}
+
+guis/assets/hud/obits/telefrag {
+	noshadows
+	sort gui
+	{
+		blend blend
+		map guis/assets/hud/obits/telefrag.tga
+		clamp
+		nopicmip
+		highquality
+		colored
+	}
+}
+
+guis/assets/hud/obits/generic {
+	noshadows
+	sort gui
+	{
+		blend blend
+		map guis/assets/hud/obits/generic.tga
+		clamp
+		nopicmip
+		highquality
+		colored
+	}
+}
+
+guis/assets/hud/obits/scope {
+	noshadows
+	sort gui
+	{
+		blend blend
+		map guis/assets/hud/obits/scope.tga
+		clamp
+		nopicmip
+		highquality
+		colored
+	}
+}
+
+guis/assets/hud/obits/mine {
+	noshadows
+	sort gui
+	{
+		blend blend
+		map guis/assets/hud/obits/mine.tga
+		clamp
+		nopicmip
+		highquality
+		colored
+	}
+}
+
+guis/assets/hud/obits/grenade {
+	noshadows
+	sort gui
+	{
+		blend blend
+		map guis/assets/hud/obits/grenade.tga
+		clamp
+		nopicmip
+		highquality
+		colored
+	}
+}
+
+guis/assets/hud/obits/plasma {
+	noshadows
+	sort gui
+	{
+		blend blend
+		map guis/assets/hud/obits/plasma.tga
+		clamp
+		nopicmip
+		highquality
+		colored
+	}
+}
+
+guis/assets/hud/obits/bolt {
+	noshadows
+	sort gui
+	{
+		blend blend
+		map guis/assets/hud/obits/bolt.tga
+		clamp
+		nopicmip
+		highquality
+		colored
+	}
+}
+
+guis/assets/hud/obits/sun {
+	noshadows
+	sort gui
+	{
+		blend blend
+		map guis/assets/hud/obits/sun.tga
+		clamp
+		nopicmip
+		highquality
+		colored
+	}
+}
+
+guis/assets/hud/obits/skull_badge {
+	noshadows
+	sort gui
+	{
+		blend blend
+		map guis/assets/hud/obits/skull_badge.tga
+		clamp
+		nopicmip
+		highquality
+		colored
+	}
+}

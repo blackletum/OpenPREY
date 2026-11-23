@@ -28,6 +28,7 @@ The same page also has mouse options (`m_pitch` for inverted mouse, `m_smooth`, 
 | Setting | Default | What it does |
 |---|---:|---|
 | `g_autoSkipCinematics` | `0` | Single-player only. Skips cinematics and other scripted sections where the player has no control, as soon as they begin. Ignored in multiplayer. |
+| `hud_graphicalObits` | `1` | Multiplayer only. Shows deaths as a compact feed at the HUD's top left: the killer's name, an icon for the weapon (with a small badge for an alternate fire, a skull for a suicide) and the victim's name. Up to five lines show at once, each for three seconds; lines naming you are lit. The death messages then stay out of the chat lines, though the console and the in-game menu's chat history still list them. `0` restores the stock chat-line messages. |
 | `g_showPlayerShadow` | `1` | Shows your own player model's shadow, with the weapon in your hand, in your own first-person view. Other players' shadows always show, in single-player and multiplayer. Retail PREY shipped `0` and gave multiplayer players no shadow at all; a config saved with the retail `0` is switched on once (`g_showPlayerShadowMigrated`). |
 
 ## Quick Reference: Audio
