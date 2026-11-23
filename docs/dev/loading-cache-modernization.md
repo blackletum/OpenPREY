@@ -219,6 +219,18 @@ private file, records a miss/corruption when reporting is enabled, and lets the
 owner parse the source. Writes use a unique staging file, flush it, then
 atomically promote it over the final path.
 
+With `com_levelLoadCacheAsyncWrite 1`, the default, `WriteGeneratedCache`
+resolves the staging and final paths on the owner thread and queues the
+envelope for one background writer. The writer encodes it, writes the staging
+file with C stdio and renames it over the final path; it never calls
+`idFileSystem`. A load that asks for the file before it lands misses and parses
+the source, exactly as on a first visit. At most 256 MiB of payload waits in the
+queue; past that the owner blocks until the writer catches up, and the writer
+drains when the cache manager shuts down. `com_levelLoadCacheSync 1`, the
+default, keeps the flush to disk before promotion on both paths; `0` skips it.
+The rename is atomic either way, and a torn file fails its integrity check and
+is rebuilt from source.
+
 Owners ask `idFileSystem::GeneratedCacheReadsEnabled( kind )` or
 `GeneratedCacheWritesEnabled( kind )` (render API 23) before they decode or
 encode a payload, and `OpenGeneratedCacheRead`/`WriteGeneratedCache` apply the
@@ -230,7 +242,9 @@ read gate, so learned manifests are unchanged.
 
 An uncompressed envelope costs two SHA-256 passes over its payload on each read
 and write: the whole-record integrity hash and the payload digest, both computed
-by `DecodeEnvelope`/`EncodeEnvelope`. The runtime does not call
+by `DecodeEnvelope`/`EncodeEnvelope` through `idCrypto::SHA256`, which uses
+the CPU's SHA instructions (x86 SHA-NI or ARMv8 SHA2) when present and a
+portable implementation otherwise. The runtime does not call
 `ValidateDecodedPayload` for the uncompressed codec, because that would hash the
 copy of bytes `DecodeEnvelope` just verified; a compressed codec needs it after
 decompression.
@@ -355,6 +369,8 @@ one additional switch:
 | `com_levelLoadModernization` | `0` | Master admission gate for every framework and SP/MP animation cache/preload path |
 | `com_levelLoadCache` | `1` | Enables learned manifests and generated model/world/collision cache reads |
 | `com_levelLoadCacheWrite` | `1` | Enables atomic manifest and generated-cache writes |
+| `com_levelLoadCacheAsyncWrite` | `1` | Encodes and writes generated caches on a background thread instead of during the load |
+| `com_levelLoadCacheSync` | `1` | Flushes each generated cache file to disk before its atomic promotion |
 | `com_levelLoadPreload` | `1` | Replays a matching manifest through the bounded read/framing pipeline |
 | `com_levelLoadCacheReport` | `0` | Prints per-generation replay, read/decode, cancellation, memory, and generated-cache counters |
 
@@ -646,6 +662,30 @@ touch: the back sides `FinishSurfaces` added, and every surface
 `idRenderWorldLocal::ParseModel` parsed. World parser version 3 and static
 parser version `0x00010003` number those ids (see Render worlds), so both
 caches are now reproducible across cold loads.
+
+### Hardware hashing and background writes (23 November 2026)
+
+Measured on a Windows x64 `debugoptimized` openPR06 build (Ryzen 7 5700X,
+OpenGL, borderless 2560x1080 window, retail PK4s) over six SP maps (`roadhouse`,
+`feedingtowera`, `salvage`, `lotaa`, `spindlea`, `spherebrain`). Every load is a
+fresh process; variants alternate load by load. A first visit is one load from
+an empty save path and warm is the median of the next three. Totals are the
+`total` of `Map load phases` summed over the six maps. The machine was in normal
+desktop use, so the first-visit column (one sample per map) is the noisier one.
+
+| Campaign | Variant | First visit | Warm |
+|---|---|---:|---:|
+| A | `com_levelLoadModernization 0` | 34.4 s | 22.3 s |
+| A | `1`, portable SHA-256, writes on the load thread | 61.7 s | 21.1 s |
+| B | `com_levelLoadModernization 0` | 24.3 s | 19.1 s |
+| B | `1`, SHA instructions, writes on the load thread (`com_levelLoadCacheAsyncWrite 0`) | 29.5 s | 17.6 s |
+| B | `1`, SHA instructions, background writer (default) | 25.8 s | 17.4 s |
+
+Campaign B ran on a newer engine baseline than A, so compare variants within a
+campaign. The first-visit cost of the experiment fell from +79% to about +6%,
+and warm loads went from 5% to 8.5% faster than the classic path. Every warm
+load in B reported generated-cache hits with `generatedCorrupt=0`, and no
+staging file remained in `generated/`.
 
 ### Dedicated-server development run
 

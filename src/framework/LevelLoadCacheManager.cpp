@@ -50,7 +50,16 @@ any cached payload can be accepted.
 #include <cstring>
 #include <iomanip>
 #include <limits>
+#include <condition_variable>
+#include <cstdio>
+#include <deque>
 #include <mutex>
+#include <thread>
+#if defined( _WIN32 )
+#include <io.h>
+#else
+#include <unistd.h>
+#endif
 #include <unordered_map>
 #include <set>
 #include <sstream>
@@ -79,6 +88,12 @@ static idCVar com_levelLoadCacheWrite(
 static idCVar com_levelLoadPreload(
 	"com_levelLoadPreload", "1", CVAR_BOOL | CVAR_ARCHIVE | CVAR_SYSTEM,
 	"replay a matching learned manifest through the bounded level-load job pipeline" );
+static idCVar com_levelLoadCacheSync(
+	"com_levelLoadCacheSync", "1", CVAR_BOOL | CVAR_ARCHIVE | CVAR_SYSTEM,
+	"flush each generated cache file to disk before promoting it (the promotion is atomic either way, and a torn file fails its integrity check and is rebuilt from source)" );
+static idCVar com_levelLoadCacheAsyncWrite(
+	"com_levelLoadCacheAsyncWrite", "1", CVAR_BOOL | CVAR_ARCHIVE | CVAR_SYSTEM,
+	"encode, hash and write generated cache files on a background thread instead of during the level load" );
 static idCVar com_levelLoadCacheReport(
 	"com_levelLoadCacheReport", "0", CVAR_BOOL | CVAR_ARCHIVE | CVAR_SYSTEM,
 	"print per-map manifest, cancellation, byte, and generated-cache diagnostics" );
@@ -493,7 +508,7 @@ bool WriteAtomic( idFileSystem *fileSystem, const std::string &finalPath,
 	}
 	const int requested = static_cast<int>( bytes.size() );
 	const bool complete = file->Write( bytes.data(), requested ) == requested;
-	const bool synced = complete && file->Sync();
+	const bool synced = complete && ( !com_levelLoadCacheSync.GetBool() || file->Sync() );
 	fileSystem->CloseFile( file );
 	if ( !synced || !fileSystem->PromoteFile( stagedPath.c_str(), finalPath.c_str(), "fs_savepath" ) ) {
 		fileSystem->RemoveFileChecked( stagedPath.c_str(), "fs_savepath" );
@@ -529,6 +544,142 @@ std::string CachePath( const idLevelLoadCache::EnvelopeExpectation &expected ) {
 
 } // namespace
 
+/*
+================
+GeneratedCacheWriter
+
+Generated caches are derived data: a level load does not need them, only the
+next one. The owner thread hands over the finished envelope and the absolute
+staging/final paths (resolved there, because path building uses shared
+buffers); this thread encodes it (two SHA-256 passes), writes the staging file
+with plain C stdio and promotes it with an atomic OS rename. It never calls
+into idFileSystem. A reader that asks before the file lands simply misses and
+parses the source, as on a first visit. Queued payloads are capped at
+MAX_QUEUED_BYTES; past that the owner waits for the writer to catch up.
+================
+*/
+class GeneratedCacheWriter {
+public:
+	struct Job {
+		std::string						stagedOSPath;
+		std::string						finalOSPath;
+		idLevelLoadCache::CacheEnvelope	envelope;
+		bool							sync = false;
+	};
+
+	~GeneratedCacheWriter() {
+		Drain();
+	}
+
+	void Enqueue( Job &&job ) {
+		{
+			std::unique_lock<std::mutex> lock( mutex );
+			const std::uint64_t bytes = job.envelope.payload.size();
+			room.wait( lock, [this, bytes] {
+				return queuedBytes == 0 || queuedBytes + bytes <= MAX_QUEUED_BYTES;
+			} );
+			queuedBytes += bytes;
+			queue.push_back( std::move( job ) );
+			if ( !worker.joinable() ) {
+				stop = false;
+				worker = std::thread( [this] { Run(); } );
+			}
+		}
+		wake.notify_one();
+	}
+
+	// blocks until every queued file has been written (shutdown)
+	void Drain() {
+		{
+			std::lock_guard<std::mutex> lock( mutex );
+			stop = true;
+		}
+		wake.notify_one();
+		if ( worker.joinable() ) {
+			worker.join();
+		}
+	}
+
+	std::uint64_t Written() const { return written.load( std::memory_order_relaxed ); }
+	std::uint64_t Failed() const { return failed.load( std::memory_order_relaxed ); }
+	std::size_t Pending() {
+		std::lock_guard<std::mutex> lock( mutex );
+		return queue.size() + ( busy ? 1 : 0 );
+	}
+
+private:
+	void Run() {
+		for ( ;; ) {
+			Job job;
+			{
+				std::unique_lock<std::mutex> lock( mutex );
+				wake.wait( lock, [this] { return stop || !queue.empty(); } );
+				if ( queue.empty() ) {
+					return;		// stop requested and nothing left
+				}
+				job = std::move( queue.front() );
+				queue.pop_front();
+				busy = true;
+			}
+			const std::uint64_t bytes = job.envelope.payload.size();
+			const bool ok = Write( job );
+			( ok ? written : failed ).fetch_add( 1, std::memory_order_relaxed );
+			{
+				std::lock_guard<std::mutex> lock( mutex );
+				busy = false;
+				queuedBytes -= bytes;
+			}
+			room.notify_all();
+		}
+	}
+
+	static bool Write( Job &job ) {
+		std::vector<std::uint8_t> encoded;
+		if ( !idLevelLoadCache::EncodeEnvelope( job.envelope, encoded ) || encoded.empty() ) {
+			return false;
+		}
+		FILE *f = fopen( job.stagedOSPath.c_str(), "wb" );
+		if ( f == nullptr ) {
+			return false;
+		}
+		bool ok = fwrite( encoded.data(), 1, encoded.size(), f ) == encoded.size();
+		ok = ( fflush( f ) == 0 ) && ok;
+		if ( ok && job.sync ) {
+#if defined( _WIN32 )
+			ok = _commit( _fileno( f ) ) == 0;
+#else
+			ok = fsync( fileno( f ) ) == 0;
+#endif
+		}
+		ok = ( fclose( f ) == 0 ) && ok;
+		if ( ok ) {
+#if defined( _WIN32 )
+			ok = MoveFileExA( job.stagedOSPath.c_str(), job.finalOSPath.c_str(),
+				MOVEFILE_REPLACE_EXISTING | ( job.sync ? MOVEFILE_WRITE_THROUGH : 0 ) ) != FALSE;
+#else
+			ok = rename( job.stagedOSPath.c_str(), job.finalOSPath.c_str() ) == 0;
+#endif
+		}
+		if ( !ok ) {
+			remove( job.stagedOSPath.c_str() );
+		}
+		return ok;
+	}
+
+	static constexpr std::uint64_t MAX_QUEUED_BYTES = 256ull * 1024ull * 1024ull;
+
+	std::mutex				mutex;
+	std::condition_variable	wake;
+	std::condition_variable	room;
+	std::deque<Job>			queue;
+	std::uint64_t			queuedBytes = 0;
+	std::thread				worker;
+	bool					stop = false;
+	bool					busy = false;
+	std::atomic<std::uint64_t>	written{ 0 };
+	std::atomic<std::uint64_t>	failed{ 0 };
+};
+
 struct idLevelLoadCacheManager::Impl {
 	struct SemanticHint {
 		levelLoadResourceType_t type;
@@ -554,6 +705,7 @@ struct idLevelLoadCacheManager::Impl {
 
 	idFileSystem *fileSystem;
 	idLevelLoadPipeline pipeline;
+	GeneratedCacheWriter writer;
 	std::uint64_t generation;
 	std::uint64_t firstUseOrder;
 	bool recording;
@@ -857,6 +1009,12 @@ void idLevelLoadCacheManager::Finish( const bool successful ) {
 			static_cast<unsigned long long>( impl->generatedWrites.load( std::memory_order_relaxed ) ),
 			static_cast<unsigned long long>( impl->generatedCorruptions.load( std::memory_order_relaxed ) ),
 			metrics.synchronousFallback ? 1 : 0, wroteManifest ? 1 : 0 );
+		if ( com_levelLoadCacheAsyncWrite.GetBool() ) {
+			common->Printf( "Generated cache writer: written=%llu failed=%llu pending=%llu\n",
+				static_cast<unsigned long long>( impl->writer.Written() ),
+				static_cast<unsigned long long>( impl->writer.Failed() ),
+				static_cast<unsigned long long>( impl->writer.Pending() ) );
+		}
 	}
 	if ( successful ) {
 		// Continue learning source-backed resources that first become visible or
@@ -1139,6 +1297,23 @@ bool idLevelLoadCacheManager::WriteGeneratedCache( const generatedCacheKind_t ki
 		}
 	} catch ( ... ) {
 		return false;
+	}
+	if ( com_levelLoadCacheAsyncWrite.GetBool() ) {
+		const std::string finalRelative = CachePath( expected );
+		std::ostringstream staged;
+		staged << finalRelative << '.' << stagedFileSerial.fetch_add( 1, std::memory_order_relaxed ) << ".tmp";
+		GeneratedCacheWriter::Job job;
+		job.finalOSPath = impl->fileSystem->RelativePathToOSPath( finalRelative.c_str(), "fs_savepath" );
+		job.stagedOSPath = impl->fileSystem->RelativePathToOSPath( staged.str().c_str(), "fs_savepath" );
+		job.sync = com_levelLoadCacheSync.GetBool();
+		job.envelope = std::move( envelope );
+		impl->fileSystem->CreateOSPath( job.finalOSPath.c_str() );
+		impl->writer.Enqueue( std::move( job ) );
+		impl->generatedWrites.fetch_add( 1, std::memory_order_relaxed );
+		if ( com_levelLoadCacheReport.GetBool() ) {
+			common->Printf( "Generated cache queued for %s (%u payload bytes)\n", normalized.c_str(), payloadBytes );
+		}
+		return true;
 	}
 	std::vector<std::uint8_t> encoded;
 	const idLevelLoadCache::Result result = idLevelLoadCache::EncodeEnvelope( envelope, encoded );

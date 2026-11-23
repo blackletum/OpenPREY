@@ -105,6 +105,10 @@ com_levelLoadCacheReport 0
 - Set `com_levelLoadCacheWrite 0` to stop new manifests and generated
   model/world/collision files from being written while valid existing files can
   still be read.
+- Generated cache files are written on a background thread
+  (`com_levelLoadCacheAsyncWrite 1`) and flushed to disk before they replace
+  the old file (`com_levelLoadCacheSync 1`). Set either to `0` to write during
+  the load or to skip the flush.
 - Set `com_levelLoadCache 0` before loading a map to bypass learned manifests
   and generated model/world/collision caches completely.
 - Set `com_levelLoadCacheReport 1` for per-map hit, miss, replay, byte,
