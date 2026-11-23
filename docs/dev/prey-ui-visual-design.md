@@ -959,6 +959,8 @@ The HUD plays no sound for weapon switches or pickups; the player entity plays
   - Spectators and connecting players are listed after the players, dimmed
     to 0.45 (the stock deathmatch board hid them). The local player's bar is
     as tall as the pitch allows, up to 17 u.
+- Deaths are an icon feed at the top left by default (section 12.1,
+  Obituary feed); the stock printed them as chat lines.
 - Chat shows ten lines (600x15 u from 0,220) at 0.25 with shadow, pinned to
   the screen's left edge under aspect expansion as the health figure is
   (`chat.gui`'s `History`, `screenalignx left`); the message
@@ -1455,6 +1457,46 @@ vocabulary rather than replace it:
   key text lands on a plate's top face as it does on a key's. A tip already
   on screen swaps its plate within a second when the player changes device
   (`idTarget_Tip`'s distance check).
+- **Obituary feed.** In multiplayer, deaths draw as "killer [icon] victim"
+  lines at the HUD's top left instead of chat lines (`hud_graphicalObits 1`,
+  the default; 0 restores the chat lines). The console and the in-game
+  menu's chat history keep the text either way.
+  - *Construction.* Each line is built as the top-right standings box is
+    (section 10.6): a black 0.5 well in a 1 u `#66738C` rim, 15 u high and as
+    wide as its content, with 4 u of padding, names in the body face at 0.25
+    with the drop shadow, and the icon 12 u high in HUD ink (`#A0B2CA`). Lines
+    stack on a 14 u pitch, so neighbours share a rim and the feed reads as one
+    table, stepped where widths differ. A line naming the local player takes
+    the scoreboard's own-row bar (`#B3CCE6` at 0.2). Names are white, the local
+    player's deathmatch yellow; team games colour every name by team (`#FF0000`,
+    `#3380CC`). Names are cut at 100 u. No shear, accent or tint: the feed is
+    standings furniture, not new chrome.
+  - *Life.* At most five lines, three seconds each; a sixth hurries the oldest
+    out over 200 ms. A line fades in over 200 ms and out over its last 320 ms,
+    and the lines below glide up into its place, as the pickup column slides.
+  - *Place.* Pinned to the top-left corner (`screenalignx left`). On a screen
+    16:9 or wider its top meets the standings box's at 21 u, the two mirroring
+    each other across the top; on a narrower one it starts at 66 u, under the
+    band the weapon bar takes while switching.
+  - *Icons.* openPR06's own silhouettes, not retail art: the eight weapons
+    (wrench, spirit bow, Hunter rifle, crawler, auto cannon, acid sprayer,
+    rocket launcher, leech gun) as solid side views on one 2:1 frame, muzzle
+    toward the victim; a skull (suicide, death without a killer), a bursting
+    portal (telefrag) and an impact (a kill by anything else); and corner
+    badges for an alternate fire (scope, mine, grenade, the leech gun's
+    plasma, bolt and sun) and a suicide with a weapon (skull). Each is white
+    on a dark keyline 1/32 of its height, so the feed tints it and it stays
+    separate from a bright scene. `tools/ui/obituary_icons.py` draws them
+    into `pak1/guis/assets/hud/obits/` with their materials in
+    `pak0/materials/openpr06_obituaries.mtr`; the stock weapon-bar icons are
+    line drawings for 50x28 u and blur at 12 u.
+  - *Code.* `guis/obituaries.gui` holds the place and limits (`maxlines`,
+    `lifetime`); its `obituaryDef` window (`src/ui/ObituaryWindow.cpp`) draws
+    the lines. `idMultiplayerGame::PushObituary` hands it each death once
+    through GUI state and the `obitPush` event, choosing the icon by the
+    projectile's entityDef (a def's own `mtr_obituary` and
+    `mtr_obituaryBadge` override it). `testObituary` (a cheat) shows a death
+    locally for captures.
 
 New pages and settings follow that precedent: build them from the stock plates,
 rows, tabs and faces, at stock sizes and colours, inside the claw frame.

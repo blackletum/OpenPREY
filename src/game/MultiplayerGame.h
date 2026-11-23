@@ -165,12 +165,13 @@ public:
 	} msg_evt_t;
 	//HUMANHEAD rww
 	const char		*DeathStringForProjectile(int projectileDefNum);
-	void			PrintDeathMessageEvent( int to, msg_evt_t evt, int parm1, int parm2, int inflictorDef );
+	void			PrintDeathMessageEvent( int to, msg_evt_t evt, int parm1, int parm2, int inflictorDef, bool broadcast = true );
 	//HUMANHEAD END
 	void			PrintMessageEvent( int to, msg_evt_t evt, int parm1 = -1, int parm2 = -1 );
 
 	void			DisconnectClient( int clientNum );
 	static void		ForceReady_f( const idCmdArgs &args );
+	static void		TestObituary_f( const idCmdArgs &args );		// openPR06
 	static void		DropWeapon_f( const idCmdArgs &args );
 	static void		MessageMode_f( const idCmdArgs &args );
 	static void		VoiceChat_f( const idCmdArgs &args );
@@ -295,6 +296,7 @@ private:
 	idUserInterface *scoreBoard;			// scoreboard
 	idUserInterface *spectateGui;			// spectate info
 	idUserInterface *guiChat;				// chat text
+	idUserInterface *guiObits;				// openPR06: the graphical obituary feed (hud_graphicalObits)
 	idUserInterface *mainGui;				// ready / nick / votes etc.
 #ifdef _GUITEST_SERVERWAIT
 	idUserInterface *serverWaitGui;			//HUMANHEAD rww
@@ -314,6 +316,7 @@ private:
 	mpChatLine_t	chatHistory[ NUM_CHAT_HISTORY_LINES ];
 	int				chatHistoryIndex;
 	idListGUI		*chatHistoryList;
+	int				chatListIndex;			// openPR06: the menu's history counts its own lines (AddChatLineText)
 // HUMANHEAD END
 
 	// rankings are used by UpdateScoreboard and UpdateHud
@@ -365,6 +368,11 @@ private:
 	bool			EnoughClientsToPlay( void );
 	void			ClearChatData( void );
 	void			DrawChat( void );
+	// openPR06: a chat line kept out of the HUD's transient chat lines when !notify
+	void			AddChatLineText( const char *line, bool notify );
+	// openPR06: the graphical obituary feed
+	void			PushObituary( msg_evt_t evt, int victim, int killer, int inflictorDef );
+	void			DrawObituaries( void );
 	// go through the clients, and see if they want to be respawned, and if the game allows it
 	// called during normal gameplay for death -> respawn cycles
 	// and for a spectator who want back in the game (see param)

@@ -303,6 +303,9 @@ if get_option('build_native_tests')
   # The campaign tips' controller plates and their materials, from their construction.
   test('openpr06-pad-tip-plates', py,
     args: [files('tools/ui/pad_tip_plates.py'), '--check'], timeout: 120)
+  # The multiplayer obituary feed's icons and their materials, from their construction.
+  test('openpr06-obituary-icons', py,
+    args: [files('tools/ui/obituary_icons.py'), '--check'], timeout: 120)
   # Repaints the initializing screen's textures from their seeds: about a minute.
   test('openpr06-retained-initialization', py,
     args: [files('tools/ui/build_retained_initialization.py'), '--check'], timeout: 300)

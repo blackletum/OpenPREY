@@ -1,0 +1,25 @@
+// openPR06: the multiplayer obituary feed (hud_graphicalObits 1, the default).
+// The game draws this over the HUD and hands it each death (idMultiplayerGame::
+// PushObituary); the feed is the native obituaryDef window (src/ui/ObituaryWindow.h),
+// built as the HUD's top-right standings box is (docs/dev/prey-ui-visual-design.md, 12.1).
+//
+// It hugs the screen's top-left corner under aspect expansion. Where the screen
+// is 16:9 or wider, the room left of the weapon bar takes its lines, so its top
+// meets the standings box's (21 u); on a narrower screen it drops just under the
+// band the weapon bar takes while switching (66 u).
+
+windowDef desktop {
+	rect		0, 0, 640, 480
+	menugui		0
+	nocursor	1
+
+	obituaryDef ObituaryFeed {
+		rect			8, 21 + 45 * ( "gui::virtual_screen_x_expand" < 75 ), 300, 100
+		screenalignx	left
+		screenaligny	top
+		noclip			1
+		textscale		0.25
+		maxlines		5
+		lifetime		3000
+	}
+}
