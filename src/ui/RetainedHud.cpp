@@ -125,14 +125,22 @@ bool idRetainedHud::Usable() const { return !impl->attempted || impl->view!=null
 void idRetainedHud::Precache() {
 	PrefetchCatalog();
 	if (!cvarSystem->GetCVarBool("ui_retained")) return;
+	// Installation media differs: the retail Prey packs have none of the
+	// images below. Precache only what is there, so a missing optional image
+	// is not reported as a load failure on every map.
+	const auto installed=[](const std::string& image) {
+		std::string stem=image;
+		if (stem.size()>4 && stem.compare(stem.size()-4,4,".tga")==0) stem.resize(stem.size()-4);
+		return fileSystem->ReadFile((stem+".tga").c_str(),nullptr)>=0 ||
+			fileSystem->ReadFile(("dds/"+stem+".dds").c_str(),nullptr)>=0;
+	};
 	// Game-owned damage numbers use the console atlas outside the GUI font
 	// loader. Prepare its retained alias while image loading is deferred too.
-	RetainedUI_PrecacheImage("fonts/english/bigchars",false);
+	if (installed("fonts/english/bigchars")) RetainedUI_PrecacheImage("fonts/english/bigchars",false);
 	// The Remastered ECG is loaded from the installation and first appears
 	// after map loading. Register its additive wrappers during level precache.
-	for (const char* image : {"gfx/guis/hud/ekg.tga","gfx/guis/hud/s_ekg.tga","gfx/guis/hud/s_ekg2.tga"})
-		RetainedUI_PrecacheImage(std::string("_repeat/")+image,true);
-	RetainedUI_PrecacheImage("_repeat/gfx/guis/hud/waveform.tga",true);
+	for (const char* image : {"gfx/guis/hud/ekg.tga","gfx/guis/hud/s_ekg.tga","gfx/guis/hud/s_ekg2.tga","gfx/guis/hud/waveform.tga"})
+		if (installed(image)) RetainedUI_PrecacheImage(std::string("_repeat/")+image,true);
 	std::string source,error; if (!Read(Registry,source)) return;
 	Json::Value data; Json::CharReaderBuilder builder; std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
 	if (!reader->parse(source.data(),source.data()+source.size(),&data,&error) || !data.isObject() || !data["images"].isArray() ||
