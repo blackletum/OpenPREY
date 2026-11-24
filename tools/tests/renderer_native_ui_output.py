@@ -57,6 +57,8 @@ enum { RENDERER_PRESENT_FINISH, RENDERER_PRESENT_FINAL_POST };
 static unsigned long long R_RendererMetrics_CpuClock(){return 0;}
 static void R_RendererMetrics_EndPresentPhase(int,unsigned long long){}
 static void RB_QueueSavePreview(){}
+// video capture is not recording in these cases (VideoCapture.cpp)
+static void RB_QueueVideoFrame(){}
 static std::vector<std::string> calls;
 static std::array<int,16> backbuffer{};
 static std::array<int,4> viewport{},quadExtent{};

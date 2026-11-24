@@ -40,7 +40,7 @@ def run_native() -> None:
     exe = OUT / ("server_list_parse" + (".exe" if os.name == "nt" else ""))
     if os.name == "nt":
         command = OUT / "build.cmd"
-        command.write_text('@echo off\ncall "' + str(ROOT / "tools/build/openq4_devcmd.cmd") + '"\n'
+        command.write_text('@echo off\ncall "' + str(ROOT / "tools/build/openpr06_devcmd.cmd") + '"\n'
                            "if errorlevel 1 exit /b 1\n" + subprocess.list2cmdline([
                                "cl", "/nologo", "/std:c++17", "/EHsc", "/W4", "/WX", str(source),
                                "/Fo:" + str(OUT / "server_list_parse.obj"), "/Fe:" + str(exe)]) + "\n", encoding="utf-8")

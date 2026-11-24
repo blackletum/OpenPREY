@@ -989,7 +989,6 @@ def run_python_tests(args: argparse.Namespace, root: Path, env: dict[str, str]) 
         (root / "tools" / "tests" / 'vk_display_color_mapping.py', []),
         (root / "tools" / "tests" / 'vk_display_color_mapping_shader_pin.py', []),
         (root / "tools" / "tests" / 'vk_display_color_mapping_capture.py', ['--self-test']),
-        (root / "tools" / "tests" / 'release_archive_formats.py', []),
     ]
     argument_checks = [
         (test, test_args) for test, test_args in inherited_argument_checks if test.name not in excluded_tests

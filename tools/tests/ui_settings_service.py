@@ -329,6 +329,9 @@ static void Sys_GrabMouseCursor(bool){Check(false,"input path forbidden in test"
 static void RetainedUI_FrameSubmitted(){++completedFrames;}
 static double LoadingPresentation_Now(){return 0.0;}
 static void LoadingPresentation_Presented(double,double){}
+// no video capture is recording: its present bracket is inert (VideoCapture.h)
+static void VideoCapture_BeforePresent(){}
+static void VideoCapture_AfterPresent(){}
 // no headset session: the VR frame bracket around the update is inert (VRSystem.h)
 struct FrameVRSystem {
     void BeginFrame(){} void DrawMenuPointer(){} void EndFrame(){}

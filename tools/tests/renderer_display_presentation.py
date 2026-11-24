@@ -139,7 +139,10 @@ static bool VK_VR_BindWindowStandIn(){assert(!"no VR frame opens without its win
 static bool VK_GuiExecutor_FrameIsOpen(){return vkExec.frameOpen;}
 // Save-preview ownership is covered by the checkpoint capture fixtures.
 static void VK_ConsumeSavePreview(int){}
+static void VK_ConsumeVideoFrames(int){}
 static void RB_QueueSavePreview(){}
+// video capture is not recording in these cases (VideoCapture.cpp)
+static void RB_QueueVideoFrame(){}
 bool VK_Device_RecoverSurface();
 static bool CreateVulkanSurface(void*,unsigned long long* surface){
     assert(!onRenderThread);calls.emplace_back("recover-surface");++recoverCalls;*surface=31;return recoverOkay;
