@@ -118,7 +118,14 @@
 //      game's precomputed image-program results when an input comes from
 //      outside the shipped packs (a stale module would call past the
 //      vtable). Upstream openQ4 numbers this 36.
-#define RENDER_API_VERSION			37
+// 38 - idRenderSystem appends RequestVideoFrame, PollVideoFrame,
+//      ReleaseVideoFrame and EndVideoCapture: the continuous readback of
+//      presented frames that video capture records. Upstream openQ4 numbers
+//      this 37.
+// 39 - idRenderSystem appends SetViewDepthOfField: the game's depth-of-field
+//      request for the frame's main view (renderViewDepthOfField_t). Upstream
+//      openQ4 numbers this 38.
+#define RENDER_API_VERSION			39
 #define RENDER_API_ENTRY_POINT		"GetRenderAPI"
 
 class idSys;

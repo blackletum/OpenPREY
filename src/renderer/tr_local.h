@@ -429,6 +429,9 @@ typedef struct viewDef_s {
 	bool				temporalJitterEnabled;
 	bool				temporalHistoryValid;
 	bool				temporalCaptureFrame;
+	// The game's depth-of-field request for this frame (SetViewDepthOfField),
+	// latched when the view was built so the back end reads it on any thread.
+	renderViewDepthOfField_t depthOfFieldRequest;
 	bool				temporalPreviousProjectionValid;
 
 	idRenderWorldLocal *renderWorld;
@@ -621,6 +624,9 @@ typedef struct {
 	// the target's temporal frame state, restored when the backend reaches it:
 	// the front end rewrites the frame's one state for every target (VR-05)
 	bool	temporalAA;
+	// a brief return to a finished eye (a desktop stereo capture): the target
+	// left is not finished again and nothing is cleared
+	bool	revisit;
 } vrTargetCommand_t;
 
 typedef struct {
@@ -754,6 +760,7 @@ void R_SetBackEndFrameData( frameData_t *frame );
 void R_SnapshotRenderView( viewDef_t *view );
 void R_PrepareRenderFrameResources( const emptyCommand_t *commands );
 void R_RetireRenderSnapshots( frameData_t *frame );
+void R_ClearRetainedSnapshotStreams();
 
 
 //=======================================================================
@@ -1065,6 +1072,10 @@ public:
 	virtual bool BeginSavePreview();
 	virtual int PollSavePreview( const char *fileName );
 	virtual void CancelSavePreview();
+	virtual bool RequestVideoFrame( long long tag );
+	virtual int PollVideoFrame( renderVideoFrame_t &frame, bool wait );
+	virtual void ReleaseVideoFrame();
+	virtual void EndVideoCapture();
 	virtual bool ReloadGeneratedCacheImages();
 	virtual void			SetPortalSkyCaptureViewCallback( renderPortalSkyCaptureViewCallback_t callback );
 	virtual void			UnCrop();
@@ -1096,6 +1107,7 @@ public:
 	virtual int				GetImageMSAASamples(idImage* image);
 	virtual const glconfig_t &	GetGLConfig( void ) const;
 	virtual bool			SetUnderwaterView( float amount, const idVec3 &tint, float fogDistance );
+	virtual bool			SetViewDepthOfField( const renderViewDepthOfField_t &dof );
 	virtual void			GetGpuFrameTiming( renderGpuFrameTiming_t &timing ) const;
 	virtual void			ResetGpuFrameTiming( const char *reason );
 	virtual void			GetPresentationState( renderPresentationState_t &state ) const;
@@ -1255,6 +1267,10 @@ public:
 	float					underwaterAmount;
 	idVec3					underwaterTint;
 	float					underwaterFogDistance;
+	// openQ4: the game's depth-of-field request (SetViewDepthOfField), valid for
+	// the frame it was made in; RenderScene latches it into the view.
+	renderViewDepthOfField_t depthOfFieldRequest;
+	int						depthOfFieldRequestFrame;
 	idRenderTexture *		activeRenderTexture;
 	renderPortalSkyCaptureViewCallback_t portalSkyCaptureViewCallback;
 	bool					suppressLevelshotViewModels;
@@ -1272,6 +1288,13 @@ public:
 	int						vrWindowHeight;
 	int						vrSavedUIViewport[4];
 	idRenderTexture *		vrTargets[3];
+	// openQ4 desktop stereoscopic 3D (r_stereo3D, RenderSystem_vr.cpp): with no
+	// headset, BeginVRFrame can open the frame as a stereo frame of its own,
+	// whose targets the backend composites into the window in this layout
+	// (stereo3DLayout_t) at the swap instead of copying them to swapchains.
+	// 0 on every other frame.
+	int						desktopStereoLayout;
+	bool					desktopStereoSwapEyes;
 
 	bool					BeginVRFrame( int &windowWidth, int &windowHeight );
 	void					EndVRFrame( void );
@@ -1313,6 +1336,24 @@ int	R_VR_EyeSubviewFrameKey( void );
 void	R_ShutdownStereoGuiShare( void );
 // RenderSystem_init.cpp: VR frames present the window without waiting for vsync
 void	R_SetVRSwapIntervalBypass( bool active );
+
+// openQ4 desktop stereoscopic 3D (r_stereo3D): how a frame's two eyes and its
+// screen layer (menus, HUD, console) reach the window.
+typedef enum {
+	STEREO3D_OFF = 0,
+	STEREO3D_SIDE_BY_SIDE,			// half-width eyes, left on the left (3D TVs, monitors)
+	STEREO3D_SIDE_BY_SIDE_FULL,		// full-resolution eyes on a double-width display (glasses)
+	STEREO3D_TOP_BOTTOM,			// half-height eyes, left on top
+	STEREO3D_ANAGLYPH,				// red/cyan glasses (Dubois colour matrices)
+	STEREO3D_INTERLACED,			// alternate window rows, left on the top row (passive 3D)
+	STEREO3D_LAYOUT_COUNT
+} stereo3DLayout_t;
+// The backend can composite a desktop stereo frame into the window.
+bool	R_VR_BackendCanPresentDesktopStereo( void );
+// A capture of a desktop stereo frame's screen layer reads the left eye
+// between these (RenderSystem_vr.cpp); false when there is nothing to read.
+bool	R_DesktopStereo_BeginCapture( void );
+void	R_DesktopStereo_EndCapture( void );
 
 extern backEndState_t		backEnd;
 
@@ -1600,6 +1641,10 @@ const int SHARED_FAULT_INJECT_CINEMATIC_POST = 4;
 const int SHARED_FAULT_INJECT_DETAIL = 9000;	// failure detail recorded for an injected decline
 extern idCVar r_vkShadowFallbackTest;	// diagnostic-only forced Vulkan unshadowed receiver fallback
 extern idCVar r_rendererModernLightingParity;	// diagnostic override forcing lighting-ownership parity contracts proven
+extern idCVar r_rendererModernClassicShapes;	// REN-02 rollback mask for corridor-owned classic shapes
+const int MODERN_CLASSIC_SHAPE_STAGES = 1;	// stage transforms on cutouts and baked-light receivers
+const int MODERN_CLASSIC_SHAPE_STENCIL_SHADOWS = 2;	// stencil-shadowed lights
+extern idCVar r_rendererOwnershipCompose;	// REN-02 step 5: compose the aggregate executor with the shared world domains
 extern idCVar r_rendererModernAutoPromote;	// allow gated default modern-visible promotion
 extern idCVar r_rendererPromotionEvidence;	// Phase 8 evidence token required before auto-promotion
 extern idCVar r_rendererShaderReload;	// allow runtime reload of the internal modern GL shader library
@@ -1665,6 +1710,7 @@ extern idCVar r_shadowMapModernStrict;	// fail-visible modern shadow contract br
 extern idCVar r_shadowMapTranslucentReceivers;	// translucent surfaces sample the shadow map like opaque receivers
 extern idCVar r_shadowMapSubviewPolicy;	// 0 = full renders in subviews, 1 = reuse-or-stencil, 2 = always stencil
 extern idCVar r_shadowMapReportInterval;	// frames between shadow-map diagnostic reports
+extern idCVar r_shadowMapPrelightCasters;	// 0 = world surfaces whole, 1 = prelight front caps for lights whose source lies outside their box, 2 = for every prelit light
 extern idCVar r_shadowMapConservativeCasters;	// 1 = keep shadow-map caster submission independent from visible receiver scissors
 extern idCVar r_shadowMapProjectedCSM;	// 1 = allow ordinary projected lights to use CSM when r_shadowMapCSM is enabled
 extern idCVar r_shadowMapDepthCompare;	// 1 = use sampler2DShadow compare mode for projected depth maps
@@ -2135,6 +2181,15 @@ void R_PurgeFramebufferCopyFBOs( void );
 // than the client-memory index draw it replaces and causes pacing spikes)
 bool R_StaticIndexCacheAllowed( const idRenderEntityLocal *def );
 
+// The static world of a prelit light as one shadow-map caster: the front caps
+// of its prelight volume (tr_light.cpp). NULL when the light has none to give.
+bool R_ShadowMapLightSourceOutsideVolume( const renderLight_t &parms );
+srfTriangles_t *R_ShadowMapPrelightCaster( idRenderLightLocal *light );
+srfTriangles_t *R_ShadowMapBuildPrelightCaster( const srfTriangles_t *shadowTri );
+bool R_ShadowMapPrelightCasterSelfTest( void );
+// links it into the view light's caster chain (Interaction.cpp)
+void R_ShadowMapLinkPrelightCaster( viewLight_t *vLight );
+
 
 /*
 ====================================================================
@@ -2408,6 +2463,10 @@ bool RB_LightGridSurfaceModernRepresentable( const drawSurf_t *surf, const viewD
 // True with a null grid is an intentional native non-receiver, not missing work.
 class LightGrid;
 bool RB_PrepareModernLightGrid( const drawSurf_t *surf, const viewDef_t *viewDef, const LightGrid *&grid );
+// REN-02: the number of albedo layers the native light-grid pass draws for a
+// surface, and the bump/diffuse stage state of the first.
+int RB_LightGridClassicAlbedoStages( const drawSurf_t *surf, idImage **bumpImage, idVec4 bumpMatrix[2],
+	idImage **diffuseImage, idVec4 diffuseMatrix[2], float diffuseColor[4], float vertexColorParams[2] );
 // ModernLightGridGLSL.h's uBakedGrid[7], with positions relative to origin.
 void RB_LightGridBakedParams( const LightGrid &grid, const float origin[3], float params[7][4] );
 bool RB_FlatDiffuseSweepActive( const drawSurf_t *surf );
@@ -2432,7 +2491,24 @@ void RB_ApplyResolutionScaleToBackBuffer( void );
 void RB_ApplyCRTToBackBuffer( void );
 // openQ4 VR desktop mirror (draw_common.cpp)
 void RB_VR_DrawImageRect( idImage *image, int x, int y, int width, int height, float s0, float t0, float s1, float t1 );
+// openQ4 desktop stereoscopic 3D: the OpenGL composite of a stereo frame into
+// the bound window (draw_common.cpp); false draws nothing
+bool RB_DesktopStereo_CompositeAvailable( void );
+bool RB_DesktopStereo_Composite( idImage *left, idImage *right, idImage *screen, int layout,
+	int windowWidth, int windowHeight, int eyeHeight, bool eyesDrawn, bool screenDrawn );
 bool RB_UnderwaterViewAvailable( void );
+// Depth of field (DepthOfField.cpp; the pass in draw_common.cpp and
+// Vulkan/vk_PostProcess.cpp). RB_DepthOfFieldAvailable: whether this back end
+// can draw it at all.
+struct depthOfFieldSettings_t;
+bool RB_DepthOfFieldAvailable( void );
+bool R_DepthOfField_ResolveView( const viewDef_t *viewDef, int viewWidth, int viewHeight,
+	depthOfFieldSettings_t &settings );
+void R_DepthOfField_LatchRequest( viewDef_t *viewDef );
+// Seconds since the previous autofocus frame on this clock (wall time, so a
+// paused game still settles its focus); resets and returns 0 when stale.
+float R_DepthOfField_FocusElapsed( int &lastMsec );
+float R_DepthOfField_FocusSpeed( void );
 
 void RB_DetermineLightScale( void );
 void RB_STD_LightScale( void );
@@ -2458,6 +2534,10 @@ void RB_BindStageTexture( const float *shaderRegisters, const textureStage_t *te
 void RB_FinishStageTexture( const textureStage_t *texture, const drawSurf_t *surf );
 bool RB_DrawSurfHasSoftParticleStage( const drawSurf_t *surf );
 void RB_StencilShadowPass( const drawSurf_t *drawSurfs );
+// REN-02 step 4: the ARB2 light loop's stencil decision and one shadow chain,
+// for the modern classic-lighting corridor.
+bool RB_ARB2_LightShadowsByStencilPolicy( const viewLight_t *vLight );
+void RB_ARB2_StencilShadowPassForLight( const viewDef_t *viewDef, viewLight_t *vLight, const drawSurf_t *shadows );
 void RB_STD_DrawView( void );
 // Temporarily use the same scene coordinates while building/submitting modern
 // packets that the later legacy scene target uses. End restores all rectangles.
@@ -2745,6 +2825,7 @@ int R_CountFrameData( void );
 void R_ToggleSmpFrame( void );
 void *R_FrameAlloc( int bytes );
 void *R_ClearedFrameAlloc( int bytes );
+bool R_FrameMemoryContains( const void *data );
 void R_FrameFree( void *data );
 
 // R_StaticAlloc/R_ClearedStaticAlloc/R_StaticFree live in the shared

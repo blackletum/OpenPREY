@@ -68,7 +68,9 @@ void R_ListRenderLightDefs_f( const idCmdArgs &args ) {
 		}
 		totalRef += rCount;
 
-		common->Printf( "%4i: %3i intr %2i refs %s\n", i, iCount, rCount, ldef->lightShader->GetName());
+		// the origin identifies an authored light for r_singleLight
+		common->Printf( "%4i: %3i intr %2i refs %s at %s\n", i, iCount, rCount, ldef->lightShader->GetName(),
+			ldef->parms.origin.ToString( 0 ) );
 		active++;
 	}
 
@@ -1194,6 +1196,7 @@ void idRenderWorldLocal::RenderScene( const renderView_t *renderView, int render
 	viewDef_t		*parms = (viewDef_t *)R_ClearedFrameAlloc( sizeof( *parms ) );
 	parms->renderView = *renderView;
 	parms->renderFlags = renderFlags;
+	R_DepthOfField_LatchRequest( parms );
 
 	// an off-axis eye frustum must enclose its axis with finite, ordered
 	// tangents; anything else renders through the symmetric fov_x/fov_y

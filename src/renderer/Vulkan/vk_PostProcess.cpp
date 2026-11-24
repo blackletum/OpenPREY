@@ -56,6 +56,7 @@
 #include "../ModernGLExecutor.h"
 #include "../TemporalPresentation.h"
 #include "../MotionBlurCore.h"
+#include "../DepthOfFieldCore.h"
 
 #undef snprintf
 #undef vsnprintf
@@ -160,7 +161,9 @@ enum vkPostPassKind_t {
 	VK_POST_GLOW_BLUR,
 	VK_POST_GLOW_COMPOSITE,
 	VK_POST_VOLUMETRIC_INJECT,
-	VK_POST_VOLUMETRIC_COMPOSITE
+	VK_POST_VOLUMETRIC_COMPOSITE,
+	VK_POST_DOF,
+	VK_POST_STEREO
 };
 
 // scene shader modules, created the first time a pass needs one
@@ -182,6 +185,7 @@ enum vkPostSceneModule_t {
 	VK_POST_MODULE_MOTION_VECTORS_REACTIVE_FRAG,
 	VK_POST_MODULE_SKY_MASK,
 	VK_POST_MODULE_GLOW,
+	VK_POST_MODULE_DOF,
 	VK_POST_SCENE_MODULE_COUNT
 };
 
@@ -208,7 +212,8 @@ static const vkPostModuleSource_t vkPostSceneModuleSources[ VK_POST_SCENE_MODULE
 	{ vk_post_motionvectors_reactive_vert_spv, vk_post_motionvectors_reactive_vert_spv_size, "post reactive coverage vertex" },
 	{ vk_post_motionvectors_reactive_frag_spv, vk_post_motionvectors_reactive_frag_spv_size, "post reactive coverage fragment" },
 	{ vk_post_skymask_frag_spv, vk_post_skymask_frag_spv_size, "post portal-sky mask fragment" },
-	{ vk_post_glow_frag_spv, vk_post_glow_frag_spv_size, "post Prey glow fragment" }
+	{ vk_post_glow_frag_spv, vk_post_glow_frag_spv_size, "post Prey glow fragment" },
+	{ vk_post_dof_frag_spv, vk_post_dof_frag_spv_size, "post depth of field fragment" }
 };
 
 // RB_BLOOM_MAX_LEVELS and RB_BLOOM_BASE_WEIGHTS (draw_common.cpp)
@@ -480,6 +485,11 @@ typedef struct vkPostState_s {
 	VkShaderModule	crtFrag;
 	bool			modulesFailed;	// creation failed once; do not retry every frame
 	idImage *		backBufferCopy;
+	// desktop stereoscopic 3D: the composite, and copies of the left eye,
+	// right eye and screen layer it samples
+	VkShaderModule	stereoFrag;
+	bool			stereoFailed;
+	idImage *		stereoCopies[3];
 } vkPostState_t;
 
 static vkPostState_t vkPost;
@@ -588,6 +598,7 @@ image manager, which frees them on its own; the render textures are ours.
 ====================
 */
 static void VK_Post_ShutdownVolumetrics( void );
+static void VK_Post_ShutdownDepthOfField( void );
 
 void VK_PostProcess_Shutdown( void ) {
 	memset( &vkLinearCapture, 0, sizeof( vkLinearCapture ) );
@@ -606,6 +617,7 @@ void VK_PostProcess_Shutdown( void ) {
 	VK_Post_ResetHDRExposure();
 	VK_Post_DestroyModule( vkPost.fullscreenVert );
 	VK_Post_DestroyModule( vkPost.crtFrag );
+	VK_Post_DestroyModule( vkPost.stereoFrag );
 	memset( &vkPost, 0, sizeof( vkPost ) );
 
 	for ( int i = 0; i < VK_POST_SCENE_MODULE_COUNT; i++ ) {
@@ -616,6 +628,7 @@ void VK_PostProcess_Shutdown( void ) {
 			delete vkPostScene.bloomTargets[ level ][ pingPong ];
 		}
 	}
+	VK_Post_ShutdownDepthOfField();
 	delete vkPostScene.motionVectorTarget;
 	delete vkPostScene.ssaoFieldTarget;
 	delete vkPostScene.ssaoOcclusionTarget;
@@ -791,6 +804,87 @@ void VK_PostProcess_ApplyBackBuffer( void ) {
 			crtWarned = true;
 		}
 	}
+}
+
+/*
+====================
+VK_PostProcess_DesktopStereoComposite
+
+openQ4 desktop stereoscopic 3D (r_stereo3D): composites a stereo frame's
+finished targets into the window with post_stereo.frag, the twin of
+RB_DesktopStereo_Composite. sources are the left eye, the right eye and the
+screen layer, each the default output it was drawn on, or NULL for one the
+frame did not draw. Each is copied once into a sampled image while it is the
+output, as the back-buffer passes copy the window. Ends on the window.
+====================
+*/
+typedef struct vkPostStereoBlock_s {
+	float	params[ 4 ];	// x: stereo3DLayout_t, y: window height, z: eye height, w: 1 when the eyes were drawn
+	float	screen[ 4 ];	// x: 1 when the screen layer was drawn
+} vkPostStereoBlock_t;
+
+static void VK_Post_StereoCopyImage( idImage *image ) {
+	VK_Post_BackBufferCopyImage( image );
+}
+
+bool VK_PostProcess_DesktopStereoComposite( const vkExecDefaultOutput_t *const sources[ 3 ], int layout, int eyeHeight ) {
+	if ( !VK_GuiExecutor_FrameIsOpen() || vkPost.stereoFailed || !VK_Post_EnsureModules() || globalImages == NULL ) {
+		return false;
+	}
+	if ( vkPost.stereoFrag == VK_NULL_HANDLE ) {
+		vkPost.stereoFrag = VK_Post_CreateModule( vk_post_stereo_frag_spv,
+				vk_post_stereo_frag_spv_size, "post stereo fragment" );
+		if ( vkPost.stereoFrag == VK_NULL_HANDLE ) {
+			vkPost.stereoFailed = true;
+			return false;
+		}
+	}
+	static const char *const copyNames[ 3 ] = { "_vkStereoLeftCopy", "_vkStereoRightCopy", "_vkStereoScreenCopy" };
+	VkDescriptorSet sets[ 3 ] = { VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE };
+	bool drawn[ 3 ] = { false, false, false };
+	for ( int i = 0; i < 3; i++ ) {
+		if ( sources[ i ] == NULL ) {
+			continue;
+		}
+		if ( vkPost.stereoCopies[ i ] == NULL ) {
+			vkPost.stereoCopies[ i ] = globalImages->ImageFromFunction( copyNames[ i ], VK_Post_StereoCopyImage );
+		}
+		idImage *copy = vkPost.stereoCopies[ i ];
+		if ( copy == NULL || !VK_Exec_SetDefaultOutput( sources[ i ] ) || !VK_Exec_SetRenderTarget( NULL ) ) {
+			continue;
+		}
+		const int width = VK_Exec_ActiveFramebufferWidth();
+		const int height = VK_Exec_ActiveFramebufferHeight();
+		if ( width <= 0 || height <= 0 || !VK_Exec_CopyRender( copy, 0, 0, width, height, 0, false ) ) {
+			continue;
+		}
+		VK_Exec_TransitionImageForSampling( copy );
+		sets[ i ] = VK_Exec_ImageDescriptor( copy->GetDeviceHandle(), true );
+		drawn[ i ] = sets[ i ] != VK_NULL_HANDLE;
+	}
+	if ( !VK_Exec_SetDefaultOutput( NULL ) || !VK_Exec_SetRenderTarget( NULL ) ) {
+		return false;
+	}
+	// an input the frame did not draw is weighted out; black stands in
+	for ( int i = 0; i < 3; i++ ) {
+		if ( !drawn[ i ] ) {
+			if ( globalImages->blackImage == NULL ) {
+				return false;
+			}
+			sets[ i ] = VK_Exec_ImageDescriptor( globalImages->blackImage->GetDeviceHandle(), true );
+		}
+	}
+	vkPostStereoBlock_t block;
+	memset( &block, 0, sizeof( block ) );
+	block.params[ 0 ] = (float)layout;
+	block.params[ 1 ] = (float)VK_Exec_ActiveFramebufferHeight();
+	block.params[ 2 ] = (float)Max( eyeHeight, 1 );
+	block.params[ 3 ] = drawn[ 0 ] && drawn[ 1 ] ? 1.0f : 0.0f;
+	block.screen[ 0 ] = drawn[ 2 ] ? 1.0f : 0.0f;
+	const int uniformOffset = VK_Exec_InteractionUniformAlloc( &block, sizeof( block ) );
+	const VkPipeline pipeline = VK_Exec_PostPipeline( VK_POST_STEREO,
+			vkPost.fullscreenVert, vkPost.stereoFrag, GLS_SRCBLEND_ONE | GLS_DSTBLEND_ZERO );
+	return VK_Post_DrawFullscreen( pipeline, sets, 3, uniformOffset );
 }
 
 /*
@@ -2564,6 +2658,200 @@ static bool VK_Post_MotionBlur( const viewDef_t *viewDef, idRenderTexture *scene
 	return drew;
 }
 
+// ---- depth of field (RB_STD_DepthOfField) ----
+
+// draw_common.cpp rbDofTarget_t
+enum vkPostDofTarget_t {
+	VK_POST_DOF_FOCUS0 = 0,
+	VK_POST_DOF_FOCUS1,
+	VK_POST_DOF_PREFILTER,
+	VK_POST_DOF_TILES,
+	VK_POST_DOF_TILES_DILATED,
+	VK_POST_DOF_GATHER,
+	VK_POST_DOF_POSTFILTER,
+	VK_POST_DOF_TARGET_COUNT
+};
+
+static const char *const vkPostDofTargetNames[ VK_POST_DOF_TARGET_COUNT ] = {
+	"_vkDofFocus0", "_vkDofFocus1", "_vkDofPrefilter", "_vkDofTiles", "_vkDofTilesDilated",
+	"_vkDofGather", "_vkDofPostfilter"
+};
+
+struct vkPostDofState_t {
+	idImage *			images[ VK_POST_DOF_TARGET_COUNT ];
+	idRenderTexture *	targets[ VK_POST_DOF_TARGET_COUNT ];
+	int					focusCurrent;
+	bool				focusValid;
+	int					focusMsec;
+	const idRenderWorldLocal *focusWorld;
+	int					focusVideoRestart;
+};
+static vkPostDofState_t vkPostDof;
+
+/*
+====================
+RB_DepthOfFieldAvailable
+
+The game asks from its own thread, so this creates nothing: the module is
+built the first time the pass draws, which warns once if it cannot.
+====================
+*/
+bool RB_DepthOfFieldAvailable( void ) {
+	return !r_skipPostProcess.GetBool() && vkCtx.device != VK_NULL_HANDLE
+		&& !vkPostScene.moduleFailed[ VK_POST_MODULE_DOF ];
+}
+
+static void VK_Post_ForgetDofFocus( void ) {
+	vkPostDof.focusValid = false;
+	vkPostDof.focusMsec = 0;
+}
+
+static void VK_Post_ShutdownDepthOfField( void ) {
+	for ( int i = 0; i < VK_POST_DOF_TARGET_COUNT; i++ ) {
+		delete vkPostDof.targets[ i ];
+	}
+	memset( &vkPostDof, 0, sizeof( vkPostDof ) );
+	vkPostDof.focusVideoRestart = -1;
+}
+
+// One intermediate pass: the whole target, its four inputs bound to sets 0-3.
+static bool VK_Post_DofStep( int targetIndex, VkShaderModule fragModule, const depthOfFieldBlock_t &block,
+		idImage *primary, idImage *depth, idImage *auxA, idImage *auxB ) {
+	if ( !VK_Exec_SetRenderTarget( vkPostDof.targets[ targetIndex ], 0, r_vkPostDepthTransitionReference.GetBool() ) ) {
+		return false;
+	}
+	idImage *const inputs[ 4 ] = { primary, depth, auxA, auxB };
+	VkDescriptorSet sets[ 4 ];
+	for ( int i = 0; i < 4; i++ ) {
+		sets[ i ] = VK_Post_Descriptor( inputs[ i ] != NULL ? inputs[ i ] : globalImages->blackImage );
+	}
+	const int uniformOffset = VK_Exec_InteractionUniformAlloc( &block, sizeof( block ) );
+	const VkPipeline pipeline = VK_Exec_PostPipeline( VK_POST_DOF, vkPost.fullscreenVert, fragModule,
+			GLS_SRCBLEND_ONE | GLS_DSTBLEND_ZERO );
+	return VK_Post_DrawTarget( pipeline, sets, 4, uniformOffset );
+}
+
+// Returns true when it drew into the scene. Leaves the scene target active.
+static bool VK_Post_DepthOfField( const viewDef_t *viewDef, idRenderTexture *sceneTarget, int sceneCubeFace ) {
+	if ( !VK_Post_IsMainSceneView( viewDef ) ) {
+		return false;
+	}
+	const int width = VK_Post_ViewWidth( viewDef );
+	const int height = VK_Post_ViewHeight( viewDef );
+	depthOfFieldSettings_t settings;
+	if ( !R_DepthOfField_ResolveView( viewDef, width, height, settings ) ) {
+		VK_Post_ForgetDofFocus();
+		return false;
+	}
+	const VkShaderModule fragModule = VK_Post_SceneModule( VK_POST_MODULE_DOF );
+	if ( fragModule == VK_NULL_HANDLE ) {
+		vkPostFailReason = "depth of field program unavailable";
+		return false;
+	}
+	static const char *const label = "Vulkan depth of field";
+	const int sizes[ VK_POST_DOF_TARGET_COUNT ][ 2 ] = {
+		{ 1, 1 }, { 1, 1 },
+		{ settings.gatherWidth, settings.gatherHeight },
+		{ settings.tileWidth, settings.tileHeight },
+		{ settings.tileWidth, settings.tileHeight },
+		{ settings.gatherWidth, settings.gatherHeight },
+		{ settings.gatherWidth, settings.gatherHeight }
+	};
+	for ( int i = 0; i < VK_POST_DOF_TARGET_COUNT; i++ ) {
+		if ( !VK_Post_EnsureColorTarget( vkPostDof.images[ i ], vkPostDof.targets[ i ], vkPostDofTargetNames[ i ],
+				sizes[ i ][ 0 ], sizes[ i ][ 1 ], TF_LINEAR, label ) ) {
+			vkPostFailReason = "depth of field targets unavailable";
+			return false;
+		}
+	}
+	// Both captures come from the scene target, before any pass moves off it.
+	idImage *depthImage = VK_Post_FinalDepth( viewDef );
+	idImage *scene = VK_Post_CaptureScene( viewDef );
+	if ( depthImage == NULL || scene == NULL ) {
+		vkPostFailReason = "scene or depth capture unavailable";
+		return false;
+	}
+	const float unitScale[ 2 ] = { 1.0f, 1.0f };
+	const float depthProjection[ 2 ] = { viewDef->projectionMatrix[ 10 ], viewDef->projectionMatrix[ 14 ] };
+
+	// The autofocus history belongs to one world and one device.
+	if ( vkPostDof.focusWorld != viewDef->renderWorld || vkPostDof.focusVideoRestart != tr.GetVideoRestartCount() ) {
+		VK_Post_ForgetDofFocus();
+		vkPostDof.focusWorld = viewDef->renderWorld;
+		vkPostDof.focusVideoRestart = tr.GetVideoRestartCount();
+	}
+
+	depthOfFieldBlock_t block;
+	idImage *focusImage = NULL;
+	if ( settings.autoFocus ) {
+		const float elapsed = R_DepthOfField_FocusElapsed( vkPostDof.focusMsec );
+		const float blend = DepthOfFieldCore_FocusBlend( R_DepthOfField_FocusSpeed(), elapsed );
+		const int next = vkPostDof.focusCurrent == VK_POST_DOF_FOCUS0 ? VK_POST_DOF_FOCUS1 : VK_POST_DOF_FOCUS0;
+		DepthOfFieldCore_FillBlock( block, settings, DOF_PASS_FOCUS, width, height, depthProjection,
+			unitScale, unitScale, blend, vkPostDof.focusValid );
+		if ( !VK_Post_DofStep( next, fragModule, block, NULL, depthImage,
+				vkPostDof.images[ vkPostDof.focusCurrent ], NULL ) ) {
+			VK_Post_ForgetDofFocus();
+			return false;
+		}
+		vkPostDof.focusCurrent = next;
+		vkPostDof.focusValid = true;
+		focusImage = vkPostDof.images[ vkPostDof.focusCurrent ];
+	} else {
+		VK_Post_ForgetDofFocus();
+	}
+
+	struct dofStep_t {
+		depthOfFieldPass_t pass;
+		int target;
+		idImage *primary;
+		idImage *depth;
+		idImage *auxA;
+	};
+	const dofStep_t steps[] = {
+		{ DOF_PASS_PREFILTER, VK_POST_DOF_PREFILTER, scene, depthImage, focusImage },
+		{ DOF_PASS_TILE_MAX, VK_POST_DOF_TILES, vkPostDof.images[ VK_POST_DOF_PREFILTER ], NULL, NULL },
+		{ DOF_PASS_TILE_DILATE, VK_POST_DOF_TILES_DILATED, vkPostDof.images[ VK_POST_DOF_TILES ], NULL, NULL },
+		{ DOF_PASS_GATHER, VK_POST_DOF_GATHER, vkPostDof.images[ VK_POST_DOF_PREFILTER ], NULL,
+			vkPostDof.images[ VK_POST_DOF_TILES_DILATED ] },
+		{ DOF_PASS_POSTFILTER, VK_POST_DOF_POSTFILTER, vkPostDof.images[ VK_POST_DOF_GATHER ], NULL, NULL }
+	};
+	for ( int i = 0; i < int( sizeof( steps ) / sizeof( steps[ 0 ] ) ); i++ ) {
+		DepthOfFieldCore_FillBlock( block, settings, steps[ i ].pass, width, height, depthProjection,
+			unitScale, unitScale, 1.0f, false );
+		if ( !VK_Post_DofStep( steps[ i ].target, fragModule, block, steps[ i ].primary, steps[ i ].depth,
+				steps[ i ].auxA, NULL ) ) {
+			vkPostFailReason = "depth of field pass refused";
+			VK_Exec_SetRenderTarget( sceneTarget, sceneCubeFace );
+			return false;
+		}
+	}
+
+	if ( !VK_Exec_SetRenderTarget( sceneTarget, sceneCubeFace ) ) {
+		return false;
+	}
+	DepthOfFieldCore_FillBlock( block, settings, DOF_PASS_COMPOSITE, width, height, depthProjection,
+		unitScale, unitScale, 1.0f, false );
+	const VkDescriptorSet sets[ 4 ] = {
+		VK_Post_Descriptor( scene ),
+		VK_Post_Descriptor( depthImage ),
+		VK_Post_Descriptor( focusImage != NULL ? focusImage : globalImages->blackImage ),
+		VK_Post_Descriptor( vkPostDof.images[ VK_POST_DOF_POSTFILTER ] )
+	};
+	const int uniformOffset = VK_Exec_InteractionUniformAlloc( &block, sizeof( block ) );
+	const VkPipeline pipeline = VK_Exec_PostPipeline( VK_POST_DOF, vkPost.fullscreenVert, fragModule,
+			GLS_SRCBLEND_ONE | GLS_DSTBLEND_ZERO );
+	const bool drew = VK_Post_DrawSceneRect( viewDef, pipeline, sets, 4, uniformOffset );
+	static bool logged = false;
+	if ( drew && !logged ) {
+		logged = true;
+		common->Printf( "Vulkan: first depth of field pass drew (%s, %d samples, %dx%d gather)\n",
+			settings.weaponFocus ? "view weapon focus" : ( settings.autoFocus ? "autofocus" : "manual focus" ),
+			settings.samples, settings.gatherWidth, settings.gatherHeight );
+	}
+	return drew;
+}
+
 // ---- bloom, tone map and grade (RB_STD_Bloom) ----
 
 typedef struct vkPostBloomBlurBlock_s {
@@ -3698,6 +3986,17 @@ static bool VK_Post_DrawSceneEffectsInView( const viewDef_t *viewDef ) {
 			VK_Post_WarnOnce( ssaoWarned, "r_ssao" );
 		}
 	}
+	// Depth of field before motion blur and bloom, as a camera would.
+	static bool dofWarned = false;
+	vkPostFailReason = NULL;
+	if ( VK_Post_DepthOfField( viewDef, sceneTarget, sceneCubeFace ) ) {
+		drew = true;
+	} else if ( vkPostFailReason != NULL ) {
+		VK_Post_WarnOnce( dofWarned, "r_dof" );
+	}
+	if ( VK_Exec_ActiveRenderTexture() != sceneTarget && !VK_Exec_SetRenderTarget( sceneTarget, sceneCubeFace ) ) {
+		return drew;
+	}
 	// Only the main camera advances the motion-blur history.
 	if ( VK_Post_MotionBlur( viewDef, sceneTarget ) ) {
 		drew = true;
@@ -4108,10 +4407,13 @@ static const vkPostModuleSource_t vkVolumetricModuleSources[ VK_VOLUMETRIC_MODUL
 typedef struct vkVolumetricState_s {
 	VkShaderModule		modules[ VK_VOLUMETRIC_MODULE_COUNT ];
 	bool				moduleFailed[ VK_VOLUMETRIC_MODULE_COUNT ];
-	idImage *			depth;
-	idImage *			scatter;
-	idRenderTexture *	scatterTarget;
+	// one depth copy and scattering target per view size (VolumetricLighting.h)
+	volumetricTargetPool_t pool;
+	idImage *			depth[ VOLUMETRIC_TARGET_SLOTS ];
+	idImage *			scatter[ VOLUMETRIC_TARGET_SLOTS ];
+	idRenderTexture *	scatterTarget[ VOLUMETRIC_TARGET_SLOTS ];
 	// the view being drawn
+	int					slot;
 	const viewDef_t *	view;
 	volumetricViewSettings_t settings;
 	volumetricViewStats_t stats;
@@ -4144,7 +4446,9 @@ static void VK_Post_ShutdownVolumetrics( void ) {
 	for ( int i = 0; i < VK_VOLUMETRIC_MODULE_COUNT; i++ ) {
 		VK_Post_DestroyModule( vkVolumetric.modules[ i ] );
 	}
-	delete vkVolumetric.scatterTarget;
+	for ( int i = 0; i < VOLUMETRIC_TARGET_SLOTS; i++ ) {
+		delete vkVolumetric.scatterTarget[ i ];
+	}
 	memset( &vkVolumetric, 0, sizeof( vkVolumetric ) );
 }
 
@@ -4156,8 +4460,12 @@ static bool VK_Post_VolumetricDepth( const viewDef_t *viewDef ) {
 	if ( state.depthCopied ) {
 		return true;
 	}
-	if ( VK_Post_EnsureImage( state.depth, "_vkVolumetricDepth", VK_Post_DepthImage ) == NULL
-			|| !VK_Post_CaptureDepth( state.depth, viewDef ) ) {
+	if ( state.depth[ state.slot ] == NULL || state.depth[ state.slot ]->GetUploadWidth() != VK_Post_ViewWidth( viewDef )
+			|| state.depth[ state.slot ]->GetUploadHeight() != VK_Post_ViewHeight( viewDef ) ) {
+		R_Volumetric_NoteTargetAllocation();
+	}
+	if ( VK_Post_EnsureImage( state.depth[ state.slot ], va( "_vkVolumetricDepth%d", state.slot ), VK_Post_DepthImage ) == NULL
+			|| !VK_Post_CaptureDepth( state.depth[ state.slot ], viewDef ) ) {
 		return false;
 	}
 	state.depthCopied = true;
@@ -4166,7 +4474,12 @@ static bool VK_Post_VolumetricDepth( const viewDef_t *viewDef ) {
 
 static bool VK_Post_VolumetricTarget( void ) {
 	vkVolumetricState_t &state = vkVolumetric;
-	return VK_Post_EnsureColorTarget( state.scatter, state.scatterTarget, "_vkVolumetricScatter",
+	if ( state.scatterTarget[ state.slot ] == NULL || state.scatterTarget[ state.slot ]->GetWidth() != state.targetWidth
+			|| state.scatterTarget[ state.slot ]->GetHeight() != state.targetHeight ) {
+		R_Volumetric_NoteTargetAllocation();
+	}
+	return VK_Post_EnsureColorTarget( state.scatter[ state.slot ], state.scatterTarget[ state.slot ],
+		va( "_vkVolumetricScatter%d", state.slot ),
 		state.targetWidth, state.targetHeight, TF_NEAREST, "volumetric scattering" );
 }
 
@@ -4277,7 +4590,7 @@ static void VK_Post_VolumetricDrawLight( const viewLight_t *vLight, const volume
 			? VK_Exec_PostPipeline( VK_POST_VOLUMETRIC_INJECT, vkPost.fullscreenVert, fragModule,
 				GLS_SRCBLEND_ONE | GLS_DSTBLEND_ONE )
 			: VK_Exec_VolumetricShadowPipeline( kind == VOLUMETRIC_SHADOW_POINT, vkPost.fullscreenVert, fragModule ) );
-	const VkDescriptorSet depthSet = VK_Post_Descriptor( state.depth );
+	const VkDescriptorSet depthSet = VK_Post_Descriptor( state.depth[ state.slot ] );
 	const VkDescriptorSet falloffSet = VK_Post_Descriptor( record.falloffImage );
 	if ( cmd == VK_NULL_HANDLE || pipeline == VK_NULL_HANDLE
 			|| depthSet == VK_NULL_HANDLE || falloffSet == VK_NULL_HANDLE ) {
@@ -4382,7 +4695,7 @@ void VK_PostProcess_DrawVolumetricLights( const viewDef_t *viewDef, bool classic
 	R_Volumetric_BuildViewSettings( viewDef,
 		R_Volumetric_Requested() && viewDef != NULL ? VK_Post_VolumetricDecline( viewDef, classicLights ) : NULL,
 		state.settings );
-	R_Volumetric_BeginViewStats( state.stats, state.settings );
+	R_Volumetric_BeginViewStats( state.stats, state.settings, viewDef );
 	if ( !state.settings.active ) {
 		return;
 	}
@@ -4396,6 +4709,8 @@ void VK_PostProcess_DrawVolumetricLights( const viewDef_t *viewDef, bool classic
 	state.sceneHeight = VK_Post_ViewHeight( viewDef );
 	R_Volumetric_TargetExtent( state.settings, state.sceneWidth, state.sceneHeight,
 		state.targetWidth, state.targetHeight );
+	state.slot = R_Volumetric_ChooseTargetSlot( state.pool, state.sceneWidth, state.sceneHeight,
+		state.settings.resolutionDivisor );
 
 	idRenderTexture *sceneTarget = VK_Exec_ActiveRenderTexture();
 	const int sceneFace = VK_Exec_ActiveCubeFace();
@@ -4442,7 +4757,7 @@ void VK_PostProcess_DrawVolumetricLights( const viewDef_t *viewDef, bool classic
 		if ( !onTarget ) {
 			// The depth comes from the scene target, before switching away.
 			if ( !VK_Post_VolumetricDepth( viewDef ) || !VK_Post_VolumetricTarget()
-					|| !VK_Exec_SetRenderTarget( state.scatterTarget, 0, false ) ) {
+					|| !VK_Exec_SetRenderTarget( state.scatterTarget[ state.slot ], 0, false ) ) {
 				failed = true;
 				R_Volumetric_CountOutcome( state.stats, VOLUMETRIC_LIGHT_SKIPPED_FAILED );
 				continue;
@@ -4451,7 +4766,9 @@ void VK_PostProcess_DrawVolumetricLights( const viewDef_t *viewDef, bool classic
 			VK_Post_VolumetricClear();
 		}
 		const int passes = state.stats.passes;
-		VK_Post_VolumetricDrawLight( vLight, record, mapped ? kind : VOLUMETRIC_SHADOW_NONE, shadowSet, shadowBlock );
+		// r_volumetricDebug 2: the same lights with no shadow term
+		VK_Post_VolumetricDrawLight( vLight, record,
+			mapped && state.settings.debug != 2 ? kind : VOLUMETRIC_SHADOW_NONE, shadowSet, shadowBlock );
 		if ( state.stats.passes > passes ) {
 			state.budgetUsed++;
 			R_Volumetric_CountOutcome( state.stats, outcome );
@@ -4492,7 +4809,7 @@ bool VK_PostProcess_CompositeVolumetrics( const viewDef_t *viewDef ) {
 		// No light scattered: the medium still attenuates the scene.
 		idRenderTexture *sceneTarget = VK_Exec_ActiveRenderTexture();
 		const int sceneFace = VK_Exec_ActiveCubeFace();
-		ready = VK_Exec_SetRenderTarget( state.scatterTarget, 0, false );
+		ready = VK_Exec_SetRenderTarget( state.scatterTarget[ state.slot ], 0, false );
 		if ( ready ) {
 			VK_Post_VolumetricClear();
 		}
@@ -4509,10 +4826,10 @@ bool VK_PostProcess_CompositeVolumetrics( const viewDef_t *viewDef ) {
 		block.sceneInfo[ 2 ] = (float)state.targetWidth;
 		block.sceneInfo[ 3 ] = (float)state.targetHeight;
 		R_Volumetric_PackViewParams( state.settings, block.params0, block.params1 );
-		const VkDescriptorSet sets[ 2 ] = { VK_Post_Descriptor( state.depth ), VK_Post_Descriptor( state.scatter ) };
+		const VkDescriptorSet sets[ 2 ] = { VK_Post_Descriptor( state.depth[ state.slot ] ), VK_Post_Descriptor( state.scatter[ state.slot ] ) };
 		const int uniformOffset = VK_Exec_InteractionUniformAlloc( &block, sizeof( block ) );
 		const VkPipeline pipeline = VK_Exec_PostPipeline( VK_POST_VOLUMETRIC_COMPOSITE, vkPost.fullscreenVert,
-			fragModule, state.settings.debug ? ( GLS_SRCBLEND_ONE | GLS_DSTBLEND_ZERO )
+			fragModule, state.settings.debug != 0 ? ( GLS_SRCBLEND_ONE | GLS_DSTBLEND_ZERO )
 				: ( GLS_SRCBLEND_ONE | GLS_DSTBLEND_SRC_ALPHA ) );
 		drawn = VK_Post_DrawSceneRect( viewDef, pipeline, sets, 2, uniformOffset );
 	}

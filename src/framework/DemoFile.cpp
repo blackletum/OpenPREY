@@ -479,6 +479,7 @@ idDemoFile::idDemoFile() {
 	compressor = NULL;
 	blocks = NULL;
 	writing = false;
+	retailRenderStream = false;
 	closedBytes = 0;
 	closedStreamBytes = 0;
 }
@@ -517,6 +518,7 @@ bool idDemoFile::OpenForReading( const char *fileName, bool allowPreload, bool q
 	int compression;
 
 	Close();
+	retailRenderStream = false;
 
 	f = fileSystem->OpenFileRead( fileName );
 	if ( !f ) {

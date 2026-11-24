@@ -529,6 +529,12 @@ void						FS_RaiseDeferredContentPackFailure( void );
 // under fs_savepath, unless an up-to-date copy is already there. False when no
 // addon holds it or the copy could not be written.
 bool						FS_ExtractAddonFile( const char *relativePath, const char *extractedPath );
+// openQ4 MP-22: every pack on the search path as "<game dir>/<pack>:<checksum>",
+// in search order, for a demo to record what its game data came from.
+void						FS_ListLoadedPacks( idStrList &entries );
+// openQ4 MP-22: the checksum and game directory of the pak relativePath resolves to;
+// false when no pak holds it
+bool						FS_FilePack( const char *relativePath, int &checksum, idStr &gameDir );
 
 /*
 ================================================

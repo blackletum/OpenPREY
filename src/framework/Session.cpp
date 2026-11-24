@@ -35,6 +35,7 @@ If you have questions concerning this license or the applicable additional terms
 #include "SessionPresetCheck.h"
 #include "NativeInputPublications.h"
 #include "ArenaCampaign.h"
+#include "async/RetailNetDemo.h"
 #include "BuildVersion.h"
 #include "SaveGameReleases.h"
 #include "VRSystemLocal.h"
@@ -55,12 +56,14 @@ If you have questions concerning this license or the applicable additional terms
 #include "../ui/SettingsService.h"
 #include "../ui/UserInterfaceManaged.h"
 #include "../ui/UserInterfaceRetained.h"
+#include "../sound/SoundCapture.h"
 #include <functional>
 #include <memory>
 #include <chrono>
 #include "DurableFile.h"
 #include "LoadingPresentation.h"
 #include "SaveGameTransaction.h"
+#include "VideoCapture.h"
 #include <filesystem>
 #if defined( USE_SDL3 )
 #include <SDL3/SDL_filesystem.h>
@@ -4791,6 +4794,7 @@ void idSessionLocal::Shutdown() {
 	if ( aviCaptureMode ) {
 		EndAVICapture();
 	}
+	VideoCapture_Shutdown();
 
 	Stop();
 	if ( IsRenderDemoRecording() ) {
@@ -5740,6 +5744,12 @@ Session_TimeDemo_f
 */
 static void Session_TimeDemo_f( const idCmdArgs &args ) {
 	if ( args.Argc() >= 2 ) {
+		// openQ4 MP-22: a multi-view demo, a recording of one player's view or a
+		// Quake 4 1.4.2 network demo times as well
+		if ( idStr( args.Argv( 1 ) ).CheckExtension( ".mvd" ) || openq4_retail::IsRetailNetDemoName( args.Argv( 1 ) ) ) {
+			idAsyncNetwork::multiViewDemo.StartTimeDemo( args.Argv( 1 ), false );
+			return;
+		}
 		sessLocal.TimeRenderDemo( va( "demos/%s", args.Argv(1) ), ( args.Argc() > 2 ) );
 	}
 }
@@ -5750,6 +5760,11 @@ Session_TimeDemoQuit_f
 ================
 */
 static void Session_TimeDemoQuit_f( const idCmdArgs &args ) {
+	if ( args.Argc() >= 2 && ( idStr( args.Argv( 1 ) ).CheckExtension( ".mvd" ) ||
+			openq4_retail::IsRetailNetDemoName( args.Argv( 1 ) ) ) ) {
+		idAsyncNetwork::multiViewDemo.StartTimeDemo( args.Argv( 1 ), true );
+		return;
+	}
 	sessLocal.TimeRenderDemo( va( "demos/%s", args.Argv(1) ) );
 	if ( sessLocal.timeDemo == TD_YES ) {
 		// this allows hardware vendors to automate some testing
@@ -6239,6 +6254,17 @@ void idSessionLocal::StartPlayingRenderDemo( idStr demoName ) {
 	// that's default for <= legacy engine v1.1
 	renderdemoVersion = 1;
 	savegameVersion = 16;
+	// a retail stream reads its 2D model in the legacy layout (renderdemoVersion
+	// 0) and paces its frames by their view times
+	memset( &retailPortalSkyPending, 0, sizeof( retailPortalSkyPending ) );
+	memset( &retailPortalSkyView, 0, sizeof( retailPortalSkyView ) );
+	retailLastFrameViewTime = -1;
+	if ( readDemo->IsRetailRenderStream() ) {
+		renderdemoVersion = 0;
+		renderDemoTimedFrames = true;
+		// its timeline is its frames', which keeps counting across level changes
+		renderDemoFrameClock = true;
+	}
 
 	numDemoFrames = 0;
 	memset( &currentDemoRenderView, 0, sizeof( currentDemoRenderView ) );
@@ -6268,6 +6294,20 @@ void idSessionLocal::StartPlayingRenderDemo( idStr demoName ) {
 		UpdateDemoMenuGui();
 		SetGUI( guiDemoMenu, NULL );
 		UpdateDemoMenuGui();
+	}
+}
+
+/*
+================
+idSessionLocal::DrawRetailPortalSky
+
+A retail render demo records the portal-sky view the frame drew before its
+main view; playback draws it the same way, as the game does.
+================
+*/
+void idSessionLocal::DrawRetailPortalSky() {
+	if ( readDemo != NULL && readDemo->IsRetailRenderStream() && retailPortalSkyView.time != 0 ) {
+		rw->RenderScene( &retailPortalSkyView, RF_DEFER_COMMAND_SUBMIT | RF_PORTAL_SKY );
 	}
 }
 
@@ -6319,10 +6359,15 @@ idSessionLocal::BeginAVICapture
 void idSessionLocal::BeginAVICapture( const char *demoName ) {
 	idStr name = demoName;
 	name.ExtractFileBase( aviDemoShortName );
+	// a video at the game's rate over com_aviDemoTics, through the ordinary
+	// video capture (com_video*): the session steps exactly that many tics,
+	// and a render demo exactly that interval, per recorded frame
+	if ( !VideoCapture_Start( aviDemoShortName.c_str(), com_aviDemoTics.GetInteger() ) ) {
+		return;
+	}
 	aviCaptureMode = true;
 	aviDemoFrameCount = 0;
 	aviTicStart = 0;
-	sw->AVIOpen( va( "demos/%s/", aviDemoShortName.c_str() ), aviDemoShortName.c_str() );
 }
 
 /*
@@ -6335,19 +6380,7 @@ void idSessionLocal::EndAVICapture() {
 		return;
 	}
 
-	sw->AVIClose();
-
-	// write a .roqParam file so the demo can be converted to a roq file
-	idFile *f = fileSystem->OpenFileWrite( va( "demos/%s/%s.roqParam", 
-		aviDemoShortName.c_str(), aviDemoShortName.c_str() ) );
-	f->Printf( "INPUT_DIR demos/%s\n", aviDemoShortName.c_str() );
-	f->Printf( "FILENAME demos/%s/%s.RoQ\n", aviDemoShortName.c_str(), aviDemoShortName.c_str() );
-	f->Printf( "\nINPUT\n" );
-	f->Printf( "%s_*.tga [00000-%05i]\n", aviDemoShortName.c_str(), (int)( aviDemoFrameCount-1 ) );
-	f->Printf( "END_INPUT\n" );
-	delete f;
-
-	common->Printf( "captured %i frames for %s.\n", ( int )aviDemoFrameCount, aviDemoShortName.c_str() );
+	VideoCapture_Stop();
 
 	aviCaptureMode = false;
 }
@@ -6396,6 +6429,10 @@ Start AVI recording the current game session
 void idSessionLocal::AVIGame( const char *demoName ) {
 	if ( aviCaptureMode ) {
 		EndAVICapture();
+		return;
+	}
+	if ( VideoCapture_Active() ) {
+		common->Printf( "Already recording video (stopVideo ends it).\n" );
 		return;
 	}
 
@@ -10443,7 +10480,76 @@ void idSessionLocal::AdvanceRenderDemo( bool singleFrameOnly ) {
 			break;
 		}
 		int		ds = DS_FINISHED;
-		const int tokenBytes = readDemo->ReadInt( ds );
+		if ( readDemo->IsRetailRenderStream() ) {
+			// A retail Quake 4 render demo: byte tokens, retail records. Its end
+			// is the end of the stream, which reads as DS_FINISHED below.
+			unsigned char retailToken = DS_FINISHED;
+			if ( readDemo->Read( &retailToken, 1 ) == 1 && retailToken != DS_FINISHED ) {
+				if ( retailToken == DS_RENDER ) {
+					renderDemoFramePayloadPending = true;
+					if ( rw->ProcessRetailDemoCommand( readDemo, &currentDemoRenderView, &retailPortalSkyPending, &demoTimeOffset ) ) {
+						renderDemoFramePayloadPending = false;
+						// the recording's own clock: the view times of its frames
+						const int viewTime = currentDemoRenderView.time;
+						const int deltaMS = retailLastFrameViewTime < 0 ? 0 : idMath::ClampInt( 0, 1000, viewTime - retailLastFrameViewTime );
+						retailLastFrameViewTime = viewTime;
+						renderDemoPendingFrameDeltaUS = deltaMS * 1000;
+						retailPortalSkyView = retailPortalSkyPending;
+						retailPortalSkyPending.time = 0;
+						CompleteRenderDemoFrame();
+						framesLeft--;
+						if ( paced && static_cast<double>( renderDemoFrameTimeUS ) > renderDemoPlayClockUS ) {
+							framesLeft = 0;
+						}
+					}
+					continue;
+				}
+				if ( retailToken == DS_SOUND ) {
+					renderDemoFramePayloadPending = true;
+					if ( !sw->ProcessRetailDemoCommand( readDemo ) ) {
+						common->Warning( "Render demo '%s' contains a malformed sound command; playback stopped safely",
+							activeRenderDemoName.c_str() );
+						Stop();
+						StartMenu( false );
+						break;
+					}
+					continue;
+				}
+				if ( retailToken == DS_VERSION ) {
+					// retail's savegame version, which nothing here depends on
+					int retailVersion = 0;
+					if ( readDemo->ReadInt( retailVersion ) != sizeof( retailVersion ) ) {
+						common->Warning( "Render demo '%s' has a truncated version token; playback stopped safely",
+							activeRenderDemoName.c_str() );
+						Stop();
+						StartMenu( false );
+						break;
+					}
+					common->Printf( "reading a retail Quake 4 render demo\n" );
+					continue;
+				}
+				// A retail stream has no end record, and the LZSS and Huffman
+				// coders decode padding past their last real byte: undecodable
+				// bytes after a complete frame, once the file is read to its end
+				// or a few bytes before it, are its end.
+				if ( !renderDemoFramePayloadPending && numDemoFrames > 0 ) {
+					byte rest[64];
+					if ( readDemo->StreamInputExhausted() ||
+						 readDemo->Read( rest, sizeof( rest ) ) < static_cast<int>( sizeof( rest ) ) ) {
+						common->DPrintf( "Render demo '%s' ends with coder padding after frame %d\n",
+							activeRenderDemoName.c_str(), numDemoFrames );
+						readDemo->Close();
+						continue;
+					}
+				}
+				common->Warning( "Render demo '%s' contains invalid retail token %d; playback stopped safely",
+					activeRenderDemoName.c_str(), static_cast<int>( retailToken ) );
+				Stop();
+				StartMenu( false );
+				break;
+			}
+		}
+		const int tokenBytes = readDemo->IsRetailRenderStream() ? 0 : readDemo->ReadInt( ds );
 		if ( tokenBytes != 0 && tokenBytes != sizeof( ds ) ) {
 			common->Warning( "Render demo '%s' has a truncated top-level token; playback stopped safely",
 				activeRenderDemoName.c_str() );
@@ -10925,6 +11031,7 @@ void idSessionLocal::Draw() {
 			// Playback controls are translucent, so keep the current recorded
 			// frame live behind them even though this GUI does not request the
 			// ordinary in-game "gameDraw" path.
+			DrawRetailPortalSky();
 			rw->RenderScene( &currentDemoRenderView );
 			renderSystem->DrawDemoPics();
 		} else if ( guiActive == guiSystem || guiActive->State().GetBool( "gameDraw" ) ) {
@@ -11001,6 +11108,7 @@ void idSessionLocal::Draw() {
 			menuIntroBlackoutFadeStart = -1;
 		}
 	} else if ( readDemo ) {
+		DrawRetailPortalSky();
 		rw->RenderScene( &currentDemoRenderView );
 		renderSystem->DrawDemoPics();
 	} else if ( mapSpawned ) {
@@ -11172,6 +11280,11 @@ void idSessionLocal::UpdateScreen( bool outOfSequence ) {
 
 	renderSystem->SetLoadingScreenSwapIntervalBypass( insideExecuteMapChange );
 
+	// a video recording reads back the frames of the ordinary frame loop
+	if ( !outOfSequence ) {
+		VideoCapture_BeforePresent();
+	}
+
 	UI_SettingsRenderFrame settingsFrame;
 	const double presentStart = LoadingPresentation_Now();
 	// a running VR session paces this update on the headset and hands the
@@ -11195,6 +11308,11 @@ void idSessionLocal::UpdateScreen( bool outOfSequence ) {
 	vrSystem->EndFrame();
 
 	insideUpdateScreen = false;
+
+	// the frames video capture asked for, once the GPU has read them back
+	if ( !outOfSequence ) {
+		VideoCapture_AfterPresent();
+	}
 }
 
 /*
@@ -11265,31 +11383,9 @@ void idSessionLocal::Frame() {
 		Sys_GrabMouseCursor( true );
 	}
 
-	// save the screenshot and audio from the last draw if needed
-	if ( aviCaptureMode ) {
-		idStr	name;
-
-		name = va("demos/%s/%s_%05i.tga", aviDemoShortName.c_str(), aviDemoShortName.c_str(), aviTicStart );
-
-		const float demoFrameRate = static_cast<float>( common->GetUserCmdHz() ) / static_cast<float>( com_aviDemoTics.GetInteger() );
-		float ratio = 30.0f / demoFrameRate;
-		aviDemoFrameCount += ratio;
-		if ( aviTicStart + 1 != ( int )aviDemoFrameCount ) {
-			// skipped frames so write them out
-			int c = aviDemoFrameCount - aviTicStart;
-			while ( c-- ) {
-				//renderSystem->TakeScreenshot( com_aviDemoWidth.GetInteger(), com_aviDemoHeight.GetInteger(), name, com_aviDemoSamples.GetInteger(), NULL );
-				name = va("demos/%s/%s_%05i.tga", aviDemoShortName.c_str(), aviDemoShortName.c_str(), ++aviTicStart );
-			}
-		}
-		aviTicStart = aviDemoFrameCount;
-
-		// remove any printed lines at the top before taking the screenshot
-		console->ClearNotifyLines();
-
-		// this will call Draw, possibly multiple times if com_aviDemoSamples is > 1
-	//	renderSystem->TakeScreenshot( com_aviDemoWidth.GetInteger(), com_aviDemoHeight.GetInteger(), name, com_aviDemoSamples.GetInteger(), NULL );
-	}
+	// Video capture records the frame UpdateScreen presents (VideoCapture.cpp);
+	// a fixed-rate recording runs this many tics a frame, aviDemo/aviGame its own
+	const int captureTics = aviCaptureMode ? com_aviDemoTics.GetInteger() : VideoCapture_FixedTicsPerFrame();
 
 	// at startup, we may be backwards
 	if ( latchedTicNumber > com_ticNumber ) {
@@ -11311,16 +11407,16 @@ void idSessionLocal::Frame() {
 	// fixedTic lets us run a forced number of usercmd each frame without timing
 	if ( com_fixedTic.GetInteger() ) {
 		minTic = previousLatchedTicNumber;
-	} else if ( aviCaptureMode ) {
+	} else if ( captureTics > 0 ) {
 		// Fixed-rate capture should only advance once the next capture-sized block of
 		// async tics is ready; otherwise repeated-state presentation frames can
 		// incorrectly rerun capture work faster than the requested cadence.
-		minTic = lastGameTic + com_aviDemoTics.GetInteger();
+		minTic = lastGameTic + captureTics;
 	}
 
 	int requestedWaitMsec = 0;
 	int actualWaitMsec = 0;
-	const bool shouldWaitForGameTic = aviCaptureMode;
+	const bool shouldWaitForGameTic = captureTics > 0;
 	const int latchedTicBeforeWait = previousLatchedTicNumber;
 
 	if ( shouldWaitForGameTic && minTic > latchedTicBeforeWait ) {
@@ -11425,8 +11521,8 @@ void idSessionLocal::Frame() {
 		// this may cause commands run in a previous frame to
 		// be run again if we are going at above the real time rate
 		lastGameTic = latchedTicNumber - com_fixedTic.GetInteger();
-	} else if (	aviCaptureMode ) {
-		lastGameTic = latchedTicNumber - com_aviDemoTics.GetInteger();
+	} else if ( captureTics > 0 ) {
+		lastGameTic = latchedTicNumber - captureTics;
 	}
 
 	// force only one game frame update this frame.  the game code requests this after skipping cinematics
@@ -11628,9 +11724,15 @@ Declare them here instead, with the same defaults game_mp uses so its later
 static registration matches. That registration keeps the current value and only
 adopts the reset value and range, so whatever the player picked in the menu is
 what the match starts with.
+
+Common::Init declares them before it executes the configs, so a saved value
+lands on this declaration. Declared afterwards, the config's seta created a bare
+console cvar first, this function skipped the name, and the setting lost its
+kind: the retained menu could not read it (23 November 2026, REL-01 clean-install
+run). Session::Init still calls it for any path that skipped that step.
 ===============
 */
-static void Session_DeclareMultiplayerMenuGameCVars( void ) {
+void Session_DeclareMultiplayerMenuGameCVars( void ) {
 	struct menuGameCVar_t {
 		const char *name;
 		const char *value;
@@ -11653,6 +11755,8 @@ static void Session_DeclareMultiplayerMenuGameCVars( void ) {
 		{ "si_maxBrightskin",		"1",	CVAR_FLOAT | CVAR_SERVERINFO },
 		{ "si_forcedModels",		"1",	CVAR_BOOL | CVAR_SERVERINFO },
 		{ "ui_weaponOrder",			"",		CVAR_USERINFO },
+		// MP-17: Player Setup's Player Identity, on unless the player turns it off
+		{ "ui_identity",			"1",	CVAR_BOOL | CVAR_USERINFO },
 		{ "g_inactivity",			"0",	CVAR_INTEGER },
 		{ "hud_hitSound",			"1",	CVAR_INTEGER },
 		{ "hud_crosshairAmmo",		"0",	CVAR_BOOL },
@@ -11665,11 +11769,19 @@ static void Session_DeclareMultiplayerMenuGameCVars( void ) {
 	};
 
 	for ( int i = 0; i < (int)( sizeof( menuGameCVars ) / sizeof( menuGameCVars[0] ) ); i++ ) {
-		if ( cvarSystem->Find( menuGameCVars[i].name ) != NULL ) {
+		const int flags = CVAR_GAME | CVAR_ARCHIVE | menuGameCVars[i].flags;
+		const idCVar *existing = cvarSystem->Find( menuGameCVars[i].name );
+		if ( existing == NULL ) {
+			cvarSystem->SetCVarString( menuGameCVars[i].name, menuGameCVars[i].value, flags );
 			continue;
 		}
-		cvarSystem->SetCVarString( menuGameCVars[i].name, menuGameCVars[i].value,
-			CVAR_GAME | CVAR_ARCHIVE | menuGameCVars[i].flags );
+		// A launch option's +set made a console cvar first. Give it this
+		// declaration's kind and archive flag and keep its value; without the
+		// kind the retained menu cannot read it.
+		if ( ( existing->GetFlags() & flags ) != flags ) {
+			const idStr value = existing->GetString();
+			cvarSystem->SetCVarString( menuGameCVars[i].name, value.c_str(), flags );
+		}
 	}
 }
 #endif
@@ -11687,6 +11799,8 @@ void idSessionLocal::Init() {
 	common->Printf( "-------- Initializing Session --------\n" );
 
 	cmdSystem->AddCommand( "writePrecache", Sess_WritePrecache_f, CMD_FL_SYSTEM|CMD_FL_CHEAT, "writes precache commands" );
+
+	VideoCapture_Init();
 
 #ifndef	ID_DEDICATED
 	cmdSystem->AddCommand( "openq4_startSingleplayer", Session_openQ4StartSingleplayer_f, CMD_FL_SYSTEM, "internal helper to start singleplayer after game-module switches" );
@@ -11950,7 +12064,8 @@ void idSessionLocal::UpdateSoundWorldFocus() {
 
 	idSoundWorld *targetSoundWorld = requestedSoundWorld;
 
-	if ( targetSoundWorld != NULL && Session_ShouldSilenceAudioWhenUnfocused() ) {
+	// openQ4 MP-22: a demo export records its sound track whatever has focus
+	if ( targetSoundWorld != NULL && !VideoCapture_Active() && !Sound_CaptureActive() && Session_ShouldSilenceAudioWhenUnfocused() ) {
 		targetSoundWorld = NULL;
 	}
 

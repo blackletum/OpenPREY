@@ -21,8 +21,10 @@ openQ4 multi-view demo recording and playback.
 #include <vector>
 
 class idFile;
+class idFile_Memory;
 class idBitMsg;
 class idCmdArgs;
+namespace openq4_retail { struct retailNetDemo_t; }
 
 struct mvdFileInfo_t {
 							mvdFileInfo_t();
@@ -47,6 +49,14 @@ struct mvdFileInfo_t {
 	idStr					serverName;
 	idStr					recordedAt;
 	idStr					error;
+	// openQ4 MP-22: recorded by a player on a server they joined; it shows that
+	// player's view only (no free camera, follow or auto-tracking)
+	bool					clientView;
+	idStr					viewName;
+	idStr					packs;			// "<dir>/<pack>:<checksum>;..." the game data came from
+	idStr					players;		// openQ4 MP-22: every name seen while recording, ", " between
+	// openQ4 MP-22: a retail Quake 4 network demo (.ndmo85, .netdemo), played through this player
+	bool					retail;
 };
 
 class idMultiViewDemo {
@@ -58,6 +68,17 @@ public:
 	void					SessionStop();
 
 	bool					IsRecording() const;
+	// openQ4 MP-22: a recording of this client's own view on a server it joined
+	bool					IsClientRecording() const;
+	// playback of such a recording: the game runs as its recorder's client slot
+	bool					IsClientViewPlayback() const;
+	// openQ4 MP-22: timeDemo for a .mvd: fixed match time a frame, uncapped, timed
+	bool					StartTimeDemo( const char *name, bool quitAfter );
+	bool					IsTimeDemo() const;
+	// openQ4 MP-22: a PNG frame a step, at a fixed frame rate (demoExport)
+	bool					StartExport( const char *name, int fps, bool quitAfter );
+	static void				Export_f( const idCmdArgs &args );
+	int						GetPlaybackLocalClient() const;
 	bool					StartNamedRecording( const char *name );
 	bool					StopRecordingCleanly( const char *reason );
 	bool					CopyRecordingQPath( char *buffer, int bufferSize ) const;
@@ -95,9 +116,20 @@ public:
 	void					RunPlaybackFrame();
 	void					OnServerMapChange();
 
+	// openQ4 MP-22: what the connected client gave its game, in arrival order
+	void					CaptureClientSnapshot( const idBitMsg &msg, int messageStart, int clientGameFrame );
+	void					CaptureClientApplySnapshot( int sequence );
+	void					CaptureClientReliable( const idBitMsg &msg );
+	void					CaptureClientUserInfo( int clientNum, const idDict &info );
+	void					CaptureClientUsercmd( const usercmd_t &cmd );
+	void					OnClientGameEnded( const char *reason );
+	// openQ4 MP-22: a recording's thumbnail, taken where console commands run
+	void					ServiceThumbnail();
+
 	static void				Record_f( const idCmdArgs &args );
 	static void				Stop_f( const idCmdArgs &args );
 	static void				Play_f( const idCmdArgs &args );
+	static void				TimeDemo_f( const idCmdArgs &args );
 	static void				Info_f( const idCmdArgs &args );
 	static void				Status_f( const idCmdArgs &args );
 	static void				Library_f( const idCmdArgs &args );
@@ -202,6 +234,35 @@ private:
 	record_t				playbackMapState;
 	record_t				playbackNetworkState;
 	idList<indexEntry_t>	recordingIndex;
+	// openQ4 MP-22: a client-view recording or its playback
+	bool					clientView;
+	int						viewClient;
+	int						latestSnapshotClientFrame;	// the recorder's own frame when the snapshot was read
+	int						latestSnapshotStampTime;
+	usercmd_t				playbackUsercmds[MAX_USERCMD_BACKUP][MAX_ASYNC_CLIENTS];
+	int						clientStartSequence;		// the recorder's last snapshot when it started
+	int						clientStartSnapshotFrame;
+	int						clientStartSnapshotTime;
+	int						clientStartGameFrame;
+	bool					timeDemo;				// playing as a benchmark
+	bool					timeDemoQuit;
+	int						timeDemoFrames;
+	int						timeDemoStartTime;		// real time of the first timed frame
+	int						timeDemoLastFrameTime;
+	int						timeDemoSlowestFrame;
+	bool					exporting;
+	int						exportFps;
+	int						exportSteps;			// match steps taken, a picture each after the first
+	int						exportFrames;
+	bool					exportSound;			// the sound track is recording (SoundCapture.h)
+	void					FinishExportSound();
+	idStrList				recordingPlayers;		// names seen while recording, for the summary
+	bool					thumbnailTaken;
+	idStr					pendingThumbnail;
+	void					TakeRecordingThumbnail();
+	void					NoteRecordingPlayer( const idDict &info );
+	bool					WriteSummaryRecord();
+	idStr					exportDirectory;
 	// Format 1.3 navigation. While recording these collect the directories
 	// written at finalization; during playback they hold what was read back.
 	std::vector<openq4_mvd::Marker>	markers;
@@ -213,10 +274,25 @@ private:
 	bool					keyframeWritesDisabled;
 	serverMVDRecordingResult_t recordingResult;
 	bool					recordingResultValid;
+	// openQ4 MP-22: a retail Quake 4 1.4.2 network demo, decoded into this
+	// player's own records in memory and played from there
+	bool					retailSource;
+	int						retailEntityDefs;		// the entity definitions the recording numbered
+	idList<byte>			retailStream;
 
 	void					Clear();
 	void					ClearState();
 	bool					StartRecording( const idCmdArgs &args );
+	bool					WriteClientNetworkStateRecord();
+	bool					BuildClientNetworkState( idFile_Memory &payload );
+	bool					WriteClientKeyframe( int gameFrame, int gameTime );
+	bool					JumpToClientKeyframe( int index, bool &worldReset );
+	bool					ValidateClientNetworkState( const byte *bytes, int length, idStr &error ) const;
+	bool					ApplyPlaybackNetworkState( const record_t &networkState, const char *context );
+	bool					ProcessClientPlaybackRecord( const record_t &record, bool &handled );
+	bool					WriteClientRecord( unsigned short type, const void *body, int bodyLength, bool required );
+	void					ClientStamp( int &frame, int &time ) const;
+	void					RunClientPrediction();
 	bool					StopRecording( const char *reason, bool finalize,
 							serverMVDResultReason_t failureReason =
 								SERVER_MVD_REASON_STREAM_WRITE_FAILED );
@@ -255,6 +331,9 @@ private:
 	bool					ResetPlaybackStream();
 	bool					ProcessSeekBudget();
 	bool					ReadMetadataRecord( const record_t &record, mvdFileInfo_t &info );
+	bool					OpenRetailNetDemo();
+	bool					BuildRetailStream( openq4_retail::retailNetDemo_t &demo, idFile_Memory &out );
+	bool					QueryRetailFileInfo( const char *name, mvdFileInfo_t &info );
 
 	idStr					BuildRecordingName( const idCmdArgs &args ) const;
 	idStr					BuildPlaybackName( const char *name ) const;

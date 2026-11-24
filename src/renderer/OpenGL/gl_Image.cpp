@@ -154,6 +154,13 @@ bool idImage::ReadLevelBytes( int level, idList<byte> &bytes, bool decodeRGBA8 )
 #define GL_SRGB8_ALPHA8 0x8C43
 #endif
 
+// Desktop GL 1.4 texture-object state; OpenGL ES has none, and the GLES
+// headers do not declare it. The sampler LOD-bias path checks for ES at
+// runtime, so on GLES the call is never made and only the name is needed.
+#ifndef GL_TEXTURE_LOD_BIAS
+#define GL_TEXTURE_LOD_BIAS 0x8501
+#endif
+
 #ifndef GL_COMPRESSED_RGBA_BPTC_UNORM
 #define GL_COMPRESSED_RGBA_BPTC_UNORM 0x8E8C
 #endif
@@ -495,10 +502,14 @@ void idImage::SetTexParameters() {
 			glTexParameterf(target, GL_TEXTURE_MAX_ANISOTROPY_EXT, 1 );
 		}
 	}
-	//if ( glConfig.textureLODBiasAvailable && ( usage != TD_FONT ) ) {
-	//	// use a blurring LOD bias in combination with high anisotropy to fix our aliasing grate textures...
-	//	glTexParameterf(target, GL_TEXTURE_LOD_BIAS_EXT, r_lodBias.GetFloat() );
-	//}
+	// A temporally upscaled scene selects its mips for the smaller scene
+	// target; a negative bias gives the resolve the detail back (REN-04).
+	// GL 1.4 texture-object state: OpenGL ES has no such parameter.
+	if ( glConfig.textureLODBiasAvailable && glConfig.backendCaps.profile != RENDERER_CONTEXT_PROFILE_ES ) {
+		const bool biased = filter == TF_DEFAULT && hasMipChain && defaultFilter.usesMipmaps;
+		glTexParameterf( target, GL_TEXTURE_LOD_BIAS, biased
+			? static_cast<float>( SamplerLodBiasStep() ) / TEMPORAL_LOD_BIAS_STEPS_PER_MIP : 0.0f );
+	}
 
 	// Border clamp is optional on ES 3.0. When absent, use the authored
 	// texture edge instead of leaving the driver's default repeat mode active.

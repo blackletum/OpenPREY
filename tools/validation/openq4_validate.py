@@ -117,6 +117,7 @@ NON_RUNTIME_PATTERNS = (
 GAME_DIR_NAME = "basepr"
 CLIENT_BINARY_STEM = "openPR06-client"
 DEDICATED_BINARY_STEM = "openPR06-ded"
+UPDATER_BINARY_STEM = "openPR06-updater"
 GAME_MODULE_STEM = "game"
 LEGACY_SPLIT_GAME_MODULE_PATTERNS = (
     "game-sp_*.dll",
@@ -323,6 +324,18 @@ def positive_int(value: str) -> int:
     return parsed
 
 
+def shard_spec(value: str) -> tuple[int, int]:
+    """Parse K/N: run the Kth of N interleaved slices of the Python checks."""
+    index_text, separator, count_text = value.partition("/")
+    if not separator:
+        raise argparse.ArgumentTypeError(f"{value!r} is not a K/N shard")
+    index = positive_int(index_text)
+    count = positive_int(count_text)
+    if index > count:
+        raise argparse.ArgumentTypeError(f"{value!r} names shard {index} of only {count}")
+    return index, count
+
+
 def repo_root_from_script() -> Path:
     return Path(__file__).resolve().parents[2]
 
@@ -506,6 +519,15 @@ def test_args(build_dir: Path) -> list[str]:
     return args
 
 
+def suite_filter_args(args: argparse.Namespace) -> list[str]:
+    # A suite of repeats that one lane covers (the SYSTEM page's non-English
+    # 'locales') is left out of the others.
+    filtered: list[str] = []
+    for suite in getattr(args, "skip_test_suite", None) or []:
+        filtered += ["--no-suite", suite]
+    return filtered
+
+
 def validation_env(args: argparse.Namespace, root: Path) -> dict[str, str]:
     env = os.environ.copy()
     if args.game_libs_repo:
@@ -617,6 +639,9 @@ def run_python_tests(args: argparse.Namespace, root: Path, env: dict[str, str]) 
         root / "tools" / "tests" / "async_usercmd_window_contract.py",
         root / "tools" / "tests" / "capture_run_defects_contract.py",
         root / "tools" / "tests" / "chat_history.py",
+        root / "tools" / "tests" / "master_protocol.py",
+        root / "tools" / "tests" / "video_capture_contract.py",
+        root / "tools" / "tests" / "mp_server_discovery.py",
         root / "tools" / "tests" / "choice_gui_value_contract.py",
         root / "tools" / "tests" / "list_window_selection_contract.py",
         root / "tools" / "tests" / "loading_pacifier_reentry_contract.py",
@@ -964,6 +989,7 @@ def run_python_tests(args: argparse.Namespace, root: Path, env: dict[str, str]) 
         (root / "tools" / "tests" / 'vk_display_color_mapping.py', []),
         (root / "tools" / "tests" / 'vk_display_color_mapping_shader_pin.py', []),
         (root / "tools" / "tests" / 'vk_display_color_mapping_capture.py', ['--self-test']),
+        (root / "tools" / "tests" / 'release_archive_formats.py', []),
     ]
     argument_checks = [
         (test, test_args) for test, test_args in inherited_argument_checks if test.name not in excluded_tests
@@ -975,6 +1001,14 @@ def run_python_tests(args: argparse.Namespace, root: Path, env: dict[str, str]) 
             failures.append(f"{rel(test_script, root)}: test script was not found")
             continue
         checks.append((test_script, test_args))
+
+    # CI splits the checks across parallel jobs. Interleaving keeps the slow
+    # native-harness checks, which sit together in the list, spread out.
+    shard = getattr(args, "python_shard", None)
+    if shard is not None:
+        index, count = shard
+        checks = checks[index - 1::count]
+        print(f"\n==> Python check shard {index}/{count}: {len(checks)} check(s)", flush=True)
 
     jobs = python_test_jobs(args)
     if jobs <= 1 or args.dry_run:
@@ -1824,12 +1858,13 @@ def validate_windows_symbols(root: Path, install_root: Path, game_dir: Path, arc
     if not (install_root / "OpenAL32.dll").is_file():
         raise ValidationError("Windows staged payload is missing OpenAL32.dll.")
 
+    # The renderer modules and the updater ship beside the engine, and a crash
+    # in one of them is symbolized from the release's symbols archive too.
+    root_symbol_stems = (CLIENT_BINARY_STEM, DEDICATED_BINARY_STEM, UPDATER_BINARY_STEM, "renderer-gl", "renderer-vk")
     required_symbols = {
-        install_root / f"{CLIENT_BINARY_STEM}_{arch}.pdb"
+        install_root / f"{name}_{arch}.pdb"
         for arch in arches
-    } | {
-        install_root / f"{DEDICATED_BINARY_STEM}_{arch}.pdb"
-        for arch in arches
+        for name in root_symbol_stems
     } | {
         game_dir / f"{GAME_MODULE_STEM}_{arch}.pdb"
         for arch in arches
@@ -1841,8 +1876,7 @@ def validate_windows_symbols(root: Path, install_root: Path, game_dir: Path, arc
         raise ValidationError(f"Windows staged payload is missing architecture-matched diagnostic PDB files:\n{formatted}")
 
     staged_symbols = (
-        sorted(install_root.glob(f"{CLIENT_BINARY_STEM}_*.pdb"))
-        + sorted(install_root.glob(f"{DEDICATED_BINARY_STEM}_*.pdb"))
+        [path for name in root_symbol_stems for path in sorted(install_root.glob(f"{name}_*.pdb"))]
         + sorted(game_dir.glob(f"{GAME_MODULE_STEM}_*.pdb"))
         + sorted(game_dir.glob("game-sp_*.pdb"))
         + sorted(game_dir.glob("game-mp_*.pdb"))
@@ -2149,6 +2183,20 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         default=None,
         help="Python validation checks to run at once (default: OPENQ4_PYTHON_TEST_JOBS or the CPU count; 1 runs them in sequence).",
     )
+    parser.add_argument(
+        "--python-shard",
+        type=shard_spec,
+        default=None,
+        metavar="K/N",
+        help="Run only the Kth of N interleaved slices of the Python checks, so CI can split them across jobs.",
+    )
+    parser.add_argument(
+        "--skip-test-suite",
+        action="append",
+        default=[],
+        metavar="SUITE",
+        help="Leave a Meson test suite out of the native tests (repeatable), such as 'locales' on lanes another lane covers.",
+    )
     parser.add_argument("--skip-build", action="store_true", help="Skip Meson setup/compile/install steps.")
     parser.add_argument("--build-gamelibs", action="store_true", help="Deprecated: game modules now build with the engine.")
     parser.add_argument("--game-libs-repo", default="", help="Override the game-source root for validation fixtures; ordinary builds use this checkout.")
@@ -2194,6 +2242,10 @@ def main(argv: list[str]) -> int:
     print(f"Build dir: {build_dir}", flush=True)
     print(f"Build type: {args.buildtype}", flush=True)
     print(f"GameLibs repo: {env['OPENPR06_GAMELIBS_REPO']}", flush=True)
+    if args.python_shard is not None:
+        print(f"Python check shard: {args.python_shard[0]}/{args.python_shard[1]}", flush=True)
+    if args.skip_test_suite:
+        print(f"Skipped native test suites: {', '.join(args.skip_test_suite)}", flush=True)
 
     try:
         check_dirty_worktree(args, root, env)
@@ -2221,7 +2273,7 @@ def main(argv: list[str]) -> int:
                 dry_run=args.dry_run,
             )
             run_command(
-                wrapper + test_args(build_dir),
+                wrapper + test_args(build_dir) + suite_filter_args(args),
                 cwd=root,
                 env=env,
                 title="Meson native tests",

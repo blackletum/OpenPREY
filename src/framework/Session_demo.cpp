@@ -10,6 +10,7 @@ openQ4 demo library and format-neutral playback controls.
 #include "DemoFile.h"
 #include "NativeInputPublications.h"
 #include "async/AsyncNetwork.h"
+#include "async/RetailNetDemo.h"
 #include "../ui/ListGUILocal.h"
 
 namespace {
@@ -66,12 +67,6 @@ static bool DemoPathEndsWith( const idStr &path, const char *suffix ) {
 	const int suffixLength = static_cast<int>( strlen( suffix ) );
 	return path.Length() >= suffixLength &&
 		idStr::Icmp( path.c_str() + path.Length() - suffixLength, suffix ) == 0;
-}
-
-static unsigned int DemoReadLittleUInt( const byte *data ) {
-	unsigned int value = 0;
-	memcpy( &value, data, sizeof( value ) );
-	return LittleLong( value );
 }
 
 static bool DemoPathIsSafe( const idStr &path ) {
@@ -174,6 +169,23 @@ static const char *DemoMVDProblemString( const idStr &error ) {
 	return "#str_41565";
 }
 
+// openQ4 MP-22: why a retail Quake 4 network demo cannot play
+static const char *DemoRetailProblemString( const idStr &error ) {
+	if ( error.Find( "another Quake 4 release" ) >= 0 ) {
+		return "#str_232881";
+	}
+	if ( error.Find( "paks" ) >= 0 ) {
+		return "#str_232882";
+	}
+	if ( error.Find( "game frames a second" ) >= 0 ) {
+		return "#str_41563";
+	}
+	if ( error.Find( "game module" ) >= 0 ) {
+		return "#str_41561";
+	}
+	return "#str_41565";
+}
+
 static idStr DemoFormatTime( int milliseconds, bool unknownAllowed = true ) {
 	if ( milliseconds < 0 ) {
 		return unknownAllowed ? "--:--" : "00:00";
@@ -207,10 +219,86 @@ struct demoRenderSessionInfo_t {
 	int				timelineDurationMS = -1;
 };
 
+/*
+================
+DemoReadRetailRenderMap
+
+The level a retail Quake 4 render demo opens with. Retail starts every
+recording with its version, the sound world's state and then the map load;
+the state is read through (its savegame layout) to reach the map's name.
+================
+*/
+static bool DemoReadRetailRenderMap( idDemoFile &probe, idStr &mapName ) {
+	mapName.Clear();
+	unsigned char token = 0, command = 0;
+	int value = 0;
+	auto skip = [&]( int bytes ) -> bool {
+		byte scratch[128];
+		while ( bytes > 0 ) {
+			const int step = Min( bytes, static_cast<int>( sizeof( scratch ) ) );
+			if ( probe.Read( scratch, step ) != step ) {
+				return false;
+			}
+			bytes -= step;
+		}
+		return true;
+	};
+	if ( probe.Read( &token, 1 ) != 1 || token != DS_VERSION || probe.ReadInt( value ) != sizeof( value ) ||
+		 probe.Read( &token, 1 ) != 1 || token != DS_SOUND || probe.Read( &command, 1 ) != 1 || command != 0 ) {
+		return false;
+	}
+	// listener origin, axis, id, time, sound clocks
+	int emitters = 0;
+	if ( !skip( 12 + 36 + 4 * 4 ) || probe.ReadInt( emitters ) != sizeof( emitters ) || emitters < 0 || emitters > 8192 ) {
+		return false;
+	}
+	for ( int i = 1; i < emitters; i++ ) {
+		int handle = 0;
+		if ( probe.ReadInt( handle ) != sizeof( handle ) ) {
+			return false;
+		}
+		if ( handle < 0 ) {
+			continue;
+		}
+		// origin, listener, parms, amplitude, eight channel slots, distances, flags
+		if ( !skip( 12 + 4 + 40 + 4 + 4 + 8 * 125 + 4 + 1 + 4 + 4 + 1 + 4 + 4 + 12 ) ) {
+			return false;
+		}
+		for ( int listed = 0; ; listed++ ) {
+			int slot = -1;
+			if ( probe.ReadInt( slot ) != sizeof( slot ) || listed > 8 ) {
+				return false;
+			}
+			if ( slot < 0 ) {
+				break;
+			}
+			for ( int name = 0; name < 2; name++ ) {
+				int length = 0;
+				if ( probe.ReadInt( length ) != sizeof( length ) || length < 0 || length >= MAX_STRING_CHARS || !skip( length ) ) {
+					return false;
+				}
+			}
+		}
+	}
+	char name[256];
+	if ( probe.Read( &token, 1 ) != 1 || token != DS_RENDER || probe.Read( &command, 1 ) != 1 || command != 13 ||
+		 !skip( 4 * 4 ) || probe.Read( name, sizeof( name ) ) != static_cast<int>( sizeof( name ) ) ) {
+		return false;
+	}
+	name[ sizeof( name ) - 1 ] = '\0';
+	mapName = name;
+	return true;
+}
+
 static bool DemoReadRenderSessionInfo( const char *path, demoRenderSessionInfo_t &info ) {
 	idDemoFile probe;
 	if ( !probe.OpenForReading( path, false, true ) ) {
 		return false;
+	}
+	if ( probe.IsRetailRenderStream() ) {
+		// no openQ4 header: nothing of a campaign to check
+		probe.Close();
+		return true;
 	}
 	int token = DS_FINISHED;
 	if ( probe.ReadInt( token ) != sizeof( token ) || token != DS_VERSION ||
@@ -462,11 +550,25 @@ static void DemoProbeEntry( demoLibraryEntry_t &entry ) {
 			entry.format = va( "OQ4MVD %u.%u / %u.%u",
 				info.formatMajor, info.formatMinor,
 				info.protocolMajor, info.protocolMinor );
+			// openQ4 MP-22: whose view or who played, and what demoFind searches
+			entry.serverName = DemoSanitizeText( info.serverName );
+			entry.players = DemoSanitizeText( info.players );
+			entry.recorder = DemoSanitizeText( info.viewName );
+			entry.clientView = info.clientView;
+			if ( info.compatible && info.clientView && !entry.recorder.IsEmpty() ) {
+				entry.details = va( DemoLocalized( "#str_232844" ), entry.recorder.c_str() );
+			} else if ( info.compatible && !entry.players.IsEmpty() ) {
+				entry.details = va( DemoLocalized( "#str_232843" ), entry.players.c_str() );
+			}
 			if ( info.compatible ) {
 				entry.capabilities =
 					DEMO_CAP_PLAY | DEMO_CAP_PAUSE | DEMO_CAP_RATE |
 					DEMO_CAP_SEEK | DEMO_CAP_STEP | DEMO_CAP_FREE_ROAM |
 					DEMO_CAP_FOLLOW | DEMO_CAP_FULL_WORLD;
+				// openQ4 MP-22: a player's recording of their own view has no other camera
+				if ( info.clientView ) {
+					entry.capabilities &= ~( DEMO_CAP_FREE_ROAM | DEMO_CAP_FOLLOW | DEMO_CAP_FULL_WORLD );
+				}
 			}
 		} else {
 			entry.status = DemoLocalized( "#str_41548" );
@@ -484,9 +586,14 @@ static void DemoProbeEntry( demoLibraryEntry_t &entry ) {
 
 		bool decodedOpenQ4Stream = false;
 		bool supportedOpenQ4Stream = false;
+		bool retailStream = false;
+		idStr retailMap;
 		int streamVersion = 1;
 		idDemoFile probe;
-		if ( probe.OpenForReading( entry.path.c_str(), false, true ) ) {
+		if ( probe.OpenForReading( entry.path.c_str(), false, true ) && probe.IsRetailRenderStream() ) {
+			retailStream = true;
+			DemoReadRetailRenderMap( probe, retailMap );
+		} else if ( probe.IsOpen() ) {
 			int firstToken = DS_FINISHED;
 			if ( probe.ReadInt( firstToken ) == sizeof( firstToken ) ) {
 				if ( firstToken == DS_VERSION ) {
@@ -505,7 +612,24 @@ static void DemoProbeEntry( demoLibraryEntry_t &entry ) {
 		}
 		probe.Close();
 
-		if ( ambiguousWrapper && !decodedOpenQ4Stream ) {
+		if ( retailStream ) {
+			// MP-22: retail Quake 4's render demos play through their own reader
+			entry.type = DEMO_LIBRARY_RENDER;
+			entry.format = DemoLocalized( "#str_232870" );
+			entry.status = DemoLocalized( "#str_41546" );
+			entry.details = DemoLocalized( "#str_41551" );
+			entry.playable = true;
+			entry.compatible = true;
+			entry.capabilities =
+				DEMO_CAP_PLAY | DEMO_CAP_PAUSE | DEMO_CAP_RATE |
+				DEMO_CAP_SEEK | DEMO_CAP_STEP;
+			if ( !retailMap.IsEmpty() ) {
+				idStr map = retailMap;
+				map.StripLeadingOnce( "maps/" );
+				map.StripFileExtension();
+				entry.mapName = DemoSanitizeText( Session_LevelDisplayName( map, "" ) );
+			}
+		} else if ( ambiguousWrapper && !decodedOpenQ4Stream ) {
 			entry.type = DEMO_LIBRARY_LEGACY_RENDER;
 			entry.format = DemoLocalized( "#str_41544" );
 			entry.status = DemoLocalized( "#str_41547" );
@@ -600,18 +724,53 @@ static void DemoProbeEntry( demoLibraryEntry_t &entry ) {
 			common->DPrintf( "Demo library rejected '%s': %s\n",
 				entry.path.c_str(), error.c_str() );
 		}
-	} else if ( DemoPathEndsWith( entry.path, ".netdemo" ) ) {
-		byte prefix[20];
-		int prefixBytes = 0;
-		DemoReadPrefix( entry.path, prefix, sizeof( prefix ), prefixBytes );
+	} else if ( openq4_retail::IsRetailNetDemoName( entry.path.c_str() ) ) {
+		// openQ4 MP-22: a retail Quake 4 network demo (.ndmo85 from 1.4.2, .netdemo
+		// before it). 1.4.2's plays through the MVD player; the header names any other.
 		entry.type = DEMO_LIBRARY_LEGACY_NET;
-		entry.format = DemoLocalized( "#str_41543" );
-		entry.status = DemoLocalized( "#str_41547" );
-		entry.details = DemoLocalized( "#str_41547" );
-		if ( prefixBytes >= 4 && memcmp( prefix, "NDMO", 4 ) == 0 && prefixBytes >= 12 ) {
-			const int version = static_cast<int>( DemoReadLittleUInt( prefix + 4 ) );
-			const int protocol = static_cast<int>( DemoReadLittleUInt( prefix + 8 ) );
-			entry.format = va( "NDMO v%d / %d", version, protocol );
+		// .netdemo is what Quake 4 wrote before 1.4.2 named its demos by protocol
+		const char *formatLabel = DemoPathEndsWith( entry.path, ".netdemo" ) ? "#str_41543" : "#str_232880";
+		entry.format = DemoLocalized( formatLabel );
+		mvdFileInfo_t info;
+		const bool read = idAsyncNetwork::multiViewDemo.QueryFileInfo( entry.path.c_str(), info );
+		if ( info.protocolMajor > 0 ) {
+			entry.format = va( "%s %u.%u", DemoLocalized( formatLabel ), info.protocolMajor, info.protocolMinor );
+		}
+		if ( read ) {
+			entry.playable = info.compatible;
+			entry.compatible = info.compatible;
+			entry.cleanEnd = info.cleanEnd;
+			entry.durationMS = info.durationMS;
+			entry.mapName = DemoSanitizeText( info.mapName );
+			entry.gameType = DemoSanitizeText( info.gameType );
+			entry.serverName = DemoSanitizeText( info.serverName );
+			entry.players = DemoSanitizeText( info.players );
+			entry.recorder = DemoSanitizeText( info.viewName );
+			entry.clientView = info.clientView;
+			entry.status = DemoLocalized( info.compatible ? "#str_41546" : "#str_41547" );
+			entry.details = DemoLocalized( DemoRetailProblemString( info.error ) );
+			if ( info.compatible ) {
+				if ( info.clientView && !entry.recorder.IsEmpty() ) {
+					entry.details = va( DemoLocalized( "#str_232844" ), entry.recorder.c_str() );
+				} else if ( !entry.players.IsEmpty() ) {
+					entry.details = va( DemoLocalized( "#str_232843" ), entry.players.c_str() );
+				} else {
+					entry.details = DemoLocalized( info.clientView ? "#str_41551" : "#str_41550" );
+				}
+				entry.capabilities =
+					DEMO_CAP_PLAY | DEMO_CAP_PAUSE | DEMO_CAP_RATE |
+					DEMO_CAP_SEEK | DEMO_CAP_STEP | DEMO_CAP_FREE_ROAM |
+					DEMO_CAP_FOLLOW | DEMO_CAP_FULL_WORLD;
+				if ( info.clientView ) {
+					entry.capabilities &= ~( DEMO_CAP_FREE_ROAM | DEMO_CAP_FOLLOW | DEMO_CAP_FULL_WORLD );
+				}
+			}
+		} else {
+			const bool otherRelease = info.error.Find( "another Quake 4 release" ) >= 0;
+			entry.status = DemoLocalized( otherRelease ? "#str_41547" : "#str_41548" );
+			entry.details = DemoLocalized( DemoRetailProblemString( info.error ) );
+			common->DPrintf( "Demo library rejected '%s': %s\n",
+				entry.path.c_str(), info.error.c_str() );
 		}
 	}
 
@@ -681,7 +840,53 @@ static void Session_DemoSkip_f( const idCmdArgs &args ) {
 }
 
 static void Session_DemoStep_f( const idCmdArgs &args ) {
-	sessLocal.StepDemo();
+	// openQ4 MP-22: demoStep [frames], negative to step back
+	sessLocal.StepDemo( args.Argc() > 1 ? atoi( args.Argv( 1 ) ) : 1 );
+}
+
+// openQ4 MP-22: demos whose name, map, mode, server, players or recorder contain the text
+static void Session_DemoFind_f( const idCmdArgs &args ) {
+	if ( args.Argc() < 2 ) {
+		common->Printf( "usage: demoFind <text>\n" );
+		return;
+	}
+	const idStr text = args.Args( 1, -1 );
+	sessLocal.RefreshDemoLibrary();
+	int found = 0;
+	for ( int i = 0; i < sessLocal.demoLibrary.Num(); i++ ) {
+		const demoLibraryEntry_t &entry = sessLocal.demoLibrary[i];
+		const char *fields[] = { entry.displayName.c_str(), entry.mapName.c_str(), entry.gameType.c_str(),
+			entry.serverName.c_str(), entry.players.c_str(), entry.recorder.c_str() };
+		bool match = false;
+		for ( int f = 0; f < static_cast<int>( sizeof( fields ) / sizeof( fields[0] ) ) && !match; f++ ) {
+			match = idStr::FindText( fields[f], text.c_str(), false ) >= 0;
+		}
+		if ( match ) {
+			common->Printf( "DEMO_FIND %s  %s  %s  %s%s%s\n", entry.path.c_str(), entry.mapName.c_str(),
+				entry.gameType.c_str(), entry.clientView ? "view of " : "", entry.clientView ? entry.recorder.c_str() : "",
+				entry.clientView ? "" : entry.players.c_str() );
+			found++;
+		}
+	}
+	common->Printf( "DEMO_FIND %d of %d demos match \"%s\"\n", found, sessLocal.demoLibrary.Num(), text.c_str() );
+}
+
+// openQ4 MP-22: the recorded players of the playing multi-view demo
+static void Session_DemoPlayers_f( const idCmdArgs &args ) {
+	if ( !idAsyncNetwork::multiViewDemo.IsPlaying() ) {
+		common->Printf( "No multi-view demo is playing\n" );
+		return;
+	}
+	const int followed = idAsyncNetwork::multiViewDemo.GetFollowClient();
+	int listed = 0;
+	for ( int slot = 0; slot < MAX_ASYNC_CLIENTS; slot++ ) {
+		idStr name;
+		if ( idAsyncNetwork::multiViewDemo.CopyFollowName( slot, name ) ) {
+			common->Printf( "%c %2d  %s\n", slot == followed ? '>' : ' ', slot, name.c_str() );
+			listed++;
+		}
+	}
+	common->Printf( "%d players; demoFollow <slot> or demoFollow <name> follows one\n", listed );
 }
 
 static void Session_DemoFollow_f( const idCmdArgs &args ) {
@@ -839,8 +1044,10 @@ void idSessionLocal::InitDemoSystem() {
 	cmdSystem->AddCommand( "demoSpeed", Session_DemoSpeed_f, CMD_FL_SYSTEM, "sets unified demo playback speed" );
 	cmdSystem->AddCommand( "demoSeek", Session_DemoSeek_f, CMD_FL_SYSTEM, "seeks to a unified demo time in seconds" );
 	cmdSystem->AddCommand( "demoSkip", Session_DemoSkip_f, CMD_FL_SYSTEM, "moves relative to the current demo time in seconds" );
-	cmdSystem->AddCommand( "demoStep", Session_DemoStep_f, CMD_FL_SYSTEM, "steps a paused demo by one frame" );
+	cmdSystem->AddCommand( "demoStep", Session_DemoStep_f, CMD_FL_SYSTEM, "steps a paused demo: demoStep [frames], negative to step back" );
 	cmdSystem->AddCommand( "demoFollow", Session_DemoFollow_f, CMD_FL_SYSTEM, "follows an MVD player: demoFollow [next|prev|free|<slot>|<name>]" );
+	cmdSystem->AddCommand( "demoPlayers", Session_DemoPlayers_f, CMD_FL_SYSTEM, "lists a multi-view demo's recorded players, to follow with demoFollow" );
+	cmdSystem->AddCommand( "demoFind", Session_DemoFind_f, CMD_FL_SYSTEM, "lists the demos whose name, map, mode, server, players or recorder contain the text" );
 	cmdSystem->AddCommand( "demoFreeRoam", Session_DemoFreeRoam_f, CMD_FL_SYSTEM, "enters MVD free-roam mode" );
 	cmdSystem->AddCommand( "demoMarker", Session_DemoMarker_f, CMD_FL_SYSTEM, "seeks to an MVD marker: demoMarker next|prev [kind]" );
 	cmdSystem->AddCommand( "demoAutoTrack", Session_DemoAutoTrack_f, CMD_FL_SYSTEM, "sets or cycles MVD auto-tracking: demoAutoTrack [off|killer|action] [any|marine|strogg]" );
@@ -890,6 +1097,7 @@ void idSessionLocal::ScanDemoLibrary() {
 	DemoCollectExtension( paths, ".demo" );
 	DemoCollectExtension( paths, ".cdemo" );
 	DemoCollectExtension( paths, ".netdemo" );
+	DemoCollectExtension( paths, ".ndmo85" );
 	DemoCollectExtension( paths, ".part" );
 	DemoCollectExtension( paths, ".ucmd" );
 
@@ -1016,7 +1224,13 @@ void idSessionLocal::UpdateDemoMenuGui() {
 		seeking = idAsyncNetwork::multiViewDemo.IsSeeking();
 		title = idAsyncNetwork::multiViewDemo.GetPlaybackName();
 		title.StripPath();
-		const int followClient = idAsyncNetwork::multiViewDemo.GetFollowClient();
+		// openQ4 MP-22: a player's recording of their own view shows that player
+		const bool clientView = idAsyncNetwork::multiViewDemo.IsClientViewPlayback();
+		if ( clientView ) {
+			capabilities &= ~( DEMO_CAP_FREE_ROAM | DEMO_CAP_FOLLOW | DEMO_CAP_FULL_WORLD );
+		}
+		const int followClient = clientView ? idAsyncNetwork::multiViewDemo.GetPlaybackLocalClient() :
+			idAsyncNetwork::multiViewDemo.GetFollowClient();
 		idStr followName;
 		if ( followClient < 0 ) {
 			view = DemoLocalized( "#str_41539" );
@@ -1095,6 +1309,26 @@ void idSessionLocal::UpdateDemoMenuGui() {
 			( mvdPlaying && idAsyncNetwork::multiViewDemo.GetMarkerCount() > 0 ) ||
 			( renderPlaying && renderDemoFrameClock && renderDemoPlaySegments.Num() > 1 &&
 			  ( capabilities & DEMO_CAP_SEEK ) != 0 ) );
+		// openQ4 MP-22: the recorded players, to follow one by name
+		demoPlayerRows = 0;
+		const int followed = mvdPlaying ? idAsyncNetwork::multiViewDemo.GetFollowClient() : -1;
+		for ( int slot = 0; slot < MAX_ASYNC_CLIENTS && demoPlayerRows < DEMO_PLAYER_ROWS; slot++ ) {
+			idStr name;
+			if ( mvdPlaying && ( capabilities & DEMO_CAP_FOLLOW ) != 0 &&
+				 idAsyncNetwork::multiViewDemo.CopyFollowName( slot, name ) ) {
+				guiDemoMenu->SetStateString( va( "demo_player%d_name", demoPlayerRows ), DemoSanitizeText( name ) );
+				guiDemoMenu->SetStateBool( va( "demo_player%d_on", demoPlayerRows ), slot == followed );
+				demoPlayerRowSlots[ demoPlayerRows++ ] = slot;
+			}
+		}
+		for ( int row = 0; row < DEMO_PLAYER_ROWS; row++ ) {
+			guiDemoMenu->SetStateBool( va( "demo_player%d_shown", row ), row < demoPlayerRows );
+		}
+		if ( demoPlayerRows == 0 ) {
+			demoPlayersOpen = false;
+		}
+		guiDemoMenu->SetStateBool( "demo_canPlayers", demoPlayerRows > 0 );
+		guiDemoMenu->SetStateBool( "demo_playersOpen", demoPlayersOpen );
 		const idCVar *autoTrack = cvarSystem->Find( "demo_autoTrack" );
 		static const char * const autoTrackLabels[] = { "#str_41573", "#str_41574", "#str_41575" };
 		guiDemoMenu->SetStateString( "demo_autoTrackLabel", DemoLocalized( autoTrackLabels[
@@ -1541,15 +1775,29 @@ bool idSessionLocal::SkipDemoMS( int deltaMS ) {
 	return false;
 }
 
-void idSessionLocal::StepDemo() {
+void idSessionLocal::StepDemo( int frames ) {
+	if ( frames == 0 ) {
+		frames = 1;
+	}
 	if ( idAsyncNetwork::multiViewDemo.IsPlaying() ) {
 		if ( !idAsyncNetwork::multiViewDemo.IsSeeking() ) {
-			idAsyncNetwork::multiViewDemo.StepFrames( 1 );
+			idAsyncNetwork::multiViewDemo.StepFrames( frames );
 		}
 	} else if ( readDemo != NULL && !renderDemoSeeking &&
 			   !timeDemo && !aviCaptureMode ) {
 		SetDemoPaused( true );
-		renderDemoStepPending = true;
+		if ( frames > 0 ) {
+			renderDemoStepPending = true;
+		} else {
+			// openQ4 MP-22: back to the frame before this one, from its keyframe.
+			// A seek stops at the first frame at or after its target, so on a
+			// frame timeline the target is that frame's own time.
+			int target = DemoCurrentRenderTimeMS( *this ) - 1;
+			if ( renderDemoFrameClock && renderDemoPrevFrameTimeUS < renderDemoFrameTimeUS ) {
+				target = static_cast<int>( renderDemoPrevFrameTimeUS / 1000 );
+			}
+			SeekDemoMS( Max( 0, target ) );
+		}
 	}
 	UpdateDemoMenuGui();
 }
@@ -1591,7 +1839,8 @@ bool idSessionLocal::PlayDemoLibraryEntry( int index ) {
 	demoReturnGui = NULL;
 	demoBrowserMode = false;
 	demoOverlayVisible = true;
-	if ( entry.type == DEMO_LIBRARY_MVD ) {
+	if ( entry.type == DEMO_LIBRARY_MVD || entry.type == DEMO_LIBRARY_LEGACY_NET ) {
+		// openQ4 MP-22: a retail network demo plays through the MVD player too
 		idCmdArgs play;
 		play.AppendArg( "playMVD" );
 		play.AppendArg( entry.path.c_str() );
@@ -1632,6 +1881,13 @@ bool idSessionLocal::DeleteDemoLibraryFile( const demoLibraryEntry_t &entry ) {
 	if ( fileSystem->RemoveExplicitFile( explicitPath.c_str() ) != 0 ) {
 		common->Warning( "Could not delete demo '%s'", entry.path.c_str() );
 		return false;
+	}
+	// openQ4 MP-22: and its thumbnail
+	idStr thumbnail = entry.path;
+	thumbnail.StripFileExtension();
+	thumbnail += "_thumb.png";
+	if ( fileSystem->ReadFile( thumbnail.c_str(), NULL, NULL ) > 0 ) {
+		fileSystem->RemoveExplicitFile( fileSystem->RelativePathToOSPath( thumbnail.c_str(), "fs_savepath" ) );
 	}
 	return true;
 }
@@ -1770,7 +2026,7 @@ bool idSessionLocal::HandleDemoMenuCommand( const char *menuCommand ) {
 		return true;
 	}
 	if ( !idStr::Icmp( cmd, "demoStep" ) ) {
-		StepDemo();
+		StepDemo( icmd < args.Argc() ? atoi( args.Argv( icmd++ ) ) : 1 );
 		return true;
 	}
 	if ( !idStr::Icmp( cmd, "demoSpeed" ) ) {
@@ -1783,6 +2039,21 @@ bool idSessionLocal::HandleDemoMenuCommand( const char *menuCommand ) {
 		if ( idAsyncNetwork::multiViewDemo.IsPlaying() ) {
 			idAsyncNetwork::multiViewDemo.FollowNext();
 		}
+		return true;
+	}
+	// openQ4 MP-22: the deck's player list
+	if ( !idStr::Icmp( cmd, "demoPlayers" ) ) {
+		demoPlayersOpen = !demoPlayersOpen && demoPlayerRows > 0;
+		UpdateDemoMenuGui();
+		return true;
+	}
+	if ( !idStr::Icmp( cmd, "demoFollowRow" ) ) {
+		const int row = icmd < args.Argc() ? atoi( args.Argv( icmd++ ) ) : -1;
+		if ( row >= 0 && row < demoPlayerRows && idAsyncNetwork::multiViewDemo.IsPlaying() ) {
+			idAsyncNetwork::multiViewDemo.FollowClient( demoPlayerRowSlots[ row ] );
+		}
+		demoPlayersOpen = false;
+		UpdateDemoMenuGui();
 		return true;
 	}
 	if ( !idStr::Icmp( cmd, "demoFollowPrev" ) ) {

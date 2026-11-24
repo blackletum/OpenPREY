@@ -2314,6 +2314,9 @@ void idRenderSystemLocal::CaptureRenderToImage( const char *imageName ) {
 	// may need to sync to create the image
 	idImage	*image = globalImages->ImageFromFile(imageName, TF_DEFAULT, TR_REPEAT, TD_DEFAULT);
 
+	// openQ4: a desktop stereo frame's scene is in its eyes, not its screen layer
+	const bool stereoCapture = R_DesktopStereo_BeginCapture();
+
 	renderCrop_t *rc = &renderCrops[currentRenderCrop];
 
 	copyRenderCommand_t *cmd = (copyRenderCommand_t *)R_GetCommandBuffer( sizeof( *cmd ) );
@@ -2328,6 +2331,9 @@ void idRenderSystemLocal::CaptureRenderToImage( const char *imageName ) {
 	if ( R_ScenePackets_FrontEndCaptureRequired() ) {
 		R_ScenePackets_AddCopyRender( image, cmd->x, cmd->y,
 			cmd->imageWidth, cmd->imageHeight, cmd->cubeFace, cmd->copyDepth );
+	}
+	if ( stereoCapture ) {
+		R_DesktopStereo_EndCapture();
 	}
 
 	guiModel->Clear();
@@ -2452,6 +2458,30 @@ int idRenderSystemLocal::PollSavePreview( const char *fileName ) {
 void idRenderSystemLocal::CancelSavePreview() {
 	R_RenderThread_Sync( "save preview" );
 	RB_ReleaseSavePreview();
+}
+
+// Video capture readback (render API 37). The ring is shared with the frame on
+// the render thread, as the save preview is.
+bool idRenderSystemLocal::RequestVideoFrame( long long tag ) {
+	R_RenderThread_Sync( "video capture" );
+	return glConfig.isInitialized && RB_RequestVideoFrame( tag );
+}
+
+int idRenderSystemLocal::PollVideoFrame( renderVideoFrame_t &frame, bool wait ) {
+	R_RenderThread_Sync( "video capture" );
+	memset( &frame, 0, sizeof( frame ) );
+	if ( !glConfig.isInitialized ) return -1;
+	return RB_PollVideoFrame( frame, wait );
+}
+
+void idRenderSystemLocal::ReleaseVideoFrame() {
+	R_RenderThread_Sync( "video capture" );
+	RB_ReleaseVideoFrame();
+}
+
+void idRenderSystemLocal::EndVideoCapture() {
+	R_RenderThread_Sync( "video capture" );
+	RB_ShutdownVideoCapture();
 }
 
 bool idRenderSystemLocal::ReloadGeneratedCacheImages() {

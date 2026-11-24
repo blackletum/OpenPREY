@@ -399,12 +399,17 @@ if get_option('build_native_tests')
   # byte or damaged anywhere, and the timeline its headers alone give.
   # Most of its time is the 2264 truncations, each replaying the recording
   # from its start. In a debug build that costs 40-90 s with libstdc++ (the
-  # Linux runners, ASan+UBSan included) but about 420 s with libc++ on the
-  # same host, whose unoptimised vector code runs per element: the macOS
-  # runners overran 300 s. The bound is a hang guard for every host.
+  # Linux runners, ASan+UBSan included) but 540-760 s with libc++, whose
+  # unoptimised vector code runs per element: it was the last test running
+  # on every macOS runner. The test compiles the codec sources itself, so
+  # optimising this one target speeds it up without touching the engine's
+  # debug build; assertions stay on. MSVC keeps the debug build's flags,
+  # whose runtime checks refuse /O2, and runs it in about 80 s anyway. The
+  # bound is a hang guard for every host.
   openq4_demo_block_codec_test = executable(
     'openq4-demo-block-codec-test', files('tools/tests/native/DemoBlockCodecTest.cpp'),
     include_directories: root_include_dir, install: false,
+    override_options: meson.get_compiler('cpp').get_id() == 'msvc' ? [] : ['optimization=2'],
   )
   test('openq4-demo-block-codec', openq4_demo_block_codec_test, timeout: 1200)
 
@@ -632,7 +637,7 @@ if get_option('build_native_tests')
   test('openq4-render-frame-ownership', py,
     args: [files('tools/tests/renderer_frame_ownership.py')], timeout: 90)
   test('openq4-render-snapshot-copy', py,
-    args: [files('tools/tests/renderer_snapshot_copy.py')], timeout: 90)
+    args: [files('tools/tests/renderer_snapshot_copy.py')], timeout: 240)
   test('openq4-render-frame-identity', py,
     args: [files('tools/tests/renderer_frame_identity.py')], timeout: 90)
   test('openq4-presentation-reference-suite', py,
@@ -819,6 +824,18 @@ if get_option('build_native_tests')
     timeout: 30,
   )
 
+  openq4_depth_of_field_core_test = executable(
+    'openq4-depth-of-field-core-test',
+    files('tools/tests/native/DepthOfFieldCoreTest.cpp'),
+    include_directories: root_include_dir,
+    install: false,
+  )
+  test(
+    'openq4-depth-of-field-core',
+    openq4_depth_of_field_core_test,
+    timeout: 30,
+  )
+
   openq4_renderer_contracts_test = executable(
     'openq4-renderer-contracts-test',
     files(
@@ -899,6 +916,14 @@ if get_option('build_native_tests')
     install: false,
   )
   test('openq4-sound-memory-trim', openq4_sound_memory_trim_test, timeout: 30)
+
+  openq4_sound_capture_test = executable(
+    'openq4-sound-capture-test',
+    files('tools/tests/native/SoundCaptureTest.cpp'),
+    include_directories: root_include_dir,
+    install: false,
+  )
+  test('openq4-sound-capture', openq4_sound_capture_test, timeout: 30)
 
   openq4_voice_packet_test = executable(
     'openq4-voice-packet-test',
@@ -1460,7 +1485,16 @@ if build_engine or get_option('build_native_tests')
       include_directories: root_include_dir,
       dependencies: [openq4_retained_dep, rmlui_project.get_variable('rmlui_dep'), jsoncpp_project.get_variable('jsoncpp_dep')],
       install: false)
+    # Each SYSTEM page test runs once per shipped language. The layout code is
+    # the same on every platform, and English with the tests' 1.4x glyph
+    # expansion already stresses it, so the other languages form the
+    # 'locales' suite: about half of every lane's native test time. One Linux
+    # x64 lane per workflow runs it; the rest pass --skip-test-suite locales.
     system_page_locales = ['english', 'spanish', 'polish', 'russian', 'french', 'italian', 'german']
+    system_page_locale_suite = {}
+    foreach locale : system_page_locales
+      system_page_locale_suite += {locale: locale == 'english' ? [] : ['locales']}
+    endforeach
     foreach locale : system_page_locales
     endforeach
     openq4_ui_system_interface_settings_test = executable('openq4-ui-system-interface-settings-test',

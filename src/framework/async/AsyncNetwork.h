@@ -72,6 +72,7 @@ const int GAME_INIT_ID_MAP_LOAD		= -2;
 #include "MsgChannel.h"
 #include "AsyncServer.h"
 #include "ServerScan.h"
+#include "ServerListFallback.h"
 #include "PredictionMargin.h"
 #include "AsyncClient.h"
 #include "MultiViewDemo.h"
@@ -195,6 +196,8 @@ public:
 	static idCVar			serverMaxUsercmdRelay;			// maximum number of usercmds relayed to other clients
 	static idCVar			serverZombieTimeout;			// time out in seconds for zombie clients
 	static idCVar			serverMaxClientsPerAddress;		// most clients one address may hold; 0 for no limit
+	static idCVar			serverRunId;					// how many servers this process has started
+	static idCVar			serverRconFrom;					// where the rcon command now running came from
 	static idCVar			serverLastDrop;					// "<slot> <reason>" of the client the server last removed
 	static idCVar			serverClientTimeout;			// time out in seconds for connected clients
 	static idCVar			clientServerTimeout;			// time out in seconds for server
@@ -240,6 +243,7 @@ private:
 	static void				Reconnect_f( const idCmdArgs &args );
 	static void				GetServerInfo_f( const idCmdArgs &args );
 	static void				GetLANServers_f( const idCmdArgs &args );
+	static void				GetNETServers_f( const idCmdArgs &args );	// openQ4 MP-19: the browser's Get New List, from the console
 	static void				ListServers_f( const idCmdArgs &args );
 	static void				RemoteConsole_f( const idCmdArgs &args );
 	static void				Heartbeat_f( const idCmdArgs &args );

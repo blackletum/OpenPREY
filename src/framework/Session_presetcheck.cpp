@@ -125,8 +125,8 @@ void Publish( idUserInterface *gui, const openq4::PerformancePresetCheck &check,
 	gui->SetStateString( "check_tierLow", PresetTierName( 0 ) );
 	gui->SetStateString( "check_tierHigh", PresetTierName( openq4::PerformancePresetCount - 1 ) );
 	gui->SetStateString( "check_detail", check.maxFps > 0 ?
-		va( Localized( "#str_232020" ), check.screenFraction, check.maxFps ) :
-		va( Localized( "#str_232021" ), check.screenFraction ) );
+		va( Localized( "#str_232020" ), check.maxFps ) :
+		Localized( "#str_232021" ) );
 	// Where the choice lives afterwards, in the menu's own words: Options >
 	// Video in both of Prey's interfaces.
 	(void)retained;

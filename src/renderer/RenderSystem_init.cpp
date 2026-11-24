@@ -575,6 +575,7 @@ idCVar r_shadowMapReportInterval( "r_shadowMapReportInterval", "30", CVAR_RENDER
 idCVar r_shadowMapModernStrict( "r_shadowMapModernStrict", "0", CVAR_RENDERER | CVAR_BOOL, "fail-visible modern shadow contract: lights whose descriptor promises shadows but cannot deliver renders black instead of silently unshadowed" );
 idCVar r_shadowMapTranslucentReceivers( "r_shadowMapTranslucentReceivers", "1", CVAR_RENDERER | CVAR_ARCHIVE | CVAR_BOOL, "translucent surfaces sample the shadow map like opaque receivers (parity with r_stencilTranslucentShadows)" );
 idCVar r_shadowMapSubviewPolicy( "r_shadowMapSubviewPolicy", "1", CVAR_RENDERER | CVAR_ARCHIVE | CVAR_INTEGER, "shadow maps in mirror/remote subviews: 0 = render like main views, 1 = prefer cache then stencil, 2 = prefer stencil; required maps override when stencil cannot preserve the shadow", 0, 2, idCmdSystem::ArgCompletion_Integer<0,2> );
+idCVar r_shadowMapPrelightCasters( "r_shadowMapPrelightCasters", "1", CVAR_RENDERER | CVAR_ARCHIVE | CVAR_INTEGER, "what the static world casts into the shadow map of a light that has a prelight volume: 0 = each world surface whole (as before), 1 = the front caps of the prelight volume, the triangles stencil shadows are built from cut to the light, for a light whose source lies outside its own box (an off-centre point light, a parallel light), 2 = the front caps for every light with such a volume", 0, 2, idCmdSystem::ArgCompletion_Integer<0,2> );
 idCVar r_shadowMapConservativeCasters( "r_shadowMapConservativeCasters", "1", CVAR_RENDERER | CVAR_ARCHIVE | CVAR_BOOL, "submit shadow-map casters conservatively even when their receiver interaction scissor is not visible" );
 idCVar r_shadowMapProjectedCSM( "r_shadowMapProjectedCSM", "1", CVAR_RENDERER | CVAR_ARCHIVE | CVAR_BOOL, "allow ordinary projected lights to use cascades when r_shadowMapCSM is enabled" );
 idCVar r_shadowMapDepthCompare( "r_shadowMapDepthCompare", "1", CVAR_RENDERER | CVAR_ARCHIVE | CVAR_BOOL, "use hardware comparison sampling for projected depth shadow maps when supported; PCSS-lite (r_shadowMapFilterMode 2) implies the manual path" );
@@ -786,6 +787,8 @@ idCVar r_rendererSharedSubview( "r_rendererSharedSubview", "0", CVAR_RENDERER | 
 idCVar r_rendererSharedDeform( "r_rendererSharedDeform", "0", CVAR_RENDERER | CVAR_ARCHIVE | CVAR_BOOL, "enable optional, default-off backend-neutral material-deform ownership; incomplete or unsupported work retains the complete classic path" );
 idCVar r_rendererSharedFaultInject( "r_rendererSharedFaultInject", "0", CVAR_RENDERER | CVAR_INTEGER | CVAR_CHEAT, "qualification diagnostic: make the selected shared classic domains decline at their backend boundary with a named fallback, so the complete classic path runs (1 = subview, 2 = render-demo/Raven special frame, 4 = cinematic/authored post)", 0, 7, idCmdSystem::ArgCompletion_Integer<0,7> );
 idCVar r_rendererModernLightingParity( "r_rendererModernLightingParity", "0", CVAR_RENDERER | CVAR_INTEGER, "diagnostic override forcing modern lighting-ownership parity contracts proven for bring-up capture: 1 = interaction, 2 = fog/blend, 4 = light grid, 8 = shadow receivers; 0 keeps every unproven domain on the ARB2 bridge", 0, 15, idCmdSystem::ArgCompletion_Integer<0,15> );
+idCVar r_rendererModernClassicShapes( "r_rendererModernClassicShapes", "3", CVAR_RENDERER | CVAR_INTEGER, "rollback mask for shapes the classic-lighting corridor may own inside a modern visible frame: 1 = cutouts and baked-light receivers whose stage carries a texture matrix, vertex colour or stage expression, 2 = stencil-shadowed lights; clearing a bit hands frames with that shape back to the complete ARB2 path", 0, 3, idCmdSystem::ArgCompletion_Integer<0,3> );
+idCVar r_rendererOwnershipCompose( "r_rendererOwnershipCompose", "0", CVAR_RENDERER | CVAR_BOOL, "let the aggregate modern executor and the shared classic world domains be requested together: the aggregate executor is asked first, and a view's pass goes to its shared domain or to ARB2 only when the aggregate did not compose the frame; 0 keeps the two ownership models mutually exclusive" );
 idCVar r_rendererModernAutoPromote( "r_rendererModernAutoPromote", "0", CVAR_RENDERER | CVAR_BOOL, "allow r_glTier auto and r_renderer best to request the guarded modern visible path after promotion evidence and sign-off; off keeps ARB2 default" );
 idCVar r_rendererPromotionEvidence( "r_rendererPromotionEvidence", "", CVAR_RENDERER, "Phase 8 validation evidence token required with r_rendererModernAutoPromote before automatic modern visible promotion" );
 idCVar r_rendererShaderReload( "r_rendererShaderReload", "0", CVAR_RENDERER | CVAR_BOOL, "allow runtime reload of the internal modern GL shader library" );
@@ -4251,6 +4254,14 @@ void R_ScreenShot_f( const idCmdArgs &args ) {
 		R_ScreenshotFilename( lastNumber, "screenshots/shot", checkname, R_ScreenshotExtension() );
 		break;
 	case 4:
+		if ( !idStr::IsNumeric( args.Argv( 1 ) ) ) {
+			// openQ4 MP-22: screenshot <filename> <width> <height>, as a demo's thumbnail is taken
+			checkname = args.Argv( 1 );
+			width = atoi( args.Argv( 2 ) );
+			height = atoi( args.Argv( 3 ) );
+			blends = 1;
+			break;
+		}
 		width = atoi( args.Argv( 1 ) );
 		height = atoi( args.Argv( 2 ) );
 		blends = atoi( args.Argv( 3 ) );
@@ -4263,7 +4274,7 @@ void R_ScreenShot_f( const idCmdArgs &args ) {
 		R_ScreenshotFilename( lastNumber, "screenshots/shot", checkname, R_ScreenshotExtension() );
 		break;
 	default:
-		common->Printf( "usage: screenshot\n       screenshot <filename>\n       screenshot <width> <height>\n       screenshot <width> <height> <blends>\n" );
+		common->Printf( "usage: screenshot\n       screenshot <filename>\n       screenshot <width> <height>\n       screenshot <width> <height> <blends>\n       screenshot <filename> <width> <height>\n" );
 		return;
 	}
 
@@ -6058,6 +6069,7 @@ static bool R_TryFullVidRestartInternal( const renderWindowRequest_t *request, b
 		R_FreeDerivedData();
 		if ( frameData != NULL ) { R_ToggleSmpFrame(); R_ToggleSmpFrame(); }
 		vertexCache.PurgeAll();
+		R_ClearRetainedSnapshotStreams();
 		if ( !R_ImagePolicyBeforeTeardown( error, errorSize ) ) R_RejectRecoverableRendererRestart( error );
 		R_ShutdownDeviceForRestart();
 		tr.viewDef = NULL; tr.primaryView = NULL; backEnd.viewDef = NULL;
@@ -6277,6 +6289,8 @@ void R_VidRestart_f( const idCmdArgs &args ) {
 
 	// free the vertex caches so they will be regenerated again
 	vertexCache.PurgeAll();
+	// the overlap snapshot's retained versions were keyed by those caches
+	R_ClearRetainedSnapshotStreams();
 
 	if ( full ) {
 		R_PerformFullVidRestart( forceWindow );
@@ -6684,6 +6698,8 @@ idRenderSystemLocal::Clear
 void idRenderSystemLocal::Clear( void ) {
 	registered = false;
 	frameCount = 0;
+	depthOfFieldRequest = renderViewDepthOfField_t();
+	depthOfFieldRequestFrame = -1;
 	viewCount = 0;
 	videoRestartCount = 0;
 	glContextGeneration = 0;
@@ -6763,6 +6779,8 @@ void idRenderSystemLocal::Clear( void ) {
 	vrWindowHeight = 0;
 	memset( vrSavedUIViewport, 0, sizeof( vrSavedUIViewport ) );
 	memset( vrTargets, 0, sizeof( vrTargets ) );
+	desktopStereoLayout = STEREO3D_OFF;
+	desktopStereoSwapEyes = false;
 	memset( gammaTable, 0, sizeof( gammaTable ) );
 	takingScreenshot = false;
 }
@@ -6930,6 +6948,8 @@ void idRenderSystemLocal::BeginLevelLoad( void ) {
 	// of the new map, costing a full-screen copy per loading-screen present.
 	underwaterAmount = 0.0f;
 	underwaterTint.Zero();
+	depthOfFieldRequest = renderViewDepthOfField_t();
+	depthOfFieldRequestFrame = -1;
 
 	// The caller runs declManager->BeginLevelLoad() immediately before this, and
 	// that purge can reach the generated glyph atlas materials. Put them back
@@ -7074,6 +7094,7 @@ idRenderSystemLocal::ShutdownOpenGL
 void idRenderSystemLocal::ShutdownOpenGL( void ) {
 	R_RenderThread_Shutdown();
 	CancelSavePreview();
+	EndVideoCapture();
 	r_recoverableRendererRestore = false;
 	if ( !glConfig.isInitialized ) {
 		R_ClearActiveRenderTextures();

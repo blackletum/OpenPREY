@@ -140,6 +140,11 @@ struct demoLibraryEntry_t {
 	idStr					format;
 	idStr					status;
 	idStr					details;
+	// openQ4 MP-22: what demoFind searches
+	idStr					serverName;
+	idStr					players;
+	idStr					recorder;
+	bool					clientView = false;
 };
 
 // A v11 or v12 render demo's time at a frame index: each recorded frame is
@@ -766,6 +771,11 @@ public:
 	int					numDemoFrames;		// for timeDemo and demoShot
 	int					demoTimeOffset;
 	renderView_t		currentDemoRenderView;
+	// A retail render demo's portal-sky view: the one the frame being read gave
+	// (time 0: none yet) and the one the frame on screen gave, drawn first.
+	renderView_t		retailPortalSkyPending;
+	renderView_t		retailPortalSkyView;
+	int					retailLastFrameViewTime;	// the previous retail frame's view time, -1 before one
 	// the next one will be read when 
 	// com_frameTime + demoTimeOffset > currentDemoRenderView.
 
@@ -1058,6 +1068,7 @@ public:
 	void				CompressDemoFile( const char *scheme, const char *name );
 	void				TimeRenderDemo( const char *name, bool twice = false );
 	void				AVIRenderDemo( const char *name );
+	void				DrawRetailPortalSky();
 	void				AVICmdDemo( const char *name );
 	void				AVIGame( const char *name );
 	void				BeginAVICapture( const char *name );
@@ -1075,6 +1086,11 @@ public:
 	void				RefreshDemoLibrary();
 	void				RefreshDemoLibraryList();
 	void				UpdateDemoMenuGui();
+	// openQ4 MP-22: the deck's player list (a multi-view demo's recorded players)
+	static const int	DEMO_PLAYER_ROWS = 16;
+	bool				demoPlayersOpen = false;
+	int					demoPlayerRowSlots[ DEMO_PLAYER_ROWS ] = {};
+	int					demoPlayerRows = 0;
 	bool				HandleDemoMenuCommand( const char *menuCommand );
 	bool				IsDemoPlaybackActive() const;
 	void				SetDemoPaused( bool paused );
@@ -1082,7 +1098,7 @@ public:
 	void				SetDemoSpeed( float speed );
 	bool				SeekDemoMS( int timeMS );
 	bool				SkipDemoMS( int deltaMS );
-	void				StepDemo();
+	void				StepDemo( int frames = 1 );	// openQ4 MP-22: negative steps back
 	void				StopDemoPlayback();
 	
 	void				FinishCmdLoad();

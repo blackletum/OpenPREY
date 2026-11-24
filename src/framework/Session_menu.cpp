@@ -94,7 +94,7 @@ idCVar gui_set_sys_scroll( "gui_set_sys_scroll", "0", CVAR_GUI | CVAR_INTEGER, "
 // r_ssao and r_ssaoMethod, which the presets and the console also change.
 idCVar gui_set_sys_ao( "gui_set_sys_ao", "0", CVAR_GUI | CVAR_INTEGER, "display menu ambient occlusion choice: 0 off, 1 SSAO, 2 HBAO, 3 GTAO", 0, 3 );
 idCVar gui_set_audio_scroll( "gui_set_audio_scroll", "0", CVAR_GUI | CVAR_INTEGER, "audio menu scroll step", 0, 7 );
-idCVar gui_set_game_scroll( "gui_set_game_scroll", "0", CVAR_GUI | CVAR_INTEGER, "game menu scroll step", 0, 83 );
+idCVar gui_set_game_scroll( "gui_set_game_scroll", "0", CVAR_GUI | CVAR_INTEGER, "game menu scroll step", 0, 95 );
 // The opt-ins are unarchived, so each lasts until the player quits, and
 // CVAR_NOCHEAT, because the engine counts any other unarchived CVar as a
 // cheat: joining or hosting a server without cheats resets it to its default,
@@ -220,7 +220,9 @@ static const char *const RETAINED_MP_VOTE_FIELDS[] = {
 	"mpVoteControlTime", "mpVoteBalance", "mpVoteShuffle", "mpVoteRestart", "mpVoteBuying", "mpVoteKick",
 	// The casual callvote fields (MP-12), after the kick as the game orders them.
 	"mpVoteNextMap", "mpVoteRandomMap", "mpVoteRoundLimit", "mpVoteOvertime", "mpVoteRuleset", "mpVoteInstagib",
-	"mpVoteReadyAll", "mpVoteCoinToss"
+	"mpVoteReadyAll", "mpVoteCoinToss",
+	// The moderation and modifier votes (MP-18, MP-14, MP-16).
+	"mpVoteMute", "mpVoteQuadHog", "mpVoteVampiric", "mpVoteFrenzy", "mpVoteArena", "mpVotePreset", "mpVoteSpectatorChat"
 };
 // The Admin page's drafted server settings, whose controls request "<verb>
 // <value>", in the order of the game's retainedVoteField_t without the kick;
@@ -229,6 +231,9 @@ static const char *const RETAINED_MP_ADMIN_FIELDS[] = {
 	"mpAdminMap", "mpAdminGameType", "mpAdminTimeLimit", "mpAdminFragLimit", "mpAdminCaptureLimit", "mpAdminTourneyLimit",
 	"mpAdminControlTime", "mpAdminBalance", "mpAdminShuffle", "mpAdminRestart", "mpAdminBuying"
 };
+// The Admin page's Ban length and reason choices (MP-18), by row; the game
+// checks each row against its tables.
+static const char *const RETAINED_MP_ADMIN_BAN_CHOICES[] = { "mpAdminBanLength", "mpAdminBanReason" };
 // The card's text fields' longest entries in bytes: the remote console
 // password, a console command, the Match page's referee credential, and the
 // player's name and clan as the stock fields took them.
@@ -420,7 +425,7 @@ static const char *const RETAINED_CONTROLS_BINDINGS[] = {
 	"_impulse10", "buymenu", "_quickChat", "_impulse51", "_attack", "_impulse15", "_impulse14", "_impulse13", "_lookUp", "_lookDown", "_mlook",
 	"centerview", "_zoom", "_impulse19", "_impulse50", "screenshot", "_weaponWheel", "_hook", "savegame quick", "loadgame quick",
 	"clientMessageMode", "clientMessageMode 1", "_impulse28", "_impulse29", "_ingamestats", "_impulse17", "emote salute",
-	"emote cheer", "emote taunt", "emote grab_a", "_voicechat"
+	"emote cheer", "emote taunt", "emote grab_a", "_voicechat", "toggleVideo"
 };
 static const int RETAINED_CONTROLS_ROWS = sizeof( RETAINED_CONTROLS_BINDINGS ) / sizeof( RETAINED_CONTROLS_BINDINGS[0] );
 // openPR06: the Options page's Controls tab binds Prey's actions, in the order
@@ -2097,10 +2102,27 @@ static void SetMainMenuMPModelVars( idUserInterface *gui ) {
 	idStr selectedSkinName;
 	idStr selectedDescription;
 	idStr selectedTeam;
-	const bool selectedValid = selectedDecl.Length() &&
+	bool selectedValid = selectedDecl.Length() &&
 		MainMenuExtractPlayerModelInfo( selectedDecl.c_str(), selectedModelName, selectedHeadName, selectedSkinName, selectedDescription, selectedTeam ) &&
 		MainMenuModelAllowedForTeam( selectedTeam, isTeamGame, menuModelTeam );
 
+	if ( !selectedValid && def ) {
+		// A stored name that names no player model, such as the retail
+		// default.cfg's "marine", takes the menu def's own default for the team.
+		// The first model in the list is Quake 4's Failed Transfer monster, which
+		// every fresh profile became the first time this menu was built.
+		const char *defaultDecl = ( menuModelTeam >= 0 && menuModelTeam < 2 ) ?
+			def->dict.GetString( va( "def_default_model_%s", mainMenuMPTeamNames[ menuModelTeam ] ) ) :
+			def->dict.GetString( "def_default_model" );
+		idStr defaultTeam;
+		if ( defaultDecl[0] &&
+			MainMenuExtractPlayerModelInfo( defaultDecl, selectedModelName, selectedHeadName, selectedSkinName, selectedDescription, defaultTeam ) &&
+			MainMenuModelAllowedForTeam( defaultTeam, isTeamGame, menuModelTeam ) ) {
+			selectedDecl = defaultDecl;
+			selectedValid = true;
+			cvarSystem->SetCVarString( modelCVar.c_str(), selectedDecl.c_str() );
+		}
+	}
 	if ( !selectedValid ) {
 		if ( MainMenuFirstModelFromList( buildValues, isTeamGame, menuModelTeam, selectedDecl, selectedModelName, selectedHeadName, selectedSkinName ) ) {
 			cvarSystem->SetCVarString( modelCVar.c_str(), selectedDecl.c_str() );
@@ -6547,10 +6569,10 @@ static const mainMenuSettingsScrollPage_t MAINMENU_SETTINGS_SCROLL_PAGES[] = {
 		"game_section_choice",
 		21,
 		0,
-		83,
+		95,
 		-24,
 		-41,
-		2306,
+		2594,
 		24.0f
 	}
 };
@@ -6596,7 +6618,13 @@ static int MainMenuSettingsSectionChoiceForScroll( const mainMenuSettingsScrollP
 		if ( scrollValue < 76 ) {
 			return 6;
 		}
-		return 7;
+		if ( scrollValue < 88 ) {
+			return 7;
+		}
+		if ( scrollValue < 93 ) {
+			return 8;
+		}
+		return 9;
 	}
 
 	if ( idStr::Icmp( page.name, "system" ) == 0 ) {
@@ -13071,6 +13099,13 @@ void idSessionLocal::PublishRetainedDemoSelection( idUserInterface *gui, const c
 		if ( !entry.mapName.IsEmpty() ) {
 			shot = RetainedPauseShot( entry.mapName.c_str() );
 		}
+		// openQ4 MP-22: the recording's own thumbnail, where one was taken
+		idStr thumbnail = entry.path;
+		thumbnail.StripFileExtension();
+		thumbnail += "_thumb";
+		if ( UI_RetainedImageSource( thumbnail.c_str() ) && fileSystem->ReadFile( va( "%s.png", thumbnail.c_str() ), NULL, NULL ) > 0 ) {
+			shot = thumbnail;
+		}
 		playable = entry.playable;
 		canPlay = ( entry.capabilities & DEMO_CAP_PLAY ) != 0;
 		canDelete = ( entry.capabilities & DEMO_CAP_DELETE ) != 0;
@@ -14631,6 +14666,12 @@ void idSessionLocal::HandleRetainedMultiplayerRequest( idUserInterface *gui, con
 		static_cast<int>( sizeof( RETAINED_MP_ADMIN_FIELDS ) / sizeof( RETAINED_MP_ADMIN_FIELDS[0] ) ), voteField, voteValue ) ) {
 		// A drafted server setting changes, and the menu stays open.
 		gameCommand = va( "retained adminSet %d %d", voteField, voteValue );
+		command = gameCommand.c_str();
+	} else if ( Session_RetainedValueRequest( request, RETAINED_MP_ADMIN_BAN_CHOICES,
+		static_cast<int>( sizeof( RETAINED_MP_ADMIN_BAN_CHOICES ) / sizeof( RETAINED_MP_ADMIN_BAN_CHOICES[0] ) ), voteField, voteValue ) &&
+		voteValue >= 0 ) {
+		// The next Ban's length or reason, by row, and the menu stays open.
+		gameCommand = va( "retained %s %d", voteField == 0 ? "adminBanLength" : "adminBanReason", voteValue );
 		command = gameCommand.c_str();
 	} else if ( !idStr::Icmp( request, "mpSettingsControls" ) ) {
 		command = "mainMenu fromMp_toControls";

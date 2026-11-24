@@ -381,10 +381,13 @@ bool SessionMenuValueCommand(const std::string& command) {
 	static const std::set<std::string> commands = {"mpVoteMap","mpVoteGameType","mpVoteTimeLimit","mpVoteFragLimit",
 		"mpVoteCaptureLimit","mpVoteTourneyLimit","mpVoteControlTime","mpVoteBalance","mpVoteShuffle","mpVoteRestart",
 		"mpVoteBuying","mpVoteKick","mpVoteNextMap","mpVoteRandomMap","mpVoteRoundLimit","mpVoteOvertime","mpVoteRuleset",
-		"mpVoteInstagib","mpVoteReadyAll","mpVoteCoinToss","mpModelSelf","mpModelEnemy","mpModelTeam","mpCrosshair","mpMatchRole","mpMatchScope","mpMatchRuleValue",
+		"mpVoteInstagib","mpVoteReadyAll","mpVoteCoinToss",
+		"mpVoteMute","mpVoteQuadHog","mpVoteVampiric","mpVoteFrenzy","mpVoteArena","mpVotePreset","mpVoteSpectatorChat",
+		"mpModelSelf","mpModelEnemy","mpModelTeam","mpCrosshair","mpMatchRole","mpMatchScope","mpMatchRuleValue",
 		"mpMatchSeriesProfile",
 		"mpAdminMap","mpAdminGameType","mpAdminTimeLimit","mpAdminFragLimit","mpAdminCaptureLimit","mpAdminTourneyLimit",
 		"mpAdminControlTime","mpAdminBalance","mpAdminShuffle","mpAdminRestart","mpAdminBuying",
+		"mpAdminBanLength","mpAdminBanReason",
 		"createGameType","createLan","createDedicated","createAutoBalance","createFragLimit","createCaptureLimit","createControlTime",
 		"createTimeLimit","createMaxPlayers","createMinPlayers","createVoting","createTeamDamage","createTourneyLimit","createUsePass",
 		"createServerMods","createWeaponStay","createPure","createRate","createReady","createSpectators","createWarmup","createVoice",
@@ -420,6 +423,8 @@ const PlayerSetting* FindPlayerSetting(const std::string& cvar) {
 		"1 0.1 0.85","1 1 1"};
 	static const std::map<std::string,PlayerSetting> settings = {
 		{"ui_handicap",{0,1,100,true}},
+		// Player Setup's Player Identity (MP-17).
+		{"ui_identity",{1}},
 		// Player Setup's HUD tab and the card's Settings page: the multiplayer
 		// HUD's options and how a spectator follows a player.
 		{"hud_hitSound",{0,0,3,true,{},{0,1,2,3}}},{"hud_crosshairNames",{0,0,2,true,{},{0,1,2}}},{"hud_crosshairAmmo",{1}},
@@ -525,7 +530,14 @@ const PlayerSetting* FindPlayerSetting(const std::string& cvar) {
 		{"net_clientMaxRate",{0,0,0,true,{},{16000,24000,32000,128000}}},{"net_serverReloadEngine",{0,0,1,true,{},{0,1}}},
 		{"g_runMapCycle",{1}},{"gui_filter_gameType",{0,0,2,true,{},{0,1,2}}},{"gui_filter_password",{0,0,2,true,{},{0,1,2}}},
 		{"gui_filter_players",{0,0,3,true,{},{0,1,3}}},{"gui_filter_idle",{0,0,1,true,{},{0,1}}},
-		{"bot_skillVariance",{0,0,2,false,{},{0,1,2}}},{"bot_chat",{0,0,2,true,{},{0,1,2}}},{"bot_characters",{1}}};
+		{"bot_skillVariance",{0,0,2,false,{},{0,1,2}}},{"bot_chat",{0,0,2,true,{},{0,1,2}}},{"bot_characters",{1}},
+		// GENERAL's VIDEO CAPTURE section (recordVideo, src/framework/VideoCapture.cpp).
+		{"com_videoFormat",{2,0,0,false,{"mp4","mkv","webm","mov","avi","gif"}}},{"com_videoQuality",{0,1,100,true}},
+		{"com_videoFPS",{0,24,120,true,{},{24,30,60,120}}},{"com_videoHeight",{0,0,2160,true,{},{0,480,720,1080,1440,2160}}},
+		{"com_videoAudio",{1}},{"com_videoTiming",{2,0,0,false,{"auto","fixed","realtime"}}},
+		// VIRTUAL REALITY's STEREOSCOPIC 3D section (src/renderer/RenderSystem_vr.cpp).
+		{"r_stereo3D",{0,0,5,true,{},{0,1,2,3,4,5}}},{"r_stereoSeparation",{0,0,8,false}},
+		{"r_stereoConvergence",{0,32,512,false}},{"r_stereoSwapEyes",{1}}};
 	const auto found = settings.find(cvar);
 	return found == settings.end() ? nullptr : &found->second;
 }

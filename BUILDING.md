@@ -277,7 +277,8 @@ bash tools/validation/validate_pr.sh \
   --no-install \
   --build-dir .tmp/validation/linux-sanitizer-builddir \
   --buildtype debugoptimized \
-  --jobs 2 \
+  --jobs 4 \
+  --skip-test-suite locales \
   --extra-setup-arg=-Duse_pch=false \
   --extra-setup-arg=-Db_sanitize=address,undefined
 ```

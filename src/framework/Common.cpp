@@ -85,6 +85,9 @@ void Sys_SDL_KeepWindowResponsive( void );
 void openQ4_PrintFramePacingSnapshot( const char *reason );
 void openQ4_RecordMultiplayerFramePacing( void );
 void Session_FinishPendingSave();
+#ifndef ID_DEDICATED
+void Session_DeclareMultiplayerMenuGameCVars( void );
+#endif
 static void Com_ProfileFrameWork_f( const idCmdArgs &args );
 
 #ifdef OPENQ4_RENDERER_MODULE_ONLY
@@ -205,6 +208,7 @@ idCVar com_product_lang_ext( "com_product_lang_ext", "1", CVAR_INTEGER | CVAR_SY
 idCVar r_skipGlowOverlay( "r_skipGlowOverlay", "0", CVAR_ARCHIVE | CVAR_RENDERER, "skip glow overlays when non-zero" );
 static idCVar r_borderlessDefaultMigrated( "r_borderlessDefaultMigrated", "0", CVAR_SYSTEM | CVAR_ARCHIVE | CVAR_BOOL, "one-time migration flag for legacy bordered window defaults" );
 static idCVar net_rateDefaultMigrated( "net_rateDefaultMigrated", "0", CVAR_SYSTEM | CVAR_ARCHIVE | CVAR_BOOL, "one-time migration flag for the legacy 25600 B/s network rate caps" );
+static idCVar r_screenFractionPresetMigrated( "r_screenFractionPresetMigrated", "0", CVAR_SYSTEM | CVAR_ARCHIVE | CVAR_BOOL, "one-time migration flag for render scales lowered by older performance presets" );
 static idCVar ui_autoSwitchDefaultMigrated( "ui_autoSwitchDefaultMigrated", "0", CVAR_SYSTEM | CVAR_ARCHIVE | CVAR_BOOL, "one-time migration flag for the smart weapon switch default" );
 static idCVar vr_weaponOffsetDefaultMigrated( "vr_weaponOffsetDefaultMigrated", "0", CVAR_SYSTEM | CVAR_ARCHIVE | CVAR_BOOL, "one-time migration flag for the VR weapon offsets that held weapons replaced" );
 static idCVar s_audioDefaultsMigrated( "s_audioDefaultsMigrated", "0", CVAR_SYSTEM | CVAR_ARCHIVE | CVAR_INTEGER, "number of one-time audio default migrations already applied" );
@@ -335,6 +339,34 @@ static void Common_MigrateLegacyVRWeaponOffsets( void ) {
 		cvarSystem->SetCVarFloat( "vr_weaponOffsetZ", 0.0f, CVAR_ARCHIVE );
 	}
 	vr_weaponOffsetDefaultMigrated.SetBool( true );
+}
+
+/*
+==================
+Common_MigratePresetRenderScale
+
+Performance presets and their automatic detection used to lower r_screenFraction
+(Performance 85%, Low 75%, Minimum 50%, and less on large displays). Presets no
+longer touch the render scale, so a scale below native that came with a named
+preset returns to 100% once. A custom configuration is left alone, as is any
+scale set after this runs. Runs on the saved configuration before autoexec.cfg,
+so a scale an autoexec sets is kept. Returns whether it changed a setting.
+==================
+*/
+static bool Common_MigratePresetRenderScale( void ) {
+	if ( r_screenFractionPresetMigrated.GetBool() ) {
+		return false;
+	}
+	// An empty value is a configuration without a render scale (a dedicated server).
+	const char *scale = cvarSystem->GetCVarString( "r_screenFraction" );
+	const int screenFraction = ( scale != NULL && scale[0] != '\0' ) ? atoi( scale ) : 100;
+	const char *preset = cvarSystem->GetCVarString( "com_performancePreset" );
+	if ( screenFraction < 100 && preset != NULL && openq4::FindPerformancePreset( preset ) != NULL ) {
+		common->Printf( "Migrating render scale set by the '%s' performance preset: r_screenFraction %d -> 100 (native)\n", preset, screenFraction );
+		cvarSystem->SetCVarInteger( "r_screenFraction", 100, CVAR_ARCHIVE );
+	}
+	r_screenFractionPresetMigrated.SetBool( true );
+	return true;
 }
 
 /*
@@ -536,6 +568,10 @@ static bool Common_IsGameWindowShown( void ) {
 static int Common_GetRequestedPresentationCap( void ) {
 	// a headset session paces every frame through xrWaitFrame
 	if ( vrSystem != NULL && vrSystem->IsPacing() ) {
+		return 0;
+	}
+	// openQ4 MP-22: a multi-view timedemo measures frames as fast as they come
+	if ( idAsyncNetwork::multiViewDemo.IsTimeDemo() ) {
 		return 0;
 	}
 
@@ -1006,6 +1042,10 @@ public:
 		}
 		delete traceModels[index];
 		traceModels[index] = NULL;
+	}
+
+	virtual int					DemoParticleLayout( const rvDeclEffect *, const renderEffect_t *, float, int *, int ) {
+		return -1;
 	}
 
 private:
@@ -3952,9 +3992,9 @@ static bool Common_DetectPerformancePreset( openQ4PerformancePreset_t &preset, i
   case Reason::ArmBoard:policy="ARM board power budget";break;
   default:break;
  }
- reason=va("%s; GPU=%s, RAM=%d MiB, dedicated VRAM=%d MiB (0=unknown/shared), drawable=%dx%d, CPUs=%d, scene scale=%d%%, post AA=%d, display=%d Hz (0=unknown), frame cap=%d",
+ reason=va("%s; GPU=%s, RAM=%d MiB, dedicated VRAM=%d MiB (0=unknown/shared), drawable=%dx%d, CPUs=%d, post AA=%d, display=%d Hz (0=unknown), frame cap=%d",
   policy,RendererGpuClassName(signals.gpuClass),detected.systemRamMB,detected.videoRamMB,
-  signals.drawableWidth,signals.drawableHeight,signals.logicalCpus,preset.screenFraction,preset.postAA,
+  signals.drawableWidth,signals.drawableHeight,signals.logicalCpus,preset.postAA,
   signals.displayRefreshHz,preset.maxFps);
  return true;
 }
@@ -4203,7 +4243,6 @@ static bool Common_DetectPerformancePresetCheck( openq4::PerformancePresetCheck 
 	found.drawableWidth = signals.drawableWidth;
 	found.drawableHeight = signals.drawableHeight;
 	found.displayRefreshHz = signals.displayRefreshHz;
-	found.screenFraction = resolved.screenFraction;
 	found.maxFps = resolved.maxFps;
 	found.postAA = resolved.postAA;
 	idStr reason;
@@ -4466,22 +4505,25 @@ static bool Common_ValidatePerformancePresetIntent( const openQ4PerformancePrese
 	passed &= Common_PerformancePresetCheckExpectedInt( preset, "r_ssao", preset.ssao, shadowMapTier ? 1 : 0 );
 	passed &= Common_PerformancePresetCheckExpectedInt( preset, "r_hdrToneMap", preset.hdrToneMap, shadowMapTier ? 1 : 0 );
 	passed &= Common_PerformancePresetCheckExpectedInt( preset, "r_motionBlur", preset.motionBlur, Common_PerformancePresetIsNamed( preset, "maximum" ) ? 1 : 0 );
+	// The game's depth of field (weapon wheel, scripted cinematics) belongs to
+	// the top half of the ladder, the same tiers as the modern effects.
+	passed &= Common_PerformancePresetCheckExpectedInt( preset, "r_depthOfField", preset.depthOfField, shadowMapTier ? 1 : 0 );
 	// Only Enhanced leaves point lights on stencil shadows; every other shadow-map
 	// tier maps them, and the stencil tiers keep the inert default.
 	passed &= Common_PerformancePresetCheckExpectedInt( preset, "r_shadowMapPointLights", preset.shadowMapPointLights, Common_PerformancePresetIsNamed( preset, "enhanced" ) ? 0 : 1 );
 	passed &= Common_PerformancePresetCheckExpectedInt( preset, "r_crt", preset.crt, 0 );
-	// Only the two tiers below the documented minimum hardware draw no shadows
-	// and skip the light-grid indirect pass; Low restores both, and every tier
-	// above it keeps them.
-	const bool shadowlessTier = Common_PerformancePresetIsNamed( preset, "minimum" ) || Common_PerformancePresetIsNamed( preset, "lowpower" );
+	// The three tiers for the documented minimum hardware and below draw no
+	// shadows and skip the light-grid indirect pass; Performance restores both,
+	// and every tier above it keeps them.
+	const bool shadowlessTier = Common_PerformancePresetIsNamed( preset, "minimum" ) || Common_PerformancePresetIsNamed( preset, "lowpower" )
+		|| Common_PerformancePresetIsNamed( preset, "low" );
 	passed &= Common_PerformancePresetCheckExpectedInt( preset, "r_shadows", preset.shadows, shadowlessTier ? 0 : 1 );
 	passed &= Common_PerformancePresetCheckExpectedInt( preset, "r_useLightGrid", preset.useLightGrid, shadowlessTier ? 0 : 1 );
 
-	if ( shadowlessTier || Common_PerformancePresetIsNamed( preset, "low" ) ) {
-		passed &= Common_PerformancePresetCheckExpectedInt( preset, "com_maxfps", preset.maxFps, shadowlessTier ? 30 : 60 );
+	if ( shadowlessTier ) {
+		passed &= Common_PerformancePresetCheckExpectedInt( preset, "com_maxfps", preset.maxFps, Common_PerformancePresetIsNamed( preset, "low" ) ? 60 : 30 );
 		passed &= Common_PerformancePresetCheckExpectedInt( preset, "com_machineSpec", preset.machineSpec, 0 );
 		passed &= Common_PerformancePresetCheckBenchmarkPreset( preset, "low" );
-		passed &= Common_PerformancePresetCheckIntAtMost( preset, "r_screenFraction", preset.screenFraction, 75 );
 		passed &= Common_PerformancePresetCheckExpectedInt( preset, "r_multiSamples", preset.multiSamples, 0 );
 		passed &= Common_PerformancePresetCheckExpectedInt( preset, "r_postAA", preset.postAA, 0 );
 		passed &= Common_PerformancePresetCheckExpectedInt( preset, "image_downSize", preset.downSize, 1 );
@@ -4495,7 +4537,6 @@ static bool Common_ValidatePerformancePresetIntent( const openQ4PerformancePrese
 	} else if ( Common_PerformancePresetIsNamed( preset, "performance" ) ) {
 		passed &= Common_PerformancePresetCheckExpectedInt( preset, "com_machineSpec", preset.machineSpec, 1 );
 		passed &= Common_PerformancePresetCheckBenchmarkPreset( preset, "baseline" );
-		passed &= Common_PerformancePresetCheckIntAtMost( preset, "r_screenFraction", preset.screenFraction, 85 );
 		passed &= Common_PerformancePresetCheckExpectedInt( preset, "r_multiSamples", preset.multiSamples, 0 );
 		passed &= Common_PerformancePresetCheckExpectedInt( preset, "r_postAA", preset.postAA, 1 );
 		passed &= Common_PerformancePresetCheckExpectedInt( preset, "image_downSize", preset.downSize, 0 );
@@ -4507,7 +4548,6 @@ static bool Common_ValidatePerformancePresetIntent( const openQ4PerformancePrese
 	} else if ( Common_PerformancePresetIsNamed( preset, "balanced" ) ) {
 		passed &= Common_PerformancePresetCheckExpectedInt( preset, "com_machineSpec", preset.machineSpec, 2 );
 		passed &= Common_PerformancePresetCheckBenchmarkPreset( preset, "baseline" );
-		passed &= Common_PerformancePresetCheckExpectedInt( preset, "r_screenFraction", preset.screenFraction, 100 );
 		passed &= Common_PerformancePresetCheckIntAtLeast( preset, "r_multiSamples", preset.multiSamples, 2 );
 		passed &= Common_PerformancePresetCheckExpectedInt( preset, "r_postAA", preset.postAA, 1 );
 		passed &= Common_PerformancePresetCheckExpectedInt( preset, "image_downSize", preset.downSize, 0 );
@@ -4516,7 +4556,6 @@ static bool Common_ValidatePerformancePresetIntent( const openQ4PerformancePrese
 	} else if ( Common_PerformancePresetIsNamed( preset, "enhanced" ) ) {
 		passed &= Common_PerformancePresetCheckExpectedInt( preset, "com_machineSpec", preset.machineSpec, 2 );
 		passed &= Common_PerformancePresetCheckBenchmarkPreset( preset, "modern" );
-		passed &= Common_PerformancePresetCheckExpectedInt( preset, "r_screenFraction", preset.screenFraction, 100 );
 		// FPS-02 Enhanced holds 144 Hz: SMAA high instead of MSAA.
 		passed &= Common_PerformancePresetCheckExpectedInt( preset, "r_multiSamples", preset.multiSamples, 0 );
 		passed &= Common_PerformancePresetCheckExpectedInt( preset, "r_postAA", preset.postAA, 2 );
@@ -4531,7 +4570,6 @@ static bool Common_ValidatePerformancePresetIntent( const openQ4PerformancePrese
 	} else if ( Common_PerformancePresetIsNamed( preset, "quality" ) ) {
 		passed &= Common_PerformancePresetCheckExpectedInt( preset, "com_machineSpec", preset.machineSpec, 3 );
 		passed &= Common_PerformancePresetCheckBenchmarkPreset( preset, "modern" );
-		passed &= Common_PerformancePresetCheckExpectedInt( preset, "r_screenFraction", preset.screenFraction, 100 );
 		// FPS-02 Quality holds 100 Hz with every light class shadow-mapped.
 		passed &= Common_PerformancePresetCheckExpectedInt( preset, "r_multiSamples", preset.multiSamples, 2 );
 		passed &= Common_PerformancePresetCheckExpectedInt( preset, "image_anisotropy", preset.anisotropy, 16 );
@@ -4548,7 +4586,6 @@ static bool Common_ValidatePerformancePresetIntent( const openQ4PerformancePrese
 		// FPS-02 Ultra: the best image that holds 75 Hz on the reference machine.
 		passed &= Common_PerformancePresetCheckExpectedInt( preset, "com_machineSpec", preset.machineSpec, 3 );
 		passed &= Common_PerformancePresetCheckBenchmarkPreset( preset, "high-end" );
-		passed &= Common_PerformancePresetCheckExpectedInt( preset, "r_screenFraction", preset.screenFraction, 100 );
 		passed &= Common_PerformancePresetCheckExpectedInt( preset, "r_multiSamples", preset.multiSamples, 4 );
 		passed &= Common_PerformancePresetCheckExpectedInt( preset, "image_anisotropy", preset.anisotropy, 16 );
 		passed &= Common_PerformancePresetCheckExpectedInt( preset, "r_postAA", preset.postAA, 3 );
@@ -4566,12 +4603,11 @@ static bool Common_ValidatePerformancePresetIntent( const openQ4PerformancePrese
 	} else if ( Common_PerformancePresetIsNamed( preset, "maximum" ) ) {
 		passed &= Common_PerformancePresetCheckExpectedInt( preset, "com_machineSpec", preset.machineSpec, 3 );
 		passed &= Common_PerformancePresetCheckBenchmarkPreset( preset, "high-end" );
-		passed &= Common_PerformancePresetCheckExpectedInt( preset, "r_screenFraction", preset.screenFraction, 100 );
 		passed &= Common_PerformancePresetCheckExpectedInt( preset, "r_multiSamples", preset.multiSamples, 8 );
 		passed &= Common_PerformancePresetCheckExpectedInt( preset, "image_anisotropy", preset.anisotropy, 16 );
 		passed &= Common_PerformancePresetCheckExpectedInt( preset, "r_postAA", preset.postAA, 3 );
 		passed &= Common_PerformancePresetCheckExpectedInt( preset, "r_shadowMapSize", preset.shadowMapSize, 4096 );
-		passed &= Common_PerformancePresetCheckExpectedInt( preset, "r_shadowMapPointSize", preset.shadowMapPointSize, 2048 );
+		passed &= Common_PerformancePresetCheckExpectedInt( preset, "r_shadowMapPointSize", preset.shadowMapPointSize, 1024 );
 		passed &= Common_PerformancePresetCheckExpectedInt( preset, "r_shadowMapFilterTaps", preset.shadowMapFilterTaps, 13 );
 		passed &= Common_PerformancePresetCheckExpectedInt( preset, "r_shadowMapPointFilterTaps", preset.shadowMapPointFilterTaps, 13 );
 		passed &= Common_PerformancePresetCheckExpectedInt( preset, "r_shadowMapFilterMode", preset.shadowMapFilterMode, 2 );
@@ -4625,7 +4661,6 @@ static bool Common_ValidatePerformancePresetProgression( void ) {
 		const openQ4PerformancePreset_t &preset = OPENQ4_PERFORMANCE_PRESETS[i];
 
 		passed &= Common_PerformancePresetCheckNonDecreasingInt( previousPreset, preset, "com_machineSpec", previousPreset.machineSpec, preset.machineSpec );
-		passed &= Common_PerformancePresetCheckNonDecreasingInt( previousPreset, preset, "r_screenFraction", previousPreset.screenFraction, preset.screenFraction );
 		// Entering the shadow-mapped tiers may trade MSAA for the modern effects
 		// (FPS-02: Enhanced spends its 144 Hz budget on them and keeps SMAA high);
 		// within a renderer class sample counts only rise.
@@ -4675,7 +4710,6 @@ static bool Common_ValidatePerformancePresetDefinition( const openQ4PerformanceP
 		passed = false;
 	}
 	if ( preset.machineSpec < 0 || preset.machineSpec > 3 ||
-		 preset.screenFraction < 10 || preset.screenFraction > 200 ||
 		 !Common_PerformancePresetMultiSamplesAreValid( preset.multiSamples ) ||
 		 preset.postAA < 0 || preset.postAA > 4 ||
 		 preset.maxFps < 0 || preset.maxFps > 1000 ||
@@ -4705,6 +4739,7 @@ static bool Common_ValidatePerformancePresetDefinition( const openQ4PerformanceP
 		 ( preset.ssao != 0 && preset.ssao != 1 ) ||
 		 ( preset.hdrToneMap != 0 && preset.hdrToneMap != 1 ) ||
 		 ( preset.motionBlur != 0 && preset.motionBlur != 1 ) ||
+		 ( preset.depthOfField != 0 && preset.depthOfField != 1 ) ||
 		 ( preset.crt != 0 && preset.crt != 1 ) ||
 		 ( preset.useLightGrid != 0 && preset.useLightGrid != 1 ) ||
 		 preset.uploadMegs < 1 || preset.uploadMegs > 128 ||
@@ -4791,7 +4826,6 @@ static bool Common_ValidatePerformancePresetApplied( const openQ4PerformancePres
 	passed &= Common_CheckPerformancePresetString( preset.name, "com_performancePreset", preset.name );
 	passed &= Common_CheckPerformancePresetInt( preset.name, "com_machineSpec", preset.machineSpec );
 	passed &= Common_CheckPerformancePresetString( preset.name, "r_rendererBenchmarkPreset", preset.rendererBenchmarkPreset );
-	passed &= Common_CheckPerformancePresetInt( preset.name, "r_screenFraction", preset.screenFraction );
 	passed &= Common_CheckPerformancePresetInt( preset.name, "r_multiSamples", preset.multiSamples );
 	passed &= Common_CheckPerformancePresetInt( preset.name, "r_postAA", preset.postAA );
 	passed &= Common_CheckPerformancePresetInt( preset.name, "com_maxfps", preset.maxFps );
@@ -4843,6 +4877,7 @@ static bool Common_ValidatePerformancePresetApplied( const openQ4PerformancePres
 	passed &= Common_CheckPerformancePresetInt( preset.name, "r_motionBlurObjectVectors", 1 );
 	passed &= Common_CheckPerformancePresetInt( preset.name, "r_shadowMapHashedAlpha", 1 );
 	passed &= Common_CheckPerformancePresetInt( preset.name, "r_shadowMapTranslucentReceivers", 1 );
+	passed &= Common_CheckPerformancePresetInt( preset.name, "r_depthOfField", preset.depthOfField );
 	passed &= Common_CheckPerformancePresetTargetsArchived( preset.name );
 	return passed;
 }
@@ -8735,6 +8770,16 @@ void idCommonLocal::InitGame( void ) {
 
 	PrintLoadingMessage( common->GetLanguageDict()->GetString( "#str_04343" ) );
 
+#ifndef ID_DEDICATED
+	// The multiplayer menu edits settings only game_mp declares. Declare them
+	// before the configs run, so a saved value lands on the declaration rather
+	// than on a bare console cvar (Session.cpp). Session::Init skips them for a
+	// dedicated server, as this does.
+	if ( idAsyncNetwork::serverDedicated.GetInteger() != 1 ) {
+		Session_DeclareMultiplayerMenuGameCVars();
+	}
+#endif
+
 	// exec the startup scripts
 	if ( fileSystem->ReadFile( "editor.cfg", NULL ) >= 0 ) {
 		cmdSystem->BufferCommandText( CMD_EXEC_APPEND, "exec editor.cfg\n" );
@@ -8768,15 +8813,28 @@ void idCommonLocal::InitGame( void ) {
 	const char *legacyConfigNameToMigrate = NULL;
 
 	// skip the config file if "safe" is on the command line
+	bool migratedRenderScale = false;
 	if ( !SafeMode() ) {
-		if ( !openPR06_ExecConfigFromSavePath( CONFIG_FILE ) ) {
+		bool execConfig = openPR06_ExecConfigFromSavePath( CONFIG_FILE );
+		if ( !execConfig ) {
+			execConfig = true;
 			if ( openPR06_ExecConfigFromSavePath( PREVIOUS_CONFIG_FILE ) ) {
 				legacyConfigNameToMigrate = PREVIOUS_CONFIG_FILE;
 			} else if ( openPR06_ExecConfigFromSavePath( INTERIM_CONFIG_FILE ) ) {
 				legacyConfigNameToMigrate = INTERIM_CONFIG_FILE;
 			} else if ( openPR06_ExecConfigFromSavePath( LEGACY_CONFIG_FILE ) ) {
 				legacyConfigNameToMigrate = LEGACY_CONFIG_FILE;
+			} else {
+				execConfig = false;
 			}
+		}
+		if ( execConfig ) {
+			// Before autoexec.cfg, which may set its own render scale.
+			cmdSystem->ExecuteCommandBuffer();
+			migratedRenderScale = Common_MigratePresetRenderScale();
+		} else {
+			// A new configuration has no preset-lowered scale to repair.
+			r_screenFractionPresetMigrated.SetBool( true );
 		}
 	}
 
@@ -8849,7 +8907,7 @@ void idCommonLocal::InitGame( void ) {
 
 	// if any archived cvars are modified after this, we will trigger a writing of the config file
 	cvarSystem->ClearModifiedFlags( CVAR_ARCHIVE );
-	if ( repairedUnsetMachineSpec || startupLanguageAutoSelected ) {
+	if ( repairedUnsetMachineSpec || startupLanguageAutoSelected || migratedRenderScale ) {
 		cvarSystem->SetModifiedFlags( CVAR_ARCHIVE );
 	}
 	Common_MigrateLinuxLegacyLowVRamTexturePreset();
