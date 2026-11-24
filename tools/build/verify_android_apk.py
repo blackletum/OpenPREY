@@ -35,13 +35,14 @@ class Variant:
 # The Quest identity is the flavor's own until AND-05 settles distribution;
 # it never shares the phone's, so neither APK can replace the other.
 VARIANT_TABLE = {
-    'phone': Variant('arm64-v8a', 'com.darkmatter.openq4', False),
-    'emulator': Variant('x86_64', 'com.darkmatter.openq4.emulator', True),
-    'quest': Variant('arm64-v8a', 'com.darkmatter.openq4.quest', False, headset=True),
+    'phone': Variant('arm64-v8a', 'com.darkmatter.openpr06', False),
+    'emulator': Variant('x86_64', 'com.darkmatter.openpr06.emulator', True),
+    'quest': Variant('arm64-v8a', 'com.darkmatter.openpr06.quest', False, headset=True),
 }
 # (abi, package, debuggable) for existing callers.
 VARIANTS = {name: (v.abi, v.package, v.debuggable) for name, v in VARIANT_TABLE.items()}
-SETUP_FONTS = {'fonts/marine.ttf', 'fonts/lowpixel.ttf'}
+# The setup screens' display and body faces, copied from staged pak0.
+SETUP_FONTS = {'fonts/menu.ttf', 'fonts/talon-ui-condensed.ttf'}
 HEADSET_MARKER = 'openq4-headset'
 XR_TEST_RUNTIME = 'libopenq4-xr-test-runtime.so'
 # What makes an APK an immersive headset app; a Quest APK needs all of them and
@@ -110,9 +111,10 @@ def verify_headset_manifest(xmltree: str, variant: str) -> None:
 
 def libraries_for_abi(abi: str) -> set[str]:
     arch = android_abi(abi).module_arch
+    # One unified Prey game module serves single player and multiplayer.
     return {
-        'libquake4.so', 'libSDL3.so', f'librenderer-gles_{arch}.so',
-        f'libgame-sp_{arch}.so', f'libgame-mp_{arch}.so', 'libopenal.so', 'libc++_shared.so',
+        'libopenpr06.so', 'libSDL3.so', f'librenderer-gles_{arch}.so',
+        f'libgame_{arch}.so', 'libopenal.so', 'libc++_shared.so',
     }
 
 
@@ -137,31 +139,32 @@ def verify_payload(apk: Path, stage: Path, version: str, variant: str = 'phone',
     if xr_test_runtime is not None and (not debuggable or variant != 'emulator' or xr_test_runtime.name != XR_TEST_RUNTIME):
         raise ValueError('Only the diagnostic emulator APK may carry the OpenXR test runtime')
     metadata = json.loads((stage / 'android-build.json').read_text(encoding='utf-8'))
-    mod = json.loads((stage / 'baseoq4/mod.json').read_text(encoding='utf-8'))
+    mod = json.loads((stage / 'basepr/mod.json').read_text(encoding='utf-8'))
     # Format 1 originally described only phones. Missing variant is accepted
     # solely for those existing stages, never inferred from an emulator ABI.
     if (metadata.get('format') != 1 or metadata.get('abi') != abi
             or metadata.get('variant', 'phone') != variant or metadata.get('androidApi') != 24
             or not re.fullmatch(r'\d+\.\d+\.\d+', str(metadata.get('sdlVersion', '')))):
         raise ValueError(f'Expected {variant} Android {abi} API 24 metadata with an SDL version')
-    if mod.get('version') != version or mod.get('requiredopenQ4Version') != version:
+    if mod.get('version') != version or mod.get('requiredopenPR06Version') != version:
         raise ValueError('Staged engine and mod versions do not match the release')
     expected = {}
     libraries = libraries_for_abi(abi)
     if (stage / 'lib' / XR_TEST_RUNTIME).exists():
         raise ValueError('The OpenXR test runtime must never be staged for a distributable APK')
     if {path.name for path in (stage / 'lib').iterdir()} != libraries:
-        raise ValueError(f'Stage must contain exactly the seven matching {abi} native libraries')
+        raise ValueError(f'Stage must contain exactly the six matching {abi} native libraries')
     for name in libraries:
         path = stage / 'lib' / name
         validate_library(path, 24, abi)
         expected[f'lib/{abi}/{name}'] = path
-    for name in (*(f'baseoq4/{pack}' for pack in content_pack_names()), 'baseoq4/mod.json',
+    for name in (*(f'basepr/{pack}' for pack in content_pack_names()), 'basepr/mod.json',
                  'licenses/sdl3/LICENSE.txt', 'licenses/openal-soft/COPYING',
-                 'licenses/android-ndk/NOTICE.toolchain', 'licenses/QUAKE-4-SDK-EULA.rtf', 'licenses/MD4.txt'):
+                 'licenses/android-ndk/NOTICE.toolchain', 'licenses/PREY-SDK-EULA.rtf', 'licenses/MD4.txt',
+                 'licenses/OFL-1.1.txt'):
         if not (stage / name).is_file():
             raise ValueError(f'Missing required packaged file: {name}')
-    for directory in ('baseoq4', 'licenses'):
+    for directory in ('basepr', 'licenses'):
         for path in (stage / directory).rglob('*'):
             if path.is_file():
                 expected['assets/' + path.relative_to(stage).as_posix()] = path
@@ -173,7 +176,7 @@ def verify_payload(apk: Path, stage: Path, version: str, variant: str = 'phone',
                          else f'Quest stage must carry the {HEADSET_MARKER} marker asset')
     if headset:
         expected['assets/' + HEADSET_MARKER] = marker
-    with zipfile.ZipFile(stage / 'baseoq4/pak0.pk4') as content:
+    with zipfile.ZipFile(stage / 'basepr/pak0.pk4') as content:
         fonts = {}
         for name in sorted(SETUP_FONTS):
             matches = [entry for entry in content.infolist() if entry.filename == name]
@@ -197,22 +200,22 @@ def verify_payload(apk: Path, stage: Path, version: str, variant: str = 'phone',
         if any(name.rsplit('/', 1)[-1] == XR_TEST_RUNTIME for name in native):
             raise ValueError('APK must never carry the OpenXR test runtime')
         if native != {name for name in expected if name.startswith('lib/')}:
-            raise ValueError(f'APK must contain exactly the seven matching {abi} native libraries')
+            raise ValueError(f'APK must contain exactly the six matching {abi} native libraries')
         assets = {name for name in names if name.startswith('assets/') and not name.endswith('/')}
         if assets != {name for name in expected if name.startswith('assets/')} | set(fonts) | {
                 'assets/openq4-package-version.txt', 'assets/openq4-package-manifest.txt'}:
-            raise ValueError('APK asset set differs from the staged openQ4 overlays and notices')
+            raise ValueError('APK asset set differs from the staged openPR06 overlays and notices')
         for name, data in fonts.items():
             if archive.getinfo(name).file_size != len(data) or archive.read(name) != data:
                 raise ValueError(f'APK setup typeface differs from staged pak0: {name}')
-        for name in (f'assets/baseoq4/{pack}' for pack in content_pack_names()):
+        for name in (f'assets/basepr/{pack}' for pack in content_pack_names()):
             if archive.getinfo(name).compress_type != zipfile.ZIP_STORED:
                 raise ValueError('PK4 archives must be stored without redundant APK compression')
         for name, path in expected.items():
             with archive.open(name) as packaged, path.open('rb') as staged:
                 if digest(packaged) != digest(staged):
                     raise ValueError(f'APK payload differs from validated stage: {name}')
-        manifest = package_manifest(stage / 'baseoq4')
+        manifest = package_manifest(stage / 'basepr')
         if archive.read('assets/openq4-package-manifest.txt') != manifest:
             raise ValueError('APK extraction manifest does not match its packaged data')
         if archive.read('assets/openq4-package-version.txt') != hashlib.sha256(manifest).hexdigest().encode('ascii'):

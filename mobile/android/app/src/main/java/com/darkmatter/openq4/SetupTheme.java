@@ -17,16 +17,21 @@ import android.view.MotionEvent;
 import android.widget.Button;
 import android.widget.TextView;
 
-/** Native setup uses the same Marine faces and open, cut action plates as the game UI. */
+/**
+ * Native setup uses the game menu's faces and steel action plates.
+ * The constant names are upstream openQ4's; the values are the Prey
+ * Interface Atlas tokens (docs/dev/prey-ui-visual-design.md).
+ */
 final class SetupTheme {
-    static final int BACKGROUND = 0xff090d09, TEXT = 0xffcccccc, AMBER = 0xffeaa944;
+    // background: prey.frame.body over black; TEXT: prey.text.value; AMBER: prey.rail
+    static final int BACKGROUND = 0xff0b0e12, TEXT = 0xffb8c9e6, AMBER = 0xffb3c6e2;
     final Context context;
     final Typeface title, body;
 
     SetupTheme(Context context) {
         this.context = context;
-        title = Typeface.createFromAsset(context.getAssets(), "fonts/marine.ttf");
-        body = Typeface.createFromAsset(context.getAssets(), "fonts/lowpixel.ttf");
+        title = Typeface.createFromAsset(context.getAssets(), "fonts/menu.ttf");
+        body = Typeface.createFromAsset(context.getAssets(), "fonts/talon-ui-condensed.ttf");
     }
 
     int dp(float value) { return Math.round(value * context.getResources().getDisplayMetrics().density); }
@@ -36,7 +41,7 @@ final class SetupTheme {
         view.setText(resource);
         view.setTypeface(heading ? title : body);
         view.setTextSize(heading ? 24 : 17);
-        view.setTextColor(heading ? 0xffaaaaaa : TEXT);
+        view.setTextColor(heading ? 0xffb3cce6 : TEXT);
         view.setPadding(0, dp(8), 0, dp(8));
         if (heading && android.os.Build.VERSION.SDK_INT >= 28) view.setAccessibilityHeading(true);
         return view;
@@ -55,7 +60,7 @@ final class SetupTheme {
         button.setTextColor(new ColorStateList(new int[][] {
             {-android.R.attr.state_enabled}, {android.R.attr.state_pressed},
             {android.R.attr.state_focused}, {android.R.attr.state_hovered}, {}
-        }, new int[] {0xff686d60, 0xffff9900, 0xffff9900, 0xffff9900, TEXT}));
+        }, new int[] {0x4db5c9e3, 0xffffffff, 0xffffffff, 0xffffffff, TEXT}));
         button.setBackground(new Plate(dp(1), dp(18), dp(7),
             context.getResources().getConfiguration().getLayoutDirection() == android.view.View.LAYOUT_DIRECTION_RTL));
         button.setStateListAnimator(null);
@@ -121,15 +126,15 @@ final class SetupTheme {
             shape.moveTo(stroke, 0); shape.lineTo(w, 0); shape.lineTo(w, h - stroke);
             shape.lineTo(c, h - stroke); shape.lineTo(stroke, h - c); shape.close();
             paint.setStyle(Paint.Style.FILL);
-            paint.setShader(new LinearGradient(0, 0, w, 0, enabled ? (active ? 0xb34d5721 : 0x664d5721) : 0x224d5721,
-                                               0x004d5721, Shader.TileMode.CLAMP));
+            paint.setShader(new LinearGradient(0, 0, w, 0, enabled ? (active ? 0xc46f86a1 : 0x666f86a1) : 0x226f86a1,
+                                               0x0f6f86a1, Shader.TileMode.CLAMP));
             canvas.drawPath(shape, paint);
             Path rail = new Path();
             rail.moveTo(stroke, 0); rail.lineTo(stroke, h - c); rail.lineTo(c, h - stroke); rail.lineTo(w, h - stroke);
             paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(stroke);
             canvas.drawPath(rail, paint);
             paint.setStyle(Paint.Style.FILL); paint.setShader(null);
-            paint.setColor(enabled && active ? 0xffff9900 : 0x806d7938);
+            paint.setColor(enabled && active ? 0xffffffff : 0x80b3c6e2);
             float start = cut, top = (h - marker) / 2;
             Path triangle = new Path(); triangle.moveTo(start, top); triangle.lineTo(start + marker, top);
             triangle.lineTo(start + marker, top + marker); triangle.close();

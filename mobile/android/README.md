@@ -7,51 +7,58 @@ SigmaTouch overlay remains an optional, separately licensed host.
 
 ## Release download
 
-The manual release workflow includes an experimental, release-signed
-`openq4-<version>-android-arm64-experimental.apk`. Install it on an ARM64 device
-with Android 7.0/API 24 or later and OpenGL ES 3.0, then provide your retail
-assets as described below. Broad device and release-package qualification remains
-open; the recorded S25 development builds pass the scoped save/touch/audio checks
-in the [recovery evidence](../../docs/dev/platform-recovery-review.md).
-The APK uses the same menu defaults as desktop packages.
+openPR06 does not publish an APK yet. The Android workflow builds and verifies
+`openpr06-<version>-android-arm64-experimental.apk` for PREY (2006), but
+`manual-release.yml` gains its Android lane only once the maintainer supplies a
+release signing key (see [Release automation and signing](#release-automation-and-signing)
+and [docs/dev/android-build.md](../../docs/dev/android-build.md#openpr06-status)).
+The APK needs an ARM64 device with Android 7.0/API 24 or later and OpenGL ES
+3.0, plus your own PREY retail files as described below. It has not yet been
+tested on a device. The application ID is `com.darkmatter.openpr06`, so it
+installs beside openQ4 and never shares its data.
 
-Published APKs use the same persistent certificate for updates. A local debug
+Published APKs will use one persistent certificate for updates. A local debug
 APK uses a different certificate; back up its private saves before uninstalling
-it to switch to the release APK. Do not clear app data to update a release APK.
+it to switch to a release APK. Do not clear app data to update a release APK.
 
 ## Build locally
 
 Build the native Android targets and run Meson install first, following
 [the Android build guide](../../docs/dev/android-build.md). The staging directory
-must contain `lib/libquake4.so`, `lib/libSDL3.so`, the renderer/game modules and
-their shared dependencies, plus `baseoq4/pak0.pk4` and the remaining staged packs.
+must contain exactly `lib/libopenpr06.so`, `lib/libSDL3.so`,
+`lib/librenderer-gles_arm64.so`, the unified `lib/libgame_arm64.so` and their
+shared dependencies (`libopenal.so`, `libc++_shared.so`), plus
+`basepr/pak0.pk4` and the remaining staged packs.
 
 Use Java 17 or 21, Gradle 8.12, and Android SDK platform 35. Supply the same SDL3
 source tree used for the native library (currently SDL 3.4.18):
 
 ```sh
 gradle -p mobile/android \
-  --project-cache-dir=/absolute/path/to/openQ4/.tmp/android-gradle-project \
+  --project-cache-dir=/absolute/path/to/openPR06/.tmp/android-gradle-project \
   -Psdl3SourceRoot=/path/to/SDL3-3.4.18 \
-  -Popenq4Stage=/path/to/openQ4/.install/android/arm64-v8a \
+  -Popenq4Stage=/path/to/openPR06/.install/android/arm64-v8a \
   assembleDebug
 ```
 
 Set `ANDROID_HOME` to an installed Android SDK, or set `sdk.dir` in the ignored
 `mobile/android/local.properties`. The APK is written under
 `builddir/android-apk/app/outputs/apk/debug/`. Native compilation stays in Meson;
-Gradle only packages staged libraries and openQ4-owned overlays. The phone
-package targets `arm64-v8a` and API 24 or later.
+Gradle only packages staged libraries and openPR06-owned overlays. The phone
+package targets `arm64-v8a` and API 24 or later. The Gradle `-Popenq4*`
+property names, the `com.darkmatter.openq4` Java package and the
+`OPENQ4_*` host environment variables keep their upstream names so openQ4's
+host changes still merge; the application IDs, labels and files are openPR06's.
 
 The separate [diagnostic emulator build](../../docs/dev/android-build.md#diagnostic-emulator-build)
 uses `-Popenq4Abi=x86_64` and its matching stage. It produces a debug APK under
 `builddir/android-apk-emulator/`, uses application ID
-`com.darkmatter.openq4.emulator` and keeps separate saves/data. Release packaging
+`com.darkmatter.openpr06.emulator` and keeps separate saves/data. Release packaging
 is disabled for that ABI; it is not a published phone upgrade.
 
 The experimental [Meta Quest flavor](../../docs/dev/android-build.md#meta-quest-flavor)
 packages an arm64-v8a stage configured with `-Dandroid_headset=true`; add
-`-Popenq4Quest=true`. It uses application ID `com.darkmatter.openq4.quest`,
+`-Popenq4Quest=true`. It uses application ID `com.darkmatter.openpr06.quest`,
 builds under `builddir/android-apk-quest/` and declares itself an immersive
 OpenXR headset app: setup opens as a 2D panel and the game in VR. Gradle
 refuses a Quest stage without the property and the property without a Quest
@@ -68,7 +75,7 @@ that metadata and uses its native API as the APK's minimum Android version.
 The supplied SDL Java source version must match the staged native SDL library.
 Do not mix Java classes and native libraries from different SDL releases.
 
-The APK version name comes from the staged `baseoq4/mod.json`, and its default
+The APK version name comes from the staged `basepr/mod.json`, and its default
 version code is `major * 1000000 + minor * 1000 + patch` (for example, `0.13.1`
 becomes `13001`). Distributors publishing multiple APKs with the same engine
 version, including prereleases, can provide an increasing
@@ -78,20 +85,25 @@ Use an absolute `--project-cache-dir` path: Gradle resolves a relative path
 against `mobile/android`, which can otherwise place generated cache files in
 the source tree. Compiler and APK intermediates remain under `builddir/`.
 
-The APK retains the full official openQ4 overlay packs. First launch also
+The APK retains the full openPR06 overlay packs. First launch also
 copies those packs into private storage;
 allow room for both the APK and extracted content, plus the retail installation
 and saves.
 
-Install the APK and open **openQ4 setup**. Choose English, German, Spanish or
-French, then **Choose game folder** and select `q4base` from your own Quake 4
-1.4.2 installation. A subfolder inside Downloads or a connected USB drive can
-hold the source files. Android's picker grants read access to that folder;
-openQ4 copies the archives to its app-specific storage and preserves the
-originals. No retail game data is included in the APK.
+Install the APK and open **openPR06 setup**. Choose English, German, Spanish or
+French, then **Choose game folder** and select `base` from your own PREY
+installation (or the install folder that contains it). Either retail layout
+works: the CD/DVD set `pak000.pk4` to `pak004.pk4`, or the digital set
+`pak_data.pk4`, `pak_sound.pk4`, `pak_en_v.pk4` and `pak_en_t.pk4`. A subfolder
+inside Downloads or a connected USB drive can hold the source files. Android's
+picker grants read access to that folder; openPR06 copies the archives to its
+app-specific storage and preserves the originals. No retail game data is
+included in the APK.
 
-Setup verifies the required archives and their contents, reports optional and
-language warnings, then prepares the bundled files with progress. **Cancel**
+Setup verifies the archives of whichever layout is present against the same
+checksums as the engine (`officialPk4s` in `src/framework/FileSystem.cpp`),
+checks their contents, then prepares the bundled files with progress. Patch
+packs (`pak005.pk4` and later, `game0N.pk4`) are accepted by presence. **Cancel**
 keeps completed archives; **Retry last operation** checks them and restarts the
 unfinished archive. If Android or the document provider loses the folder grant,
 choose the folder again. Low-space messages show the next file's requirement
@@ -103,9 +115,9 @@ For development, manual data placement still works. Open the launcher and use
 
 ```sh
 adb install builddir/android-apk/app/outputs/apk/debug/app-debug.apk
-adb shell mkdir -p /sdcard/Android/data/com.darkmatter.openq4/files/q4base
-adb push /path/to/Quake4/q4base/. /sdcard/Android/data/com.darkmatter.openq4/files/q4base/
-adb shell am start -n com.darkmatter.openq4/.LauncherActivity
+adb shell mkdir -p /sdcard/Android/data/com.darkmatter.openpr06/files/base
+adb push /path/to/Prey/base/. /sdcard/Android/data/com.darkmatter.openpr06/files/base/
+adb shell am start -n com.darkmatter.openpr06/com.darkmatter.openq4.LauncherActivity
 ```
 
 The native game Activity is internal; external launches use the setup entry
@@ -155,16 +167,16 @@ orientation when it creates the engine's resizable window. In portrait the
 touch controls form the thumb deck below the view. Physical portrait,
 cutout, rotation and input qualification remain in progress.
 
-Saves/configuration/logs live in private `files/saves/baseoq4/`, and generated
+Saves/configuration/logs live in private `files/saves/basepr/`, and generated
 texture caches live in the Android cache directory. With a debug APK, retrieve
 the engine log using:
 
 ```sh
-adb shell run-as com.darkmatter.openq4 cat files/saves/baseoq4/logs/openq4.log
+adb shell run-as com.darkmatter.openpr06 cat files/saves/basepr/logs/openpr06.log
 ```
 
 When a native fatal error writes a diagnostic report, it is beside that log at
-`files/saves/baseoq4/logs/fatal.txt`. The standalone host publishes
+`files/saves/basepr/logs/fatal.txt`. The standalone host publishes
 `OPENQ4_SAVE_ROOT` before native startup so early diagnostics use the same root
 as `fs_savepath`. External hosts may publish their absolute save directory in
 that variable; otherwise the existing `USER_FILES/quake4` or SDL private-storage
@@ -183,7 +195,8 @@ these copies and local saves. The native libraries must be extracted by the
 package manager. Gradle's `useLegacyPackaging` setting writes the corresponding
 `extractNativeLibs` attribute into the packaged manifest.
 
-The custom Activity and build files are openQ4 GPL-3.0-or-later sources. SDL's
+The custom Activity and build files are GPL-3.0-or-later engine-side sources
+from openQ4, adapted for openPR06. SDL's
 Android Java classes are referenced directly from the supplied source tree;
 they retain [SDL's zlib license](https://github.com/libsdl-org/SDL/blob/release-3.4.10/LICENSE.txt).
 The SDL Activity contract and Gradle versions follow
@@ -192,9 +205,9 @@ No SDL template source is copied into this repository.
 
 ## Release automation and signing
 
-`.github/workflows/android-build.yml` can build the APK independently and is
-also required by Manual Releases. It uses NDK r30, Java 17, Gradle 8.12 and SDK
-35. SDL comes from the repository's checksum-pinned wrap with its patches, and
+`.github/workflows/android-build.yml` builds the APK independently; openPR06's
+Manual Releases does not call it yet. It uses NDK r30, Java 17, Gradle 8.12 and
+SDK 35. SDL comes from the repository's checksum-pinned wrap with its patches, and
 OpenAL Soft is the same 1.25.2 release the desktop packages use. The dependency source download
 contains the actual patched SDL tree, the exact OpenAL archive and build
 recipes. [SDL](https://github.com/libsdl-org/SDL) retains its zlib license and
@@ -202,24 +215,29 @@ recipes. [SDL](https://github.com/libsdl-org/SDL) retains its zlib license and
 are dynamically linked; rebuild with replacement libraries and sign your own
 APK when modifying them.
 
-The workflow requires four repository Actions secrets:
-`ANDROID_RELEASE_KEYSTORE_BASE64`, `ANDROID_RELEASE_STORE_PASSWORD`,
-`ANDROID_RELEASE_KEY_PASSWORD` and `ANDROID_RELEASE_KEY_ALIAS`. It builds an
-unsigned release APK, aligns it, signs it using `apksigner`, then checks the
-signature against the public certificate in `release-signing-cert.pem`.
+The workflow builds an unsigned release APK, aligns it, signs it using
+`apksigner`, then checks the signature against a pinned certificate. Its
+`signing` input chooses the key:
+
+- `release` (the default) needs four repository Actions secrets,
+  `ANDROID_RELEASE_KEYSTORE_BASE64`, `ANDROID_RELEASE_STORE_PASSWORD`,
+  `ANDROID_RELEASE_KEY_PASSWORD` and `ANDROID_RELEASE_KEY_ALIAS`, and the
+  public certificate committed as `mobile/android/release-signing-cert.pem`.
+  openPR06 has none of these yet, so this mode stops with an error.
+- `ci` signs with a throwaway key generated for that job and verifies against
+  its certificate. The artifact is named `...-ci-signed-not-for-distribution.apk`:
+  it proves the package builds and verifies, but no installation can ever be
+  updated from it, so never publish it.
+
 Private keys and passwords never belong in Git or downloadable artifacts.
 Preserve a secure independent backup of the signing key: future in-place
 updates must retain the same signing identity. See Android's
 [app signing guidance](https://developer.android.com/studio/publish/app-signing).
-
-For this repository's initial release key, the persistent local backup is
-under ignored `.private/android-signing/`, restricted to the creating Windows
-user. Its password backup is protected by Windows DPAPI and requires that user
-and machine. Move an independent secure backup before replacing that account or
-machine; GitHub secrets cannot be downloaded as a key backup.
+openQ4's certificate is not openPR06's; the verifier's unit tests keep it only
+as a fixture (`tools/tests/android_fixture_signing_cert.pem`).
 
 `verify_android_apk.py` also checks the application ID, version/API, non-debug
-manifest, native-library extraction, 16 KiB alignment, all seven libraries,
+manifest, native-library extraction, 16 KiB alignment, all six libraries,
 overlay bytes and license notices. APK publication is blocked if any check or
 any desktop build fails. This packaging validation does not replace device
 installation and gameplay testing.
@@ -233,7 +251,7 @@ engine's validation of the separately supplied retail PK4s.
 
 The standalone debug APK was assembled with Gradle 8.12, Android plugin 8.7.3,
 SDK/build-tools 35 and the matching SDL 3.4.10 Java/native sources. Its APK v2
-signature, ZIP alignment and packaged manifest were verified. All seven native
+signature, ZIP alignment and packaged manifest were verified. All native
 libraries, both overlay packs, mod metadata, contributor credits and dependency
 notices match the Meson staging files. Device installation and gameplay have
 not been tested as part of this integration.
@@ -245,8 +263,9 @@ filesystem fixtures; it does not require or control an Android device.
 
 `python tools/tests/android_retail_data.py` checks the setup verifier against the
 native PK4 checksum implementation and generated valid/damaged archives. It
-requires a JDK and GCC or Clang; `--retail-root /path/to/q4base` additionally
-performs a read-only full check of local retail media. The launcher uses this
+requires a JDK and GCC or Clang; `--retail-root /path/to/Prey/base` additionally
+performs a read-only full check of local retail media (passing on the digital
+layout, 2026-11-22). The launcher uses this
 verifier for imports and installed-data checks. The engine's own validation
 also remains enabled.
 
@@ -261,8 +280,9 @@ player-facing setup flow remain separate physical acceptance work.
 cancellation and native/setup storage ownership. `android_setup_flow.py` runs
 the real provider/import/verification/extraction sequence, including cancellation
 between stages and retry, and checks the four complete localized resource sets.
-Neither needs a device. APK verification also compares the launcher's Marine and
-Lowpixel fonts with the exact faces inside the staged `pak0.pk4`.
+Neither needs a device. APK verification also compares the launcher's display
+(`fonts/menu.ttf`) and Talon UI Condensed body faces with the exact faces inside
+the staged `pak0.pk4`.
 
 `python tools/tests/android_private_export.py` checks read-only save/log ZIPs,
 manifest integrity, cancellation, source changes, bounds, storage ownership and

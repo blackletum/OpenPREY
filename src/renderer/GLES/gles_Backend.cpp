@@ -528,6 +528,97 @@ bool R_IsARBProgramValid( unsigned int target, unsigned int ident ) {
 	return false;
 }
 
+/*
+====================
+R_ARBProgramUsesInteractionInputs
+
+OPENPR06: retail Prey materials author per-light interaction stages as ARB
+fragment programs. The material parser asks this to mark such a stage
+SL_INTERACTION, which keeps it out of the ambient shader passes here instead
+of drawing it as an unlit program stage. This module has no executor for
+those programs, so the interaction pass leaves them out (R_IsARBProgramValid
+is false), as the Vulkan module does.
+
+The classification is draw_arb2.cpp's: a fragment program that samples both
+the light falloff (texture[2]) and projection (texture[3]) images. ES has no
+ARB assembly to compile, so the source is only scanned, once per program.
+====================
+*/
+static bool gles_materialProgramInteractionScanned[ GLES_MAX_MATERIAL_PROGRAMS ];
+static bool gles_materialProgramInteraction[ GLES_MAX_MATERIAL_PROGRAMS ];
+
+static bool R_GLES_ARBProgramSourceUsesInteractionInputs( const char *program ) {
+	idStr fullPath = "glprogs/";
+	fullPath += program;
+	fullPath.BackSlashesToSlashes();
+
+	char *fileBuffer = NULL;
+	if ( fileSystem->ReadFile( fullPath.c_str(), reinterpret_cast<void **>( &fileBuffer ), NULL ) < 0 || fileBuffer == NULL ) {
+		return false;
+	}
+
+	const char *start = strstr( fileBuffer, "!!ARBfp" );
+	const char *end = start != NULL ? strstr( start, "END" ) : NULL;
+	idStr normalized;
+	if ( start != NULL && end != NULL ) {
+		bool inComment = false;
+		for ( const char *cursor = start; cursor < end + 3; cursor++ ) {
+			const char c = *cursor;
+			if ( c == '\r' || c == '\n' ) {
+				inComment = false;
+				continue;
+			}
+			if ( inComment ) {
+				continue;
+			}
+			if ( c == '#' ) {
+				inComment = true;
+				continue;
+			}
+			if ( c == ' ' || c == '\t' ) {
+				continue;
+			}
+			normalized.Append( static_cast<char>( tolower( static_cast<unsigned char>( c ) ) ) );
+		}
+	}
+	fileSystem->FreeFile( fileBuffer );
+
+	return strstr( normalized.c_str(), "texture[2]" ) != NULL
+		&& strstr( normalized.c_str(), "texture[3]" ) != NULL;
+}
+
+bool R_ARBProgramUsesInteractionInputs( unsigned int target, const char *program ) {
+	if ( target != GL_FRAGMENT_PROGRAM_ARB || program == NULL || program[0] == '\0' ) {
+		return false;
+	}
+	const int handle = R_FindARBProgram( target, program );
+	if ( handle <= 0 || handle > gles_numMaterialPrograms ) {
+		return false;
+	}
+	const int slot = handle - 1;
+	if ( !gles_materialProgramInteractionScanned[ slot ] ) {
+		gles_materialProgramInteraction[ slot ] = R_GLES_ARBProgramSourceUsesInteractionInputs( program );
+		gles_materialProgramInteractionScanned[ slot ] = true;
+	}
+	return gles_materialProgramInteraction[ slot ];
+}
+
+/*
+====================
+R_LoadARBProgramsForStartup / R_PrecacheLevelMaterialPrograms
+
+OPENPR06: the GL module preloads its ARB programs here and the Vulkan module
+compiles each level's material programs behind the loading screen. ES has
+neither: material programs it implements natively are built with the GLES_D3
+program library, and the rest are skipped at draw time.
+====================
+*/
+void R_LoadARBProgramsForStartup( void ) {
+}
+
+void R_PrecacheLevelMaterialPrograms( void ) {
+}
+
 void R_ReloadARBPrograms_f( const idCmdArgs &args ) {
 	( void )args;
 }

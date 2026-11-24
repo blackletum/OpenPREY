@@ -36,7 +36,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 BUDGETS = ROOT / 'docs/dev/android-device-budgets.json'
-SAVE_ROOT = 'files/saves/baseoq4'
+SAVE_ROOT = 'files/saves/basepr'
 SETTINGS = """set r_fullscreen 0
 set ui_retained 1
 set ui_autoJoin 0
@@ -256,7 +256,7 @@ def run_phase(device: Device, phase: str, out: Path, report: dict):
     stop = threading.Event()
     result = {'phase': phase, 'started_utc': utc()}
     try:
-        for name in ('openQ4Config.cfg', 'logs/openq4.log'):
+        for name in ('openPR06Config.cfg', 'logs/openpr06.log'):
             preserved[name] = device.read(f'{SAVE_ROOT}/{name}')
             if preserved[name] is not None:
                 (phase_out / ('before-' + name.replace('/', '-'))).write_bytes(preserved[name])
@@ -275,8 +275,8 @@ def run_phase(device: Device, phase: str, out: Path, report: dict):
             device.adb('shell', 'run-as', device.package, 'mkdir', 'cache')
             cache_moved = True
             result['cache'] = 'cold (generated cache moved aside)'
-        if preserved['logs/openq4.log'] is not None:
-            device.remove(f'{SAVE_ROOT}/logs/openq4.log')
+        if preserved['logs/openpr06.log'] is not None:
+            device.remove(f'{SAVE_ROOT}/logs/openpr06.log')
         for name, text in scripts.items():
             created[f'{SAVE_ROOT}/{name}'] = text.encode()
             device.write(f'{SAVE_ROOT}/{name}', text.encode())
@@ -301,7 +301,7 @@ def run_phase(device: Device, phase: str, out: Path, report: dict):
             seen_game = seen_game or 'OpenQ4Activity' in focus
             if not seen_game and time.monotonic() > launch_deadline:
                 raise RuntimeError(f'the game did not start within 5 minutes (focus: {focus.strip()[:120]})')
-            log = device.read(f'{SAVE_ROOT}/logs/openq4.log') or log
+            log = device.read(f'{SAVE_ROOT}/logs/openpr06.log') or log
             if re.search(rb'(?:^|\n)(?:ERROR:|FATAL:|Fatal)', log):
                 raise RuntimeError('engine fatal error')
             if b'AND02_TRIM_REQUEST' in log and not trimmed:
@@ -315,7 +315,7 @@ def run_phase(device: Device, phase: str, out: Path, report: dict):
         else:
             raise RuntimeError(f'{phase} did not complete within {args.timeout} s (game seen: {seen_game})')
         time.sleep(2)
-        log = device.read(f'{SAVE_ROOT}/logs/openq4.log') or log
+        log = device.read(f'{SAVE_ROOT}/logs/openpr06.log') or log
         (phase_out / 'openq4.log').write_bytes(log)
         result['storage_after'] = storage(device)
         text = log.decode(errors='replace')
@@ -343,7 +343,7 @@ def run_phase(device: Device, phase: str, out: Path, report: dict):
             # Keep the screen on while this phase is collected, so the next one can start.
             device.adb('shell', 'am', 'start', '-n', f'{device.package}/com.darkmatter.openq4.LauncherActivity',
                        '--es', 'diagnostic_launch', 'hold', check=False)
-        log = device.read(f'{SAVE_ROOT}/logs/openq4.log')
+        log = device.read(f'{SAVE_ROOT}/logs/openpr06.log')
         if log is not None and not (phase_out / 'openq4.log').exists():
             (phase_out / 'openq4.log').write_bytes(log)
         for path, data in created.items():
@@ -365,10 +365,10 @@ def run_phase(device: Device, phase: str, out: Path, report: dict):
                     if data is not None:
                         (phase_out / name).write_bytes(data)
                     device.remove(f'{SAVE_ROOT}/{directory}/{name}')
-        if preserved.get('openQ4Config.cfg') is not None:
-            device.write(f'{SAVE_ROOT}/openQ4Config.cfg', preserved['openQ4Config.cfg'])
-        if preserved.get('logs/openq4.log') is not None:
-            device.write(f'{SAVE_ROOT}/logs/openq4.log', preserved['logs/openq4.log'])
+        if preserved.get('openPR06Config.cfg') is not None:
+            device.write(f'{SAVE_ROOT}/openPR06Config.cfg', preserved['openPR06Config.cfg'])
+        if preserved.get('logs/openpr06.log') is not None:
+            device.write(f'{SAVE_ROOT}/logs/openpr06.log', preserved['logs/openpr06.log'])
         if cache_moved:
             result['cold_cache_kib'] = du(device, 'cache')
             device.adb('shell', 'run-as', device.package, 'rm', '-rf', 'cache')
@@ -465,7 +465,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--adb', type=Path, required=True)
     parser.add_argument('--serial', required=True)
-    parser.add_argument('--package', default='com.darkmatter.openq4')
+    parser.add_argument('--package', default='com.darkmatter.openpr06')
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--phases', default='campaign,sustain,mp')
     parser.add_argument('--apk', type=Path, help='install this debuggable APK first (adb install -r -d; data kept)')

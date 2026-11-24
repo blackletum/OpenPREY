@@ -27,10 +27,11 @@ clearly named `DISABLED`, and every job has an unconditional false gate because 
 still assume openQ4's split `game-sp`/`game-mp` modules and Quake 4 content. Remove those
 gates only after rebuilding source pinning, package assertions, signing, and runtime
 smoke tests around the in-tree game library, `game_<arch>`, and `basepr/`.
-`android-build.yml` came with the upstream engine merge. openPR06 has no Android
-release yet: the native build stops at the GLES renderer, which lacks PREY's
-ARB-program hooks, and the host app is still openQ4's, so it is not part of active
-validation.
+`android-build.yml` came with the upstream engine merge and now builds and
+verifies an openPR06 arm64 APK for PREY. It is not in `manual-release.yml` or
+active validation yet: release signing (`signing: release`, the default) needs
+secrets and a certificate openPR06 does not have, and `signing: ci` signs with a
+throwaway key for testing only. See `docs/dev/android-build.md` (openPR06 status).
 
 `discord-release.yml` only reacts to an already-published release. It does not build or
 publish artifacts. It is off unless the repository variable `DISCORD_RELEASE_ENABLED` is

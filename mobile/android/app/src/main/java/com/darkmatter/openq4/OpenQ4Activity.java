@@ -1,4 +1,4 @@
-// Standalone host for emileb's Android/GLES support in openQ4.
+// Standalone host for emileb's Android/GLES support in openQ4, adapted for openPR06.
 // SPDX-License-Identifier: GPL-3.0-or-later
 package com.darkmatter.openq4;
 
@@ -189,7 +189,7 @@ public final class OpenQ4Activity extends SDLActivity {
 
     @Override
     protected String[] getLibraries() {
-        return new String[] { "SDL3", "quake4" };
+        return new String[] { "SDL3", "openpr06" };
     }
 
     @Override
@@ -201,7 +201,8 @@ public final class OpenQ4Activity extends SDLActivity {
             if (retailRoot == null) {
                 throw new IOException("App-specific external storage is unavailable");
             }
-            requireDirectory(new File(retailRoot, "q4base"));
+            // fs_basepath/base: the player's retail PREY archives (RetailData.DIRECTORY)
+            requireDirectory(new File(retailRoot, "base"));
             File saveRoot = new File(getFilesDir(), "saves");
             requireDirectory(saveRoot);
             // Early native fatal diagnostics run before fs_savepath is parsed.
@@ -214,15 +215,15 @@ public final class OpenQ4Activity extends SDLActivity {
                 "+set", "fs_basepath", retailRoot.getAbsolutePath(),
                 "+set", "fs_savepath", saveRoot.getAbsolutePath(),
                 "+set", "fs_cachepath", getCacheDir().getAbsolutePath(),
-                "+set", "fs_game", "baseoq4",
-                "+set", "si_gameType", multiplayer ? "DM" : "singleplayer",
+                "+set", "fs_game", "basepr",
+                "+set", "si_gameType", multiplayer ? "deathmatch" : "singleplayer",
                 "+set", "ui_autoJoin", "0",
                 "+set", "r_renderApi", "gles",
                 "+set", "r_renderer", "glesd3",
                 "+set", "r_fullscreen", "0",
                 "+set", "in_tty", "0",
                 "+set", "logFile", "2",
-                "+set", "logFileName", "logs/openq4.log"
+                "+set", "logFileName", "logs/openpr06.log"
             ));
             if (isHeadsetBuild()) {
                 // An immersive headset app: without VR nothing reaches the display,
@@ -241,7 +242,7 @@ public final class OpenQ4Activity extends SDLActivity {
         } catch (IOException | ErrnoException error) {
             // SDL/logcat retains the actionable cause; never run with partial
             // package data or fall back to an unintended writable directory.
-            throw new IllegalStateException("Could not prepare openQ4 storage", error);
+            throw new IllegalStateException("Could not prepare openPR06 storage", error);
         }
     }
 

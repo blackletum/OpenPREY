@@ -187,7 +187,7 @@ final class PackageStorage {
     private static void repair(AssetManager assets, File root, File target, Entry entry, int index, Progress observer)
             throws IOException, ErrnoException {
         requireDirectory(target.getParentFile());
-        // Keep incomplete writes outside baseoq4, which the engine enumerates.
+        // Keep incomplete writes outside basepr, which the engine enumerates.
         File temporary = new File(root, ".repair-" + index + ".tmp");
         requireUnlinked(temporary);
         if (temporary.exists() && !temporary.isFile()) throw new IOException("Invalid package repair target");
@@ -197,7 +197,7 @@ final class PackageStorage {
         progress(observer, Phase.COPYING, entry.name, 0, entry.size);
         MessageDigest digest = sha256();
         long count = 0;
-        try (InputStream input = assets.open("baseoq4/" + entry.name);
+        try (InputStream input = assets.open("basepr/" + entry.name);
              FileOutputStream output = new FileOutputStream(temporary)) {
             byte[] buffer = new byte[65536];
             int read;
@@ -254,14 +254,14 @@ final class PackageStorage {
             for (int slash = entry.name.indexOf('/'); slash >= 0; slash = entry.name.indexOf('/', slash + 1)) {
                 directoryNames.add(entry.name.substring(0, slash));
             }
-            File target = new File(root, "baseoq4/" + entry.name);
+            File target = new File(root, "basepr/" + entry.name);
             if (!matches(target, entry, observer)) {
                 if (!invalidated && ready.exists() && !ready.delete()) throw new IOException("Cannot invalidate content readiness");
                 invalidated = true;
                 repair(assets, root, target, entry, i, observer);
             }
         }
-        validateTree(new File(root, "baseoq4"), "", fileNames, directoryNames);
+        validateTree(new File(root, "basepr"), "", fileNames, directoryNames);
         // A ready marker is a completion record, never a substitute for the
         // per-file checks above. A crash before rename is harmless on retry.
         byte[] readyBytes = version.getBytes(StandardCharsets.US_ASCII);

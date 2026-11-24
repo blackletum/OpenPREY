@@ -16,10 +16,29 @@ before the release is cut. To cut it:
   and Metal-bridge variants (unsigned preview). Merge `release/0.15.0` into
   `main`, run the workflow from `main` with `version_override=0.15.0` and
   `draft=true`, check the draft's assets, then publish it.
-- Android is not part of 0.15.0: the native build fails to link the GLES
-  renderer (`R_LoadARBProgramsForStartup`, `R_PrecacheLevelMaterialPrograms`
-  and `R_ARBProgramUsesInteractionInputs` are missing there), the Android host
-  is still openQ4's, and the repository has no Android release-signing secrets.
+- Android is not part of 0.15.0. Since 22 November 2026 the build works: the
+  GLES module has its own ARB-program hooks, the host is openPR06's
+  (`libopenpr06.so`, the unified `libgame_arm64.so`, `basepr/`, application
+  ID `com.darkmatter.openpr06`, setup that checks a PREY `base/` in either
+  retail layout), and a push-triggered CI probe ran the native build, Gradle
+  `assembleRelease` and `verify_android_apk.py` on a CI-signed APK. What is
+  left before `manual-release.yml` gets openQ4's "Android APK" lane
+  (`uses: ./.github/workflows/android-build.yml`, `signing: release`):
+  - **Signing (maintainer):** create an Android release key, keep an
+    independent secure backup (every later update must use the same key), add
+    the repository secrets `ANDROID_RELEASE_KEYSTORE_BASE64` (the PKCS#12
+    keystore, base64), `ANDROID_RELEASE_STORE_PASSWORD`,
+    `ANDROID_RELEASE_KEY_PASSWORD` and `ANDROID_RELEASE_KEY_ALIAS`, and commit
+    its public certificate as `mobile/android/release-signing-cert.pem`
+    (`keytool -exportcert -rfc`). The lane then passes the secrets with
+    `secrets: inherit` and needs the release's content-pack artifact, as
+    openQ4's does.
+  - **Device testing:** no openPR06 APK has run on a device. Install, setup
+    with a real PREY `base/` folder (CD and digital layouts), a single-player
+    map, multiplayer, touch controls, suspend/resume and the GLES renderer's
+    output on PREY maps all remain untested; the GLES module draws no retail
+    ARB-program interaction stages yet.
+  See [android-build.md](android-build.md#openpr06-status).
 - Pass the version explicitly (`version_override=0.15.0`). The automatic bump
   gives `0.15.000`.
 - A local clone that fetched the `openq4-upstream` remote carries openQ4's

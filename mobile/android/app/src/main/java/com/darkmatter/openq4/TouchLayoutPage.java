@@ -365,7 +365,7 @@ final class TouchLayoutPage {
             paint.setStyle(Paint.Style.FILL); paint.setTypeface(theme.body);
             paint.setTextSize(Math.max(theme.dp(9), Math.min(theme.dp(13), half * .6f)));
             paint.setTextAlign(Paint.Align.CENTER);
-            paint.setColor(hidden ? 0x99cccccc : chosen ? 0xffff9900 : SetupTheme.TEXT);
+            paint.setColor(hidden ? 0x99cccccc : chosen ? 0xffe6cc73 : SetupTheme.TEXT);
             canvas.drawText(names[button], px, py + half + paint.getTextSize() * 1.1f, paint);
         }
     }

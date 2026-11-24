@@ -35,7 +35,7 @@ static const char* internalStorage="/data/user/0/com.darkmatter.openq4/files";
 static const char* SDL_GetAndroidInternalStoragePath(){return internalStorage;}
 static const char* Posix_Cwd(){return "/legacy-cwd";}
 static constexpr int MAX_OSPATH=1024;
-static const char* OPENQ4_GAMEDIR="baseoq4";
+static const char* OPENQ4_GAMEDIR="basepr";
 static char posix_fatalBreadcrumbPath[MAX_OSPATH];
 static std::vector<std::string> created;
 static void Sys_Mkdir(const char* path){created.emplace_back(path);}
@@ -51,7 +51,7 @@ int main(){try {
         std::string expected=root;while(expected.size()>1 && expected.back()=='/')expected.pop_back();
         require(Sys_DefaultSavePath()==expected,"explicit save root did not win over legacy/default paths");
         Posix_InitFatalBreadcrumbPath();
-        std::string directory=expected+(expected.back()=='/'?"":"/")+"baseoq4";
+        std::string directory=expected+(expected.back()=='/'?"":"/")+"basepr";
         require(posix_fatalBreadcrumbPath==directory+"/logs/fatal.txt","fatal report is outside the selected save root");
         require(created==std::vector<std::string>{directory,directory+"/logs"},"fatal directory creation changed");
         environment[OPENQ4_ANDROID_SAVE_ROOT_ENV]="/different";

@@ -173,7 +173,7 @@ final class ControlsPage {
         @Override protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
             float unit = theme.dp(2), cx = getWidth() * .5f, cy = getHeight() * .5f;
-            paint.setStrokeWidth(theme.dp(1)); paint.setColor(0xff565c3f);
+            paint.setStrokeWidth(theme.dp(1)); paint.setColor(0xff546579);
             float spacing = 30 * unit;
             for (float x = cx + (yaw % 30) * unit - getWidth(); x < getWidth(); x += spacing)
                 canvas.drawLine(x, 0, x, getHeight(), paint);
