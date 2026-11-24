@@ -204,6 +204,17 @@ void hhGenericAnimatedPart::Spawn() {
 	//rww - make sure it's sent
 	fl.networkSync = true;
 
+	// openPR06: resolve the owner now rather than only in EV_PostSpawn. hhRenderEntity::Present
+	// links "useCombatModel" combat models immediately (shuttle consoles need that), and a part
+	// linked before it knows its owner is clipped as itself. The crawler grenade's model proxy
+	// then sat in its own projectile's path: the projectile bounced back off its body at launch.
+	// Retail linked the combat model only after EV_PostSpawn, under the owner, which projectile
+	// traces skip as their pass entity. EV_PostSpawn stays for owners spawned after the part.
+	idStr ownerName = spawnArgs.GetString( "owner" );
+	if( ownerName.Length() ) {
+		SetOwner( gameLocal.FindEntity(ownerName.c_str()) );
+	}
+
 	PostEventMS( &EV_PostSpawn, 0 );
 }
 
@@ -240,6 +251,12 @@ hhGenericAnimatedPart::SetOwner
 */
 void hhGenericAnimatedPart::SetOwner( idEntity* pOwner ) {
 	owner = pOwner;
+
+	// openPR06: a combat model already linked under this part moves to the owner now;
+	// LinkCombatModel only relinks when the transform or bounds change.
+	if( combatModel && combatModel->IsLinked() && GetModelDefHandle() != -1 ) {
+		combatModel->Link( gameLocal.clip, owner.IsValid() ? owner.GetEntity() : this, 0, combatModel->GetOrigin(), combatModel->GetAxis(), GetModelDefHandle() );
+	}
 }
 
 /*

@@ -107,7 +107,7 @@ single-player and multiplayer.
 
 ## Build Setup
 
-Third-party libraries come from Meson subprojects (`subprojects/`) and vendored sources (`src/external/`): SDL3, GLEW, libogg, libvorbis, stb_vorbis, glslang, RmlUi, JsonCpp, libtess2 and the OpenXR SDK, plus a prebuilt OpenAL Soft runtime on Windows. With `--wrap-mode=forcefallback`, the first configure step unpacks and builds the subprojects, so Windows needs nothing installed beyond the compiler, the build tools and the [OpenAL runtime](#windows-openal-runtime). Linux also needs the [system packages](#linux-system-packages) above.
+Third-party libraries come from Meson subprojects (`subprojects/`) and vendored sources (`src/external/`): SDL3, GLEW, libogg, libvorbis, stb_vorbis, zlib-ng, glslang, RmlUi, JsonCpp, libtess2 and the OpenXR SDK, plus a prebuilt OpenAL Soft runtime on Windows. With `--wrap-mode=forcefallback`, the first configure step unpacks and builds the subprojects, so Windows needs nothing installed beyond the compiler, the build tools and the [OpenAL runtime](#windows-openal-runtime). Linux also needs the [system packages](#linux-system-packages) above.
 
 On Linux the default SDL3 backend always uses the bundled GLEW. SDL3 must be at least 3.4.4; the bundled wrap is SDL3 3.4.18. `-Dlinux_x11=disabled` builds the native Wayland/EGL-only path without SDL's X11 driver, and an explicit `enabled` or `disabled` value forces the bundled SDL so the requested driver set is honoured; `auto` may use a suitable system SDL. The transitional `-Dplatform_backend=native` path needs the X11 and VidMode (`libxxf86vm-dev`) development packages and can use a system GLEW (`libglew-dev`) instead of the bundled one.
 
