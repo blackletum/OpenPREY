@@ -165,7 +165,7 @@ conservative validation states unless that evidence directly exercises them.
 | `vscode-prey-launch` | PORTED | IMPLEMENTED | STATIC-CHECKED; RUNTIME-PENDING | Generator produced 35 per-map plus base/dedicated configurations; all client configs select `basepr`, `.home`, and `r_fullscreen 0`. Launches have not all been executed. |
 | `rebrand-openpr06` | PORTED | IMPLEMENTED | STATIC/RUNTIME/PACKAGE-CHECKED | Active runtime/tool branding validators pass; lowercase openPR06 logs and the isolated packaged runtime were verified. Compatibility-only OpenQ4 identifiers remain documented. |
 | `portability-64bit-fixes` | DROPPED | NOT-APPLICABLE | NOT-APPLICABLE | Upstream portability work retained. |
-| `cpu-easyargs-win64` | PORTED | IMPLEMENTED | RUNTIME-CHECKED | Scripted float+entity event dispatch passed on Win64 with `CPU_EASYARGS=0`. |
+| `cpu-easyargs-win64` | PORTED | IMPLEMENTED | RUNTIME-CHECKED | Scripted float+entity event dispatch passed on Win64 with `CPU_EASYARGS=0`. Linux x64, Linux arm64 and macOS 64-bit use that setting too: the easy path passes every argument as a 32-bit int, and Linux x64 0.15.0 segfaulted in `idActor::SetAnimState` while spawning the player on `game/roadhouse`. |
 | `macos-native-bringup` | DROPPED | NOT-APPLICABLE | NOT-APPLICABLE | Upstream macOS backend retained; Prey runtime signoff is deferred. |
 | `focus-audio-muting` | DROPPED | NOT-APPLICABLE | NOT-APPLICABLE | Upstream platform focus query retained; Prey sound wiring is tracked by `sound-04`/`FW-26`. |
 | `dxgi-videoram` | DROPPED | NOT-APPLICABLE | NOT-APPLICABLE | Upstream DXGI implementation retained. |

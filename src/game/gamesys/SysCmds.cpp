@@ -8,9 +8,10 @@
 
 #include "TypeInfo.h"
 
-// Win64 passes float arguments in a different register class from integer and
-// pointer arguments. Keep a runtime smoke command for the exact mixed signature
-// that requires CPU_EASYARGS=0 and the generated callback table.
+// 64-bit ABIs pass floats in a different register class from integer and
+// pointer arguments, and the easy path also truncates pointers to 32 bits.
+// Keep a runtime smoke command for the mixed signature that requires
+// CPU_EASYARGS=0 and the generated callback table.
 static const idEventDef EV_EventDispatchSmoke( "<eventDispatchSmoke>", "fe" );
 
 class idEventDispatchSmokeTarget : public idClass {
