@@ -233,6 +233,8 @@
 	"#str_122311"	"Team Balance"
 	"#str_122312"	"Run Map Cycle Script"
 	"#str_122313"	"Bots join when the server starts and fill free player slots, up to Max Players. Named characters give each bot its own model, style and voice."
+	"#str_122314"	"Depth of Field"
+	"#str_122315"	"Blur Strength"
 	"#str_200040"	"Map"
 	"#str_200292"	"Add to Favorites"
 	"#str_200293"	"Remove Favorite"

@@ -515,7 +515,7 @@ const PlayerSetting* FindPlayerSetting(const std::string& cvar) {
 		{"r_shadowMapSize",{0,512,4096,true,{},{512,1024,2048,4096}}},{"r_shadowMapFilterMode",{0,0,2,true,{},{0,1,2}}},
 		{"r_softParticles",{1}},{"r_temporalAA",{0,0,2,true,{},{0,1,2}}},{"r_resolutionScaleMode",{0,0,3,true,{},{0,1,2,3}}},
 		{"r_resolutionScaleSharpness",{0,0,1.5,false}},{"r_bloomThreshold",{0,0,16,false}},{"r_motionBlurStrength",{0,0,2,false}},
-		{"r_glowStrength",{0,0,4,false}},{"s_dialogueVolume",{0,0,1,false}},{"s_useEAXOcclusion",{1}},{"s_airAbsorption",{1}},
+		{"r_glowStrength",{0,0,4,false}},{"r_depthOfField",{1}},{"r_depthOfFieldRadius",{0,0,32,false}},{"s_dialogueVolume",{0,0,1,false}},{"s_useEAXOcclusion",{1}},{"s_airAbsorption",{1}},
 		{"s_outputLimiter",{1}},{"s_muteUnfocused",{1}},
 		// Its MultiPrey page: Player Settings' data rate, Create Server's
 		// advanced rows that are not Create Server verbs, and Find Servers'

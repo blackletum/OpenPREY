@@ -2140,7 +2140,7 @@ page up to 28.
 | Video | Display | Screen: Rendering API, Monitor, Video Resolution, Full Screen, Fullscreen Mode, Borderless Window, Refresh Rate, Span All Monitors, Window Size, Custom Resolution | Frame and Scaling: Vertical Sync, Frame Rate Limit, Render Scale, Upscaling and Upscale Sharpness (new); Picture: Brightness, Gamma |
 | | Quality | The Detect box, Quality Preset; Lighting: Use Shader Programs, Shader Detail, Enable Shadows, Shadow Maps, Shadow Map Size and Shadow Filtering (new) | Surfaces: Enable Specular, Enable Bump Maps, High Quality Specular, Sharpen Bumpmaps, Use Glow, Image Anisotropy, Soft Particles (new), High Quality Skinning |
 | | Post FX | Anti-Aliasing: MSAA Samples, MSAA Alpha Coverage, Post Anti-Aliasing, Temporal AA (new); Ambient Occlusion: SSAO, SSAO Radius, SSAO Intensity | Bloom and HDR: Bloom, Bloom Intensity, Bloom Radius, Bloom Threshold (new), HDR Tone Mapping, HDR Exposure, HDR White Point, Color Saturation, Color Contrast |
-| | Advanced FX | Motion Blur: Motion Blur, Motion Blur Strength (new); CRT Monitor: CRT Monitor, CRT Strength, Chromatic Aberration | Glow: Glow Strength (new) |
+| | Advanced FX | Motion Blur: Motion Blur, Motion Blur Strength (new); CRT Monitor: CRT Monitor, CRT Strength, Chromatic Aberration | Glow: Glow Strength (new); Depth of Field (new): Depth of Field, Blur Strength |
 | Audio | — | Volume: Effect Volume, Music Volume, Dialogue Volume (new), Level Load Music; Output: Sound System, Speaker Setup or Sound Device, Reverse Channels or EAX | 3D Audio (new): Occlusion, Air Absorption, Output Limiter, Mute When Unfocused |
 
 The stock Controls page's Help row is left out: its `togglehelp` command is

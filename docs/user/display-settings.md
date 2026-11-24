@@ -306,8 +306,8 @@ Motion blur (`r_motionBlur 1`, on in the `maximum` preset) smears the scene alon
 
 The first time Tommy raises a weapon he turns it over in his hands. While he does, the focus pulls onto the weapon: the world behind it goes soft, the weapon and his hands stay sharp, and the focus lets go as the weapon comes up. It works on OpenGL and Vulkan, with or without the other post-processing effects, and never in a VR headset.
 
-- `r_depthOfField 0` turns it off (default 1).
-- `r_depthOfFieldRadius` (9) is the widest blur, in pixels of a 1080-line view; it scales with the window, so the look is the same at any resolution. 0 also turns it off.
+- `r_depthOfField 0` turns it off (default 1): Options > Video > Advanced FX > Depth of Field.
+- `r_depthOfFieldRadius` (9) is the widest blur, in pixels of a 1080-line view; it scales with the window, so the look is the same at any resolution. 0 also turns it off. It is the Blur Strength slider under the same heading.
 
 ## Resolution Scale
 
