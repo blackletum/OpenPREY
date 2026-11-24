@@ -433,6 +433,9 @@ void idGameLocal::Shutdown( void ) {
 	// shutdown the model exporter
 	idModelExport::Shutdown();
 
+	// generated animation caches still being written
+	idMD5Anim_FinishGeneratedCacheWrites();
+
 	idEvent::Shutdown();
 
 	delete[] locationEntities;
@@ -453,8 +456,8 @@ void idGameLocal::Shutdown( void ) {
 	delete mapFile;
 	mapFile = NULL;
 
-	// free the collision map
-	collisionModelManager->FreeMap();
+	// MapShutdown, called above, already released the map's collision models;
+	// a second FreeMap here would take their reference count below zero.
 
 	ShutdownConsoleCommands();
 
@@ -1789,6 +1792,15 @@ void idGameLocal::MapShutdown( void ) {
 	idClipModel::ClearTraceModelCache();
 
 	ShutdownAsyncNetwork();
+
+	// Drop this map's collision-model reference before clearing the name, and
+	// free every model nothing references any more. The engine's collision
+	// manager keeps models until they are purged (as openQ4's game does here);
+	// releasing them only at game shutdown pinned each visited map in the
+	// fixed MAX_SUBMODELS table, and the fifth campaign map loaded in one
+	// session failed with "LoadModel: no free slots".
+	collisionModelManager->FreeMap( GetMapName() );
+	collisionModelManager->PurgeModels();
 
 	mapFileName.Clear();
 
