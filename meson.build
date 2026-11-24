@@ -710,6 +710,7 @@ if get_option('build_native_tests')
     files(
       'tools/tests/native/LevelLoadCacheFormatTest.cpp',
       'src/framework/LevelLoadCacheFormat.cpp',
+      'src/idlib/CryptoHash.cpp',
     ),
     include_directories: root_include_dir,
     install: false,
