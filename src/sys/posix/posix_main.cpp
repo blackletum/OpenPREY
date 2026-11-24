@@ -1842,6 +1842,29 @@ static char posix_fatalBreadcrumbPath[ MAX_OSPATH ];
 
 /*
 ================
+Posix_MkdirParents
+
+Creates every missing directory on the way to path, like mkdir -p.
+================
+*/
+static void Posix_MkdirParents( const char *path ) {
+	char buffer[ 4096 ];
+	if ( path == NULL || path[0] == '\0' || strlen( path ) >= sizeof( buffer ) ) {
+		return;
+	}
+	idStr::Copynz( buffer, path, sizeof( buffer ) );
+	for ( char *p = buffer + 1; *p != '\0'; ++p ) {
+		if ( *p == '/' ) {
+			*p = '\0';
+			Sys_Mkdir( buffer );
+			*p = '/';
+		}
+	}
+	Sys_Mkdir( buffer );
+}
+
+/*
+================
 Posix_InitFatalBreadcrumbPath
 
 Resolves and caches <savepath>/<gamedir>/logs/fatal.txt (creating the
@@ -1861,9 +1884,10 @@ void Posix_InitFatalBreadcrumbPath( void ) {
 
 	idStr directory = savePath;
 	directory.AppendPath( OPENQ4_GAMEDIR );
-	Sys_Mkdir( directory.c_str() );
 	directory.AppendPath( "logs" );
-	Sys_Mkdir( directory.c_str() );
+	// On a first run the save path itself (~/.local/share/openpr06, and on a
+	// fresh account ~/.local/share) does not exist yet; create every level.
+	Posix_MkdirParents( directory.c_str() );
 
 	idStr path = directory;
 	path.AppendPath( "fatal.txt" );
