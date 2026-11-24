@@ -8260,6 +8260,7 @@ void idCommonLocal::LoadGameDLL( void ) {
 	gameImport.declManager				= ::declManager;
 	gameImport.AASFileManager			= ::AASFileManager;
 	gameImport.collisionModelManager	= ::collisionModelManager;
+	gameImport.vrSystem					= ::vrSystem;	// openPR06: appended to v7 (Game.h)
 #if defined( INGAME_PROFILER_ENABLED ) && INGAME_PROFILER_ENABLED
 	gameImport.profiler					= NULL;
 #endif

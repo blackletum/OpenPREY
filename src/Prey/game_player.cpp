@@ -2043,6 +2043,18 @@ void hhPlayer::Weapon_GUI( void ) {
 
 /*
 ================
+hhPlayer::CrosshairWanted
+
+openPR06: whether the weapon crosshair is up, split out of UpdateCrosshairs
+so the VR aim marker (hhPlayerView::GetVRAimMarker) follows the same rule
+================
+*/
+bool hhPlayer::CrosshairWanted( void ) {
+	return !privateCameraView && !IsLocked(idealWeapon) && (!hand.IsValid() || hand->IsLowered()) && !InCinematic() && weapon.IsValid() && g_crosshair.GetInteger();
+}
+
+/*
+================
 hhPlayer::UpdateCrosshairs
 HUMANHEAD PDM
 ================
@@ -2052,9 +2064,17 @@ void hhPlayer::UpdateCrosshairs() {
 	bool targeting = false;
 	int crosshair = 0;
 
-	if ( !privateCameraView && !IsLocked(idealWeapon) && (!hand.IsValid() || hand->IsLowered()) && !InCinematic() && weapon.IsValid() && g_crosshair.GetInteger() ) {
+	if ( CrosshairWanted() ) {
 		weapon->UpdateCrosshairs(combatCrosshair, targeting);
 		crosshair = g_crosshair.GetInteger();
+	}
+
+	// openPR06 VR: the eyes marked the weapon hand's shot where it lands
+	// this frame; a crosshair on the virtual screen would hang off that line
+	if ( playerView.VRAimMarked() ) {
+		crosshair = 0;
+		combatCrosshair = false;
+		targeting = false;
 	}
 
 	cursor->SetStateBool( "combatcursor", targeting ? false : combatCrosshair );

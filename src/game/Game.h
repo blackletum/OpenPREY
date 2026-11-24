@@ -302,6 +302,8 @@ extern idGameEdit *				gameEdit;
 
 const int GAME_API_VERSION		= 7;
 
+class idVRSystem;
+
 typedef struct {
 
 	int							version;				// API version
@@ -324,6 +326,13 @@ typedef struct {
 	hhProfiler *				profiler;				// in-game profiler
 #endif	
 	// HUMANHEAD END
+
+	// openPR06 VR: appended after Prey's v7 members, so the API version stays
+	// 7 and the members above keep their offsets. The engine's tracked head
+	// and controller poses (src/framework/VRSystem.h); openPR06's engine never
+	// passes NULL (builds without OpenXR pass the null system, which never
+	// activates), but the game checks anyway.
+	idVRSystem *				vrSystem;
 
 } gameImport_t;
 

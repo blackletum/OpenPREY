@@ -25,6 +25,7 @@ idUserInterfaceManager *	uiManager = NULL;
 idDeclManager *				declManager = NULL;
 idAASFileManager *			AASFileManager = NULL;
 idCollisionModelManager *	collisionModelManager = NULL;
+idVRSystem *				vrSystem = NULL;				// openPR06 VR (gameImport_t::vrSystem)
 idCVar *					idCVar::staticVars = NULL;
 
 // HUMANHEAD pdm
@@ -109,6 +110,7 @@ extern "C" gameExport_t *GetGameAPI( gameImport_t *import ) {
 		declManager					= import->declManager;
 		AASFileManager				= import->AASFileManager;
 		collisionModelManager		= import->collisionModelManager;
+		vrSystem					= import->vrSystem;
 
 		// HUMANHEAD pdm
 #if INGAME_PROFILER_ENABLED
@@ -157,6 +159,7 @@ void TestGameAPI( void ) {
 	testImport.declManager				= ::declManager;
 	testImport.AASFileManager			= ::AASFileManager;
 	testImport.collisionModelManager	= ::collisionModelManager;
+	testImport.vrSystem					= ::vrSystem;
 
 	// HUMANHEAD pdm
 #if INGAME_PROFILER_ENABLED

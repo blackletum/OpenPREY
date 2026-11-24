@@ -8,27 +8,51 @@ the game in stereo at your headset's resolution, tracks your head, turns a
 motion controller's aim into player input, and shows the HUD, menus, loading
 screens and video cinematics on floating screens in front of you.
 
-VR mode is **experimental** and **untested with PREY**. Nobody has yet played
-PREY's wall-walking, gravity changes, portals or spirit walk in a headset.
+VR mode is **experimental**. It has been checked only against openQ4's
+simulated OpenXR runtime (`tools/tests/openxr_vr_prey_smoke.py`), not on a real
+headset. Nobody has yet played PREY's wall-walking, gravity changes, portals or
+spirit walk in a headset.
 
 OpenXR is built into the SDL3 client on Windows and Linux (Meson option
 `openxr`, on by default when it can be built). Dedicated servers never include
 it.
 
-## What PREY's game module doesn't do
+## What PREY's game module does in VR
 
-openQ4 built part of its VR support into its Quake 4 game code. PREY's game
-module, built from the PREY SDK, has no VR-specific code, so these parts are
-missing in openPR06:
+openQ4 built part of its VR support into its Quake 4 game code. openPR06 ports
+the core of it into PREY's game module (`hhPlayerView`):
 
-- the gun drawn in your hand and shots leaving it (the `vr_weaponOffset*` and
+- your own first-person view is drawn once per eye, in stereo, from your
+  tracked head;
+- the head tracking follows PREY's gravity: on a wall-walk or after a gravity
+  flip, your play space turns with your character, so "up" in the headset is
+  your character's up;
+- you hear from where your head is;
+- the comfort vignette darkens the edges of your view while the stick moves
+  or turns you;
+- aiming with the controller (`vr_aimMode 1`), a red dot marks where your shot
+  lands, at the target's depth, in place of the crosshair;
+- the rifle's scope magnifies both eyes;
+- view bob, screen shake and the view's weapon kick stay out of the eyes. The
+  low-health tint, spirit walk's tint, view overlays and fades go into the
+  eyes; screen blobs and the HUD go on the floating HUD.
+
+These play flat on the floating screen instead: cutscenes and other scripted
+cameras, third person (`pm_thirdPerson`), the death view, and riding the
+shuttle or any other vehicle.
+
+Still missing next to openQ4:
+
+- the gun held in your hand: the gun is drawn ahead of your eyes, pointing
+  where you aim, and shots leave from your eyes (the `vr_weaponOffset*` and
   `vr_weaponPitch` settings have nothing to move);
+- the beam of `vr_aimLaser 2`: it shows the dot only;
+- your own body in the headset (`vr_body`);
 - physical crouching: the engine flags a crouched head, but PREY's game
   doesn't read the flag, so use your crouch button;
 - vibration on shots and hits, and room-scale collision feedback;
-- the comfort changes openQ4 made to view bob, weapon kick and screen shake.
-
-The engine-side parts described below still apply.
+- stereo in vehicles, and the effects that capture the screen (motion blur,
+  scratch overlays), which stand down in the eyes.
 
 ## What you need
 
@@ -123,8 +147,8 @@ your front hand.
 - While the stick moves you or turns you smoothly, the edges of your view
   darken around a clear centre (the comfort vignette); walking about your
   room never triggers it.
-- Menus, loading screens and video cinematics appear on the floating screen
-  instead of moving your view. Nobody has tried PREY's in-game cutscenes in VR.
+- Menus, loading screens, video cinematics and PREY's in-game cutscenes appear
+  on the floating screen instead of moving your view.
 
 With `vr_roomScale 1`, the steps you take in your room reach the game as
 ordinary movement input, and leaning moves only your head, up to

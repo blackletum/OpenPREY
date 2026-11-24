@@ -377,6 +377,7 @@ public:
 	virtual float		CalcFov( bool honorZoom );	
 	virtual void		MangleControls(usercmd_t *cmd);
 	virtual	void		UpdateCrosshairs( void );
+	bool				CrosshairWanted( void );	// openPR06: the weapon crosshair is up (UpdateCrosshairs, the VR aim marker)
 
 	void				SetOverlayGui(const char *guiName);
 
