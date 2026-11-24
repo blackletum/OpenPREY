@@ -358,6 +358,12 @@ idVarDef *idCompiler::FindImmediate( const idTypeDef *type, const eval_t *eval, 
 
 	etype = type->Type();
 
+	bool indexed;
+	def = gameLocal.program.FindImmediateIndexed( type, eval, string, indexed );
+	if ( indexed ) {
+		return def;
+	}
+
 	// check for a constant with the same value
 	for( def = gameLocal.program.GetDefList( "<IMMEDIATE>" ); def != NULL; def = def->Next() ) {
 		if ( def->TypeDef() != type ) {
@@ -446,6 +452,7 @@ idVarDef *idCompiler::GetImmediate( idTypeDef *type, const eval_t *eval, const c
 		} else {
 			def->SetValue( *eval, true );
 		}
+		gameLocal.program.AddImmediateIndexed( def );
 	}
 
 	return def;

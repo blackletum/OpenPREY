@@ -1298,6 +1298,219 @@ idVarDef *idProgram::GetDefList( const char *name ) const {
 
 /*
 ============
+Immediate index
+
+The compiler shares one "<IMMEDIATE>" def per type and value. idCompiler::
+FindImmediate found it by walking every immediate in the program, so each
+constant in a script cost a pass over all of them: compiling prey_main.script
+spent most of its time there. The index hashes the type and value to the
+immediates that have them and compares them exactly as that walk did, newest
+first, so it returns the def the walk returned. FreeDef takes a def out of it;
+Restart and FreeData drop it, and the next lookup rebuilds it from the def
+list. Types the walk does not compare stay with the walk.
+============
+*/
+static bool ImmediateIndexed( const idTypeDef *type, const char *string ) {
+	switch( type->Type() ) {
+	case ev_field:
+	case ev_argsize:
+	case ev_jumpoffset:
+	case ev_entity:
+	case ev_float:
+	case ev_virtualfunction:
+	case ev_vector:
+		return true;
+	case ev_string:
+		return string != NULL;
+	default:
+		return false;
+	}
+}
+
+static unsigned int ImmediateHashMix( unsigned int hash, unsigned int value ) {
+	return ( hash ^ value ) * 16777619u;
+}
+
+static unsigned int ImmediateHashFloat( unsigned int hash, float value ) {
+	if ( value == 0.0f ) {
+		value = 0.0f;		// -0.0f compares equal to 0.0f
+	}
+	unsigned int bits;
+	memcpy( &bits, &value, sizeof( bits ) );
+	return ImmediateHashMix( hash, bits );
+}
+
+static int ImmediateHash( const idTypeDef *type, const eval_t *eval, const char *string ) {
+	unsigned int hash = ImmediateHashMix( 2166136261u, static_cast<unsigned int>( reinterpret_cast<uintptr_t>( type ) >> 4 ) );
+	switch( type->Type() ) {
+	case ev_string:
+		hash = ImmediateHashMix( hash, static_cast<unsigned int>( idStr::Hash( string ) ) );
+		break;
+	case ev_float:
+		hash = ImmediateHashFloat( hash, eval->_float );
+		break;
+	case ev_vector:
+		hash = ImmediateHashFloat( hash, eval->vector[ 0 ] );
+		hash = ImmediateHashFloat( hash, eval->vector[ 1 ] );
+		hash = ImmediateHashFloat( hash, eval->vector[ 2 ] );
+		break;
+	case ev_entity:
+		hash = ImmediateHashMix( hash, static_cast<unsigned int>( eval->entity ) );
+		break;
+	default:
+		hash = ImmediateHashMix( hash, static_cast<unsigned int>( eval->_int ) );
+		break;
+	}
+	return static_cast<int>( hash & 0x7fffffff );
+}
+
+// the value an immediate holds, in the form the compiler looks it up by
+static void ImmediateValue( const idVarDef *def, eval_t &eval, const char *&string ) {
+	memset( &eval, 0, sizeof( eval ) );
+	string = NULL;
+	switch( def->Type() ) {
+	case ev_field:			eval._int = *def->value.intPtr; break;
+	case ev_argsize:		eval._int = def->value.argSize; break;
+	case ev_jumpoffset:		eval._int = def->value.jumpOffset; break;
+	case ev_entity:			eval.entity = *def->value.intPtr; break;
+	case ev_string:			string = def->value.stringPtr; break;
+	case ev_float:			eval._float = *def->value.floatPtr; break;
+	case ev_virtualfunction:	eval._int = def->value.virtualFunction; break;
+	case ev_vector:
+		eval.vector[ 0 ] = def->value.vectorPtr->x;
+		eval.vector[ 1 ] = def->value.vectorPtr->y;
+		eval.vector[ 2 ] = def->value.vectorPtr->z;
+		break;
+	default:
+		break;
+	}
+}
+
+// the comparisons of idCompiler::FindImmediate
+static bool ImmediateMatches( const idVarDef *def, const idTypeDef *type, const eval_t *eval, const char *string ) {
+	if ( def->TypeDef() != type ) {
+		return false;
+	}
+	switch( type->Type() ) {
+	case ev_field:			return *def->value.intPtr == eval->_int;
+	case ev_argsize:		return def->value.argSize == eval->_int;
+	case ev_jumpoffset:		return def->value.jumpOffset == eval->_int;
+	case ev_entity:			return *def->value.intPtr == eval->entity;
+	case ev_string:			return idStr::Cmp( def->value.stringPtr, string ) == 0;
+	case ev_float:			return *def->value.floatPtr == eval->_float;
+	case ev_virtualfunction:	return def->value.virtualFunction == eval->_int;
+	case ev_vector:
+		return def->value.vectorPtr->x == eval->vector[ 0 ] &&
+			def->value.vectorPtr->y == eval->vector[ 1 ] &&
+			def->value.vectorPtr->z == eval->vector[ 2 ];
+	default:
+		return false;
+	}
+}
+
+/*
+============
+idProgram::AddImmediateToIndex
+
+Chains run newest first, the order of the def list.
+============
+*/
+void idProgram::AddImmediateToIndex( idVarDef *def ) {
+	eval_t eval;
+	const char *string;
+	ImmediateValue( def, eval, string );
+	if ( !ImmediateIndexed( def->TypeDef(), string ) ) {
+		return;
+	}
+	immediateHash.Add( ImmediateHash( def->TypeDef(), &eval, string ), immediateDefs.Append( def ) );
+}
+
+/*
+============
+idProgram::FindImmediateIndexed
+
+Sets indexed when the index answers for this type and value; the result is
+then the def idCompiler::FindImmediate's walk would return, or NULL.
+============
+*/
+idVarDef *idProgram::FindImmediateIndexed( const idTypeDef *type, const eval_t *eval, const char *string, bool &indexed ) {
+	indexed = ImmediateIndexed( type, string );
+	if ( !indexed ) {
+		return NULL;
+	}
+	if ( !immediateIndexValid ) {
+		idList<idVarDef *> newestFirst;
+		for( idVarDef *def = GetDefList( "<IMMEDIATE>" ); def != NULL; def = def->Next() ) {
+			newestFirst.Append( def );
+		}
+		immediateDefs.Clear();
+		immediateDefs.SetGranularity( 1024 );
+		immediateHash.Clear( 16384, 1024 );
+		immediateHash.SetGranularity( 1024 );
+		for( int i = newestFirst.Num() - 1; i >= 0; i-- ) {
+			AddImmediateToIndex( newestFirst[ i ] );
+		}
+		immediateIndexValid = true;
+	}
+	for( int i = immediateHash.First( ImmediateHash( type, eval, string ) ); i != -1; i = immediateHash.Next( i ) ) {
+		if ( ImmediateMatches( immediateDefs[ i ], type, eval, string ) ) {
+			return immediateDefs[ i ];
+		}
+	}
+	return NULL;
+}
+
+/*
+============
+idProgram::AddImmediateIndexed
+============
+*/
+void idProgram::AddImmediateIndexed( idVarDef *def ) {
+	if ( immediateIndexValid ) {
+		AddImmediateToIndex( def );
+	}
+}
+
+/*
+============
+idProgram::RemoveImmediateFromIndex
+
+The compiler frees an immediate when constant folding leaves it unused.
+============
+*/
+void idProgram::RemoveImmediateFromIndex( idVarDef *def ) {
+	if ( !immediateIndexValid || idStr::Cmp( def->Name(), "<IMMEDIATE>" ) != 0 ) {
+		return;
+	}
+	eval_t eval;
+	const char *string;
+	ImmediateValue( def, eval, string );
+	if ( !ImmediateIndexed( def->TypeDef(), string ) ) {
+		return;
+	}
+	const int hash = ImmediateHash( def->TypeDef(), &eval, string );
+	for( int i = immediateHash.First( hash ); i != -1; i = immediateHash.Next( i ) ) {
+		if ( immediateDefs[ i ] == def ) {
+			immediateHash.Remove( hash, i );
+			immediateDefs[ i ] = NULL;
+			return;
+		}
+	}
+}
+
+/*
+============
+idProgram::InvalidateImmediateIndex
+============
+*/
+void idProgram::InvalidateImmediateIndex( void ) {
+	immediateDefs.Clear();
+	immediateHash.Free();
+	immediateIndexValid = false;
+}
+
+/*
+============
 idProgram::AddDefToNameList
 ============
 */
@@ -1523,6 +1736,7 @@ void idProgram::FreeDef( idVarDef *def, const idVarDef *scope ) {
 		varDefs[ i ]->num = i;
 	}
 
+	RemoveImmediateFromIndex( def );
 	delete def;
 }
 
@@ -1999,6 +2213,7 @@ void idProgram::FreeData( void ) {
 	int i;
 
 	// free the defs
+	InvalidateImmediateIndex();
 	varDefs.DeleteContents( true );
 	varDefNames.DeleteContents( true );
 	varDefNameHash.Free();
@@ -2248,6 +2463,7 @@ void idProgram::Restart( void ) {
 		typeNameHash.Add( typeNameHash.GenerateKey( types[ i ]->Name(), true ), i );
 	}
 
+	InvalidateImmediateIndex();
 	for( i = top_defs; i < varDefs.Num(); i++ ) {
 		delete varDefs[ i ];
 	}

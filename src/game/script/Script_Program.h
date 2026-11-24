@@ -502,7 +502,15 @@ private:
 	int											top_defs;
 	int											top_files;
 
+	// "<IMMEDIATE>" constants by type and value; see FindImmediateIndexed
+	idList<idVarDef *>							immediateDefs;
+	idHashIndex									immediateHash;
+	bool										immediateIndexValid;
+
 	void										CompileStats( void );
+	void										InvalidateImmediateIndex( void );
+	void										AddImmediateToIndex( idVarDef *def );
+	void										RemoveImmediateFromIndex( idVarDef *def );
 
 public:
 	idVarDef									*returnDef;
@@ -543,6 +551,8 @@ public:
 	void										FreeDef( idVarDef *d, const idVarDef *scope );
 	idVarDef									*FindFreeResultDef( idTypeDef *type, const char *name, idVarDef *scope, const idVarDef *a, const idVarDef *b );
 	idVarDef									*GetDefList( const char *name ) const;
+	idVarDef									*FindImmediateIndexed( const idTypeDef *type, const eval_t *eval, const char *string, bool &indexed );
+	void										AddImmediateIndexed( idVarDef *def );
 	void										AddDefToNameList( idVarDef *def, const char *name );
 
 	function_t									*FindFunction( const char *name ) const;						// returns NULL if function not found
