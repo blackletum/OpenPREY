@@ -41,12 +41,17 @@ If you have questions concerning this license or the applicable additional terms
 #include <sys/stat.h>
 #include <limits>
 #include <mutex>
+#include <unordered_set>
 #include <thread>
 #include <algorithm>
 #include <atomic>
 #include <string>
 #include <unordered_map>
 #include <vector>
+
+// Defined in Unzip.cpp: reuse idle per-pack read handles (see unzReOpen).
+extern void unzSetHandleReuse( bool enable );
+extern void unzReleaseIdleHandles( const char *path );
 
 #if defined( USE_SDL3 )
 	#include <SDL3/SDL_filesystem.h>
@@ -1974,6 +1979,8 @@ private:
 	int						HashFileName( const char *fname ) const;
 	int						ListOSFiles( const char *directory, const char *extension, idStrList &list );
 	FILE *					OpenOSFile( const char *name, const char *mode, idStr *caseSensitiveName = NULL );
+	FILE *					OpenOSFileForWrite( const char *OSPath, const char *mode );
+	void					ForgetCreatedOSPaths( void );
 	FILE *					OpenOSFileCorrectName( idStr &path, const char *mode );
 	int						DirectFileLength( FILE *o );
 	void					CopyFile( idFile *src, const char *toOSPath );
@@ -2064,6 +2071,7 @@ idCVar	idFileSystemLocal::fs_caseSensitiveOS( "fs_caseSensitiveOS", "1", CVAR_SY
 idCVar	idFileSystemLocal::fs_searchAddons( "fs_searchAddons", "0", CVAR_SYSTEM | CVAR_BOOL, "search all addon pk4s ( disables addon functionality )" );
 idCVar	idFileSystemLocal::fs_validateOfficialPaks( "fs_validateOfficialPaks", "1", CVAR_SYSTEM | CVAR_INIT | CVAR_BOOL, "verify required official Prey media pk4 files on startup" );
 idCVar	idFileSystemLocal::fs_cacheVerifiedPaks( "fs_cacheVerifiedPaks", "1", CVAR_SYSTEM | CVAR_INIT | CVAR_BOOL, "skip re-hashing an openPR06 runtime pack whose size, times, file id and zip directory are unchanged since it passed its checksum check; 0 hashes every pack at every startup" );
+static idCVar fs_reusePackHandles( "fs_reusePackHandles", "1", CVAR_SYSTEM | CVAR_BOOL, "reuse idle read handles of a pk4 instead of opening the pack file again for every member read" );
 idCVar	idFileSystemLocal::fs_cacheLooseDirectories( "fs_cacheLooseDirectories", "1", CVAR_SYSTEM | CVAR_BOOL, "during a level load, remember which loose search-path directories do not exist, so a lookup skips them instead of failing an open in each (case-insensitive filesystems only)" );
 
 idFileSystemLocal	fileSystemLocal;
@@ -2629,6 +2637,41 @@ int idFileSystemLocal::DirectFileLength( FILE *o ) {
 	return end;
 }
 
+static std::mutex createdOSPathLock;
+static std::unordered_set<std::string> createdOSPaths;
+
+/*
+============
+idFileSystemLocal::ForgetCreatedOSPaths
+
+A remembered directory may have been removed outside the engine; the next
+write recreates the whole path.
+============
+*/
+void idFileSystemLocal::ForgetCreatedOSPaths( void ) {
+	std::lock_guard<std::mutex> lock( createdOSPathLock );
+	createdOSPaths.clear();
+}
+
+/*
+============
+idFileSystemLocal::OpenOSFileForWrite
+
+Creates the directories for OSPath and opens it, retrying once with the
+directory memory cleared when the open fails.
+============
+*/
+FILE *idFileSystemLocal::OpenOSFileForWrite( const char *OSPath, const char *mode ) {
+	CreateOSPath( OSPath );
+	FILE *fp = OpenOSFile( OSPath, mode );
+	if ( fp == NULL ) {
+		ForgetCreatedOSPaths();
+		CreateOSPath( OSPath );
+		fp = OpenOSFile( OSPath, mode );
+	}
+	return fp;
+}
+
 /*
 ============
 idFileSystemLocal::CreateOSPath
@@ -2650,9 +2693,18 @@ void idFileSystemLocal::CreateOSPath( const char *OSPath ) {
 	idStr path( OSPath );
 	for( ofs = &path[ 1 ]; *ofs ; ofs++ ) {
 		if ( *ofs == PATHSEPERATOR_CHAR ) {	
-			// create the directory
+			// create the directory, once per process: writing a generated cache
+			// otherwise asks the OS to create every component of the path again
+			// for every file (a dozen mkdir calls each)
 			*ofs = 0;
-			Sys_Mkdir( path );
+			bool create;
+			{
+				std::lock_guard<std::mutex> lock( createdOSPathLock );
+				create = createdOSPaths.insert( path.c_str() ).second;
+			}
+			if ( create ) {
+				Sys_Mkdir( path );
+			}
 			*ofs = PATHSEPERATOR_CHAR;
 		}
 	}
@@ -6012,6 +6064,7 @@ void idFileSystemLocal::FreePack( pack_t *pack ) const {
 	}
 
 	if ( pack->handle ) {
+		unzReleaseIdleHandles( pack->pakFilename );
 		unzClose( pack->handle );
 	}
 
@@ -8215,6 +8268,7 @@ idFile_InZip * idFileSystemLocal::ReadFileFromZip( pack_t *pak, fileInPack_t *pa
 	idFile_InZip *file = new idFile_InZip();
 
 	// open a new file on the pakfile
+	unzSetHandleReuse( fs_reusePackHandles.GetBool() );
 	file->z = unzReOpen( pak->pakFilename, pak->handle );
 	if ( file->z == NULL ) {
 		common->FatalError( "Couldn't reopen %s", pak->pakFilename.c_str() );
@@ -8628,10 +8682,9 @@ idFile *idFileSystemLocal::OpenFileWrite( const char *relativePath, const char *
 	ClearDirCache();
 
 	common->DPrintf( "writing to: %s\n", OSpath.c_str() );
-	CreateOSPath( OSpath );
 
 	f = new idFile_Permanent();
-	f->o = OpenOSFile( OSpath, "wb" );
+	f->o = OpenOSFileForWrite( OSpath, "wb" );
 	if ( !f->o ) {
 		delete f;
 		return NULL;
@@ -8696,10 +8749,9 @@ idFile *idFileSystemLocal::OpenExplicitFileWrite( const char *OSPath ) {
 	}
 
 	common->DPrintf( "writing to: %s\n", OSPath );
-	CreateOSPath( OSPath );
 
 	f = new idFile_Permanent();
-	f->o = OpenOSFile( OSPath, "wb" );
+	f->o = OpenOSFileForWrite( OSPath, "wb" );
 	if ( !f->o ) {
 		delete f;
 		return NULL;
@@ -8728,10 +8780,9 @@ idFile *idFileSystemLocal::OpenExplicitFileAppend( const char *OSPath, bool sync
 	}
 
 	common->DPrintf( "appending to: %s\n", OSPath );
-	CreateOSPath( OSPath );
 
 	idFile_Permanent *f = new idFile_Permanent();
-	f->o = OpenOSFile( OSPath, "ab" );
+	f->o = OpenOSFileForWrite( OSPath, "ab" );
 	if ( !f->o ) {
 		delete f;
 		return NULL;
@@ -8770,14 +8821,13 @@ idFile *idFileSystemLocal::OpenFileAppend( const char *relativePath, bool sync, 
 	}
 
 	OSpath = BuildOSPath( path, gameFolder, relativePath );
-	CreateOSPath( OSpath );
 
 	if ( fs_debug.GetInteger() ) {
 		common->Printf( "idFileSystem::OpenFileAppend: %s\n", OSpath.c_str() );
 	}
 
 	f = new idFile_Permanent();
-	f->o = OpenOSFile( OSpath, "ab" );
+	f->o = OpenOSFileForWrite( OSpath, "ab" );
 	if ( !f->o ) {
 		delete f;
 		return NULL;
