@@ -54,6 +54,9 @@ public:
 	void				UpdateWeaponJoints(void); //rww
 
 	virtual bool		CheckThirdPersonMuzzle(idVec3 &origin, idMat3 &axis); //rww
+
+	// openPR06 VR: the view model joint shots leave by (hhWeapon::GetVRMuzzle)
+	jointHandle_t		GetBarrelJointView() const { return barrelJoints.Num() ? barrelJoints[ 0 ].view : INVALID_JOINT; }
 protected:
 	void				SetWeaponJointHandleList( const char* keyPrefix, hhCycleList<weaponJointHandle_t>& jointList );
 	void				SaveWeaponJointHandleList( const hhCycleList<weaponJointHandle_t>& jointList, idSaveGame *savefile ) const;

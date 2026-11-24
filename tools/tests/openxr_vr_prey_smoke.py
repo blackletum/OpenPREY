@@ -4,7 +4,8 @@ built with OpenXR, and retail PREY assets).
 
 openPR06's half of openQ4's VR smoke (openQ4 tools/tests/openxr_vr_smoke.py),
 cut down to what PREY's game module does: hhPlayerView renders the
-first-person view once per eye (src/Prey/game_playerview.cpp).
+first-person view once per eye (src/Prey/game_playerview.cpp), and the weapon
+hand holds the view weapon (hhPlayer::GetVRWeaponTransform).
 
 The test runtime (tools/tests/openxr/OpenXRTestRuntime.cpp, built beside the
 client) simulates a stereo headset with off-axis eyes and two controllers. It
@@ -21,12 +22,18 @@ Checks:
 - with game time stopped and the controller aiming, the aim marker
   (vr_aimLaser) is the only difference between captures: a small red dot in
   each eye, at the same height in both, whose disparity puts it in front of
-  the player at a plausible range;
+  the player at a plausible range, and a beam (vr_aimLaser 2) that adds more;
+- the gun in the hand: moving the controller 15 cm to the right, with game
+  time stopped and no marker, moves the drawn gun (and only what it covers)
+  by the same distance in the head's frame (vr_debug 2 logs the held gun);
+- the trigger fires the rifle through its default binding, and each shot
+  pulses the weapon hand's controller (a 40 ms vibration on the right hand);
 - the comfort vignette: a smooth turn at full strength darkens the eyes' top
   corners and leaves their centres clear;
 - the rifle's zoom magnifies the eyes;
 - PREY's gravity: flipped onto the ceiling (setPlayerGravity), the drawn head
-  turns upside down with the player's frame and both eyes still see the world;
+  turns upside down with the player's frame, the gun stays in the hand the
+  same way, and both eyes still see the world;
 - the log carries no errors.
 """
 from __future__ import annotations
@@ -45,9 +52,13 @@ ROOT = Path(__file__).resolve().parents[2]
 # angles of each frustum (left, right, up, down), and their separation.
 EYE_FOV = {"left": (-0.94, 0.78, 0.86, -0.92), "right": (-0.78, 0.94, 0.86, -0.92)}
 EYE_SEPARATION_M = 0.064
-# The weapon hand aims 10 degrees down. PREY fires from the eye along the
-# view the hand steers, so the shot meets the floor some metres ahead.
+# The weapon hand aims 10 degrees down from 0.35 m below the eyes, and the
+# gun in it fires from the hand, so the shot meets the floor some metres ahead.
 LASER_HAND_POSE = "0.2 1.25 -0.35 0 -10 0"
+# The same aim from 15 cm further right: the held gun follows the controller.
+SHIFTED_HAND_POSE = "0.35 1.25 -0.35 0 -10 0"
+HAND_SHIFT_M = 0.15
+WORLD_SCALE = 39.37  # vr_worldScale: game units per metre
 LEVEL_HAND_POSE = "0.2 1.25 -0.35 0 0 0"
 DEFAULT_BASEPATH = Path(r"C:\Program Files (x86)\Human Head Studios\Prey")
 
@@ -143,10 +154,16 @@ def main(argv: list[str] | None = None) -> None:
         f"when {marker('laser_aim')} hand right {LASER_HAND_POSE}",
         f"when {marker('laser_off')} capture {profile / 'xr_laser_off'}",
         f"when {marker('laser_dot')} capture {profile / 'xr_laser_dot'}",
+        f"when {marker('laser_beam')} capture {profile / 'xr_laser_beam'}",
+        f"when {marker('hand_shift')} hand right {SHIFTED_HAND_POSE}",
+        f"when {marker('hand_moved')} capture {profile / 'xr_hand_moved'}",
+        f"when {marker('hand_back')} hand right {LASER_HAND_POSE}",
         f"when {marker('smooth')} stick right 1 0",
         f"when {marker('vignette')} capture {profile / 'xr_vignette'}",
         f"when {marker('smooth_stop')} stick right 0 0",
         f"when {marker('laser_done')} hand right {LEVEL_HAND_POSE}",
+        f"when {marker('fire')} button right trigger 1",
+        f"when {marker('fire_release')} button right trigger 0",
         f"when {marker('zoom_off')} capture {profile / 'xr_zoom_off'}",
         f"when {marker('zoom_on')} capture {profile / 'xr_zoom_on'}",
         f"when {marker('flipped')} capture {profile / 'xr_flipped'}",
@@ -156,6 +173,8 @@ def main(argv: list[str] | None = None) -> None:
 
     commands = [
         "waitMsec 4000", "echo VR_GAMEPLAY_ACTIVE", "vr_status",
+        # the profile persists between runs: start from the default trigger binding
+        "bind JOY15 _attack",
         "give weapon_rifle", "waitMsec 2500",
         "condump vr_marker_gameplay.txt", "waitMsec 800",
         # a head turn changes what the eyes see
@@ -165,12 +184,23 @@ def main(argv: list[str] | None = None) -> None:
         # the aim marker against a frozen world: only the marker may change
         "condump vr_marker_laser_aim.txt", "waitMsec 800", "g_stopTime 1", "vr_aimLaser 0", "waitMsec 800",
         "condump vr_marker_laser_off.txt", "waitMsec 500", "vr_aimLaser 1", "waitMsec 500",
-        "condump vr_marker_laser_dot.txt", "waitMsec 500",
+        "condump vr_marker_laser_dot.txt", "waitMsec 500", "vr_aimLaser 2", "waitMsec 500",
+        "condump vr_marker_laser_beam.txt", "waitMsec 500",
+        # the gun in the hand, still against the frozen world and with no
+        # marker: the controller moves right, and the drawn gun with it
+        "vr_aimLaser 0", "vr_debug 2", "waitMsec 300", "vr_debug 1", "echo VR_HAND_AT_REST",
+        "condump vr_marker_hand_shift.txt", "waitMsec 800",
+        "vr_debug 2", "waitMsec 300", "vr_debug 1", "echo VR_HAND_SHIFTED",
+        "condump vr_marker_hand_moved.txt", "waitMsec 500",
+        "condump vr_marker_hand_back.txt", "waitMsec 800", "vr_aimLaser 1", "waitMsec 300",
         # comfort: a smooth turn darkens each eye's edges around a clear centre
         "vr_turnMode 1", "vr_comfortVignette 1", "condump vr_marker_smooth.txt", "waitMsec 600",
         "condump vr_marker_vignette.txt", "waitMsec 300",
         "condump vr_marker_smooth_stop.txt", "waitMsec 300", "vr_turnMode 0", "vr_comfortVignette 0.5",
         "g_stopTime 0", "condump vr_marker_laser_done.txt", "waitMsec 800",
+        # the right trigger's default binding fires the rifle from the hand
+        "echo VR_FIRE", "condump vr_marker_fire.txt", "waitMsec 400",
+        "condump vr_marker_fire_release.txt", "waitMsec 1000",
         # the rifle's scope magnifies each eye
         "g_stopTime 1", "waitMsec 300", "condump vr_marker_zoom_off.txt", "waitMsec 400", "g_stopTime 0",
         'script "entity w = $player1.getWeaponEntity(); w.zoomIn();"', "waitMsec 1500", "g_stopTime 1",
@@ -248,7 +278,8 @@ def main(argv: list[str] | None = None) -> None:
     assert not any(e.get("event") in ("end_frame_invalid", "create_session_rejected", "create_swapchain_rejected")
                    for e in events), "the runtime rejected a submission"
 
-    stages = ("gameplay", "turned", "laser_off", "laser_dot", "vignette", "zoom_off", "zoom_on", "flipped")
+    stages = ("gameplay", "turned", "laser_off", "laser_dot", "laser_beam", "hand_moved", "vignette", "zoom_off",
+              "zoom_on", "flipped")
     captures = {}
     for e in events:
         if e.get("event") == "capture":
@@ -276,13 +307,18 @@ def main(argv: list[str] | None = None) -> None:
     # the aim marker: the same dot in both eyes, fusing in front of the player
     dots = {}
     for eye in ("left", "right"):
-        off, dot = image("xr_laser_off", eye), image("xr_laser_dot", eye)
-        box, _ = changed_box(off, dot)
+        off, dot, beam = image("xr_laser_off", eye), image("xr_laser_dot", eye), image("xr_laser_beam", eye)
+        box, dot_pixels = changed_box(off, dot)
         assert box is not None, f"the aim marker changed nothing in the {eye} eye"
         assert box[2] - box[0] <= 24 and box[3] - box[1] <= 24, \
             f"the {eye} eye changed beyond a small dot with game time stopped: {box}"
         red = sum(1 for r, g, b in dot.crop(box).getdata() if r > 150 and r > g + 60 and r > b + 60)
         assert red >= 4, f"the {eye} eye's marker is not a red dot ({red} red pixels in {box})"
+        # the beam leaves the gun in the hand, below the eyes, for the dot
+        beam_box, beam_pixels = changed_box(off, beam)
+        assert beam_pixels > dot_pixels * 2, f"the {eye} eye's beam adds too little ({beam_pixels} vs {dot_pixels} pixels)"
+        assert beam_box[3] > box[3] + 20, f"the {eye} eye's beam should rise from the gun below the dot ({beam_box} vs {box})"
+        results[f"beam_pixels_{eye}"] = beam_pixels
         x, y = (box[0] + box[2] - 1) / 2.0, (box[1] + box[3] - 1) / 2.0
         dots[eye] = eye_tangents(eye, x, y, dot.width, dot.height)
     (left_x, left_y), (right_x, right_y) = dots["left"], dots["right"]
@@ -291,6 +327,37 @@ def main(argv: list[str] | None = None) -> None:
     assert disparity > 0.0, f"the marker's disparity puts it behind the eyes ({disparity:.5f})"
     results["marker_depth_m"] = EYE_SEPARATION_M / disparity
     assert 1.0 < results["marker_depth_m"] < 40.0, f"the marker fuses at {results['marker_depth_m']:.2f} m"
+
+    # the gun in the hand: the held gun moves with the controller, in the
+    # head's own axes (forward, left, up), by what the controller moved
+    def held_weapon(tag: str) -> tuple[float, float, float]:
+        found = re.findall(r"VR held weapon \d+ \([^)]*\) head-relative \(\s*(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s*\)",
+                           text.partition(tag)[0])
+        assert found, f"vr_debug 2 logged no held weapon before {tag}: the gun is not in the hand"
+        return tuple(float(v) for v in found[-1])
+    rest, shifted = held_weapon("VR_HAND_AT_REST"), held_weapon("VR_HAND_SHIFTED")
+    results["held_weapon_rest"], results["held_weapon_shifted"] = rest, shifted
+    expected = HAND_SHIFT_M * WORLD_SCALE
+    assert abs((rest[1] - shifted[1]) - expected) < 0.5, \
+        f"moving the controller {HAND_SHIFT_M} m right should move the held gun {expected:.2f} units right: {rest} -> {shifted}"
+    assert abs(rest[0] - shifted[0]) < 0.5 and abs(rest[2] - shifted[2]) < 0.5, \
+        f"a sideways controller move should move the held gun only sideways: {rest} -> {shifted}"
+    for eye in ("left", "right"):
+        rest_image, moved_image = image("xr_laser_off", eye), image("xr_hand_moved", eye)
+        box, pixels = changed_box(rest_image, moved_image)
+        assert box is not None and pixels > 400, \
+            f"moving the controller barely changed the {eye} eye with game time stopped ({pixels} pixels): the gun did not follow"
+        height = rest_image.height
+        assert box[3] > height // 2, f"the {eye} eye changed only above its centre, not where the gun hangs: {box}"
+        results[f"hand_moved_pixels_{eye}"] = pixels
+
+    # a shot pulses the weapon hand, and only it (a hit would pulse both, for 90 ms)
+    assert "VR_FIRE" in text, "the fire stage never ran"
+    pulses = [e for e in events if e.get("event") == "haptic" and e.get("duration_ns") == 40_000_000]
+    assert pulses, "firing the rifle did not vibrate a controller"
+    assert all(e.get("hand") == "/user/hand/right" and 0.4 <= e["amplitude"] <= 1.0 for e in pulses), \
+        f"a shot must pulse only the right (weapon) hand: {pulses}"
+    results["fire_pulses"] = len(pulses)
 
     # the vignette: the eyes' top corners go dark, their centres stay clear
     for eye in ("left", "right"):
@@ -322,6 +389,12 @@ def main(argv: list[str] | None = None) -> None:
     assert results["head_up_z_normal"] > 0.9, f"the head should stand up in normal gravity ({results['head_up_z_normal']})"
     assert results["head_up_z_flipped"] < -0.9, \
         f"with gravity flipped the head should turn with the player's frame ({results['head_up_z_flipped']})"
+    # the hand hangs off the same gravity frame as the head, so the gun sits
+    # where it did relative to the head, upside down with it
+    held_normal, held_flipped = held_weapon("VR_GRAVITY_NORMAL"), held_weapon("VR_GRAVITY_FLIPPED")
+    results["held_weapon_flipped"] = held_flipped
+    assert all(abs(a - b) < 0.5 for a, b in zip(held_normal, held_flipped)), \
+        f"on the ceiling the gun should stay in the hand relative to the head: {held_normal} -> {held_flipped}"
     for eye in ("left", "right"):
         assert captures[f"flipped_{eye}"]["lit_fraction"] > 0.2, f"the {eye} eye went dark on the ceiling"
     results["flipped_eye_difference"] = max(ImageStat.Stat(ImageChops.difference(

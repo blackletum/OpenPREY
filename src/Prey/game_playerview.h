@@ -42,7 +42,7 @@ protected:
 	// openPR06 VR: the world once per headset eye (game_playerview.cpp)
 	bool				GetVRView( vrFrameState_t &frame, float &trackingYaw );
 	bool				VRView( idUserInterface *hud, const renderView_t *view, const vrFrameState_t &frame, float trackingYaw );
-	bool				GetVRAimMarker( const vrFrameState_t &frame, const renderView_t *view, const idVec3 &headOrigin, vrAimMarker_t &marker );
+	bool				GetVRAimMarker( const vrFrameState_t &frame, const idVec3 &headOrigin, bool weaponHeld, const idVec3 &weaponOrigin, const idMat3 &weaponAxis, vrAimMarker_t &marker );
 	float				VRZoomScale( void );
 	float				VRComfortVignette( float trackingYaw );
 	void				UpdateViewOverlays( void );

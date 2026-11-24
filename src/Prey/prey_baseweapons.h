@@ -176,6 +176,15 @@ class hhWeapon: public hhAnimatedEntity {
 		void				PrecomputeTraceInfo();
 		const trace_t&		GetEyeTraceInfo() const { return eyeTraceInfo; }
 
+		// openPR06 VR (hhPlayer::GetVRWeaponTransform): how the view model holds
+		// its gun, in model space, for VR_WeaponTransform
+		void				GetVRHold( idVec3 &barrel, idVec3 &grip );
+		// the muzzle where the weapon is drawn in the hand this frame
+		bool				GetVRMuzzle( const idVec3 &weaponOrigin, const idMat3 &weaponAxis, idVec3 &muzzle );
+		// re-places the drawn view model in the hand for this draw, whether or
+		// not a game tic ran since the last one
+		void				PresentVRHold( const idVec3 &origin, const idMat3 &axis );
+
 		void				SetViewAnglesSensitivity( float fov );
 
 		void				UpdateNozzleFx( void );
@@ -268,6 +277,10 @@ class hhWeapon: public hhAnimatedEntity {
 
 		idVec3				cameraShakeOffset;
 		hhPhysics_StaticWeapon	physicsObj;
+
+		// openPR06 VR, never saved: measured once from the idle animation
+		bool				vrHoldKnown;
+		idVec3				vrHoldGrip;
 
 		// 0 - no hands, 1 - right, 2 - left, 3 - both
 		int					handedness;  // nla - For determining which hands can be up with which weapons

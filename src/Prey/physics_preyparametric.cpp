@@ -60,6 +60,17 @@ bool hhPhysics_StaticWeapon::Evaluate( int timeStepMSec, int endTimeMSec ) {
 		return false;
 	}
 
+	// openPR06 VR: the weapon hand holds the player's own view weapon, so
+	// shots leave from the gun where the hand holds it (hhPlayer::GetVRWeaponTransform)
+	idVec3 vrOrigin;
+	idMat3 vrAxis;
+	if ( castSelf && selfOwner->weapon.GetEntity() == castSelf && selfOwner->GetVRWeaponTransform( vrOrigin, vrAxis ) ) {
+		const bool moved = current.origin != vrOrigin || current.axis != vrAxis;
+		current.origin = vrOrigin;
+		current.axis = vrAxis;
+		return moved;
+	}
+
 	idMat3 localAxis;
 	idVec3 localOrigin( 0.0f, 0.0f, selfOwner->EyeHeight() );
 	idAngles pitchAngles( selfOwner->GetUntransformedViewAngles().pitch, 0.0f, 0.0f );

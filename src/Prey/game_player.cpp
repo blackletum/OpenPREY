@@ -2055,6 +2055,132 @@ bool hhPlayer::CrosshairWanted( void ) {
 
 /*
 ================
+hhPlayer::GetVRView
+
+openPR06 VR: the frame's tracked poses, when the headset shows this local
+player's own first-person view. The player's own eye sets the render view's
+viewID; a camera, third person or the death view leaves it 0. Cinematics,
+death and vehicles play flat on the virtual screen.
+================
+*/
+bool hhPlayer::GetVRView( vrFrameState_t &frame, float &trackingYaw ) {
+	if ( vrSystem == NULL || !vrSystem->IsActive() || gameLocal.GetLocalPlayer() != this ) {
+		return false;
+	}
+	const renderView_t *view = GetRenderView();
+	if ( view == NULL || view->viewID != entityNumber + 1 ) {
+		return false;
+	}
+	if ( gameLocal.inCinematic || IsDead() || InVehicle() || pm_thirdPerson.GetBool() ) {
+		return false;
+	}
+	vrSystem->GetFrameState( frame );
+	if ( !frame.active || !frame.stereo ) {
+		return false;
+	}
+	trackingYaw = frame.bodyYaw + GetDeltaViewAngles().yaw;
+	return true;
+}
+
+/*
+================
+hhPlayer::IsVRHandAiming
+================
+*/
+bool hhPlayer::IsVRHandAiming( void ) {
+	vrFrameState_t frame;
+	float trackingYaw;
+	return health > 0 && GetVRView( frame, trackingYaw ) && frame.aimMode == VR_AIM_HAND
+		&& frame.aim[ frame.weaponHand == VR_HAND_LEFT ? VR_HAND_LEFT : VR_HAND_RIGHT ].valid;
+}
+
+/*
+================
+hhPlayer::GetVRHandAim
+
+openPR06 VR: shots leave the weapon hand along its aim (openQ4's
+idPlayer::GetVRAimOrigin). A hand reaching through a wall must not fire from
+behind it, so the origin stays short of whatever lies between it and the eye.
+================
+*/
+bool hhPlayer::GetVRHandAim( idVec3 &origin, idMat3 &axis ) {
+	vrFrameState_t frame;
+	float trackingYaw;
+	if ( health <= 0 || !GetVRView( frame, trackingYaw ) || frame.aimMode != VR_AIM_HAND ) {
+		return false;
+	}
+	vrPose_t pose = frame.aim[ frame.weaponHand == VR_HAND_LEFT ? VR_HAND_LEFT : VR_HAND_RIGHT ];
+	if ( !pose.valid ) {
+		return false;
+	}
+	pose.origin += VR_HeadOffsetCorrection( frame );
+	const idVec3 eyeOrigin = GetEyePosition();
+	const idMat3 tracking = VR_TrackingAxis( trackingYaw ) * GetEyeAxis();
+	const idVec3 handOrigin = eyeOrigin + pose.origin * tracking;
+	axis = pose.axis * tracking;
+
+	trace_t trace;
+	gameLocal.clip.TracePoint( trace, eyeOrigin, handOrigin, MASK_SHOT_RENDERMODEL, this );
+	origin = trace.fraction < 1.0f ? eyeOrigin + ( trace.endpos - eyeOrigin ) * 0.9f : handOrigin;
+	return true;
+}
+
+/*
+================
+hhPlayer::GetVRWeaponTransform
+
+openPR06 VR: the view weapon in the weapon hand (openQ4's
+idPlayer::GetVRWeaponTransform). VR_WeaponTransform places it in tracking
+space about the eye; the player's gravity frame then carries it, as it
+carries the eyes (hhPlayerView::VRView).
+================
+*/
+bool hhPlayer::GetVRWeaponTransform( idVec3 &origin, idMat3 &axis ) {
+	vrFrameState_t frame;
+	float trackingYaw;
+	if ( health <= 0 || !weapon.IsValid() || !GetVRView( frame, trackingYaw ) || frame.aimMode != VR_AIM_HAND ) {
+		return false;
+	}
+	idVec3 barrel;
+	idVec3 grip;
+	weapon->GetVRHold( barrel, grip );
+	idVec3 localOrigin;
+	idMat3 localAxis;
+	if ( !VR_WeaponTransform( frame, vec3_origin, trackingYaw, barrel, grip, localOrigin, localAxis ) ) {
+		return false;
+	}
+	const idMat3 eyeAxis = GetEyeAxis();
+	origin = GetEyePosition() + localOrigin * eyeAxis;
+	axis = localAxis * eyeAxis;
+	return true;
+}
+
+/*
+================
+hhPlayer::VRVibrate
+
+openPR06 VR: a pulse in the local player's controllers (openQ4's
+idPlayer::VRVibrate). Prediction reruns a multiplayer client's frames, so
+only a new frame pulses.
+================
+*/
+void hhPlayer::VRVibrate( bool weaponHand, bool otherHand, float amplitude, int durationMsec ) {
+	if ( vrSystem == NULL || !vrSystem->IsActive() || gameLocal.GetLocalPlayer() != this || !gameLocal.isNewFrame ) {
+		return;
+	}
+	vrFrameState_t frame;
+	vrSystem->GetFrameState( frame );
+	const int hand = frame.weaponHand == VR_HAND_LEFT ? VR_HAND_LEFT : VR_HAND_RIGHT;
+	if ( weaponHand ) {
+		vrSystem->Vibrate( hand, amplitude, durationMsec );
+	}
+	if ( otherHand ) {
+		vrSystem->Vibrate( hand == VR_HAND_LEFT ? VR_HAND_RIGHT : VR_HAND_LEFT, amplitude, durationMsec );
+	}
+}
+
+/*
+================
 hhPlayer::UpdateCrosshairs
 HUMANHEAD PDM
 ================

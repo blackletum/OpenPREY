@@ -53,6 +53,15 @@ Later evidence:
   rifle zoom, and the head turning upside down with `setPlayerGravity 0 0 1066`.
   No real headset has run it; the gun in the hand, the body, physical crouch,
   haptics and vehicle stereo remain openQ4-only (`docs/user/vr.md`).
+- **VR weapon hand, 2026-11-24.** `vr_aimMode 1` holds the view weapon in the
+  weapon hand (`hhPlayer::GetVRWeaponTransform`, re-placed per draw by
+  `hhWeapon::PresentVRHold`), fires from it along the hand's aim, draws the
+  `vr_aimLaser 2` beam from its barrel joint, and pulses the controllers on
+  shots and hits. The same smoke passed on OpenGL and Vulkan with new checks:
+  a 15 cm controller move moves the held rifle 5.9 units in the head's frame
+  with game time stopped, the beam adds to the dot, and the trigger's shots
+  pulse the right hand for 40 ms. The body, physical crouch and vehicle
+  stereo remain openQ4-only.
 
 ## Item ledger
 

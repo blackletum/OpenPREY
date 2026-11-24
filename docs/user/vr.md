@@ -20,7 +20,7 @@ it.
 ## What PREY's game module does in VR
 
 openQ4 built part of its VR support into its Quake 4 game code. openPR06 ports
-the core of it into PREY's game module (`hhPlayerView`):
+the core of it into PREY's game module (`hhPlayerView`, `hhPlayer`, `hhWeapon`):
 
 - your own first-person view is drawn once per eye, in stereo, from your
   tracked head;
@@ -30,8 +30,13 @@ the core of it into PREY's game module (`hhPlayerView`):
 - you hear from where your head is;
 - the comfort vignette darkens the edges of your view while the stick moves
   or turns you;
-- aiming with the controller (`vr_aimMode 1`), a red dot marks where your shot
-  lands, at the target's depth, in place of the crosshair;
+- aiming with the controller (`vr_aimMode 1`), you hold your gun in your
+  weapon hand, full size, and your shots leave from it along the controller's
+  aim (see [Weapon position](#weapon-position));
+- a red dot marks where your shot lands, at the target's depth, in place of
+  the crosshair; `vr_aimLaser 2` adds a beam from the gun's muzzle;
+- your weapon hand's controller kicks with each shot, and both controllers
+  shake when you're hit;
 - the rifle's scope magnifies both eyes;
 - view bob, screen shake and the view's weapon kick stay out of the eyes. The
   low-health tint, spirit walk's tint, view overlays and fades go into the
@@ -43,14 +48,14 @@ shuttle or any other vehicle.
 
 Still missing next to openQ4:
 
-- the gun held in your hand: the gun is drawn ahead of your eyes, pointing
-  where you aim, and shots leave from your eyes (the `vr_weaponOffset*` and
-  `vr_weaponPitch` settings have nothing to move);
-- the beam of `vr_aimLaser 2`: it shows the dot only;
-- your own body in the headset (`vr_body`);
+- a left-handed hold: with `vr_leftHanded 1` the gun moves to your left
+  hand, but PREY's view models aren't mirrored, so a gun that draws Tommy's
+  hand (the wrench, the crawler grenade) still draws a right hand;
+- your own body in the headset (`vr_body`), including arms reaching to the
+  gun in your hand;
 - physical crouching: the engine flags a crouched head, but PREY's game
   doesn't read the flag, so use your crouch button;
-- vibration on shots and hits, and room-scale collision feedback;
+- room-scale collision feedback;
 - stereo in vehicles, and the effects that capture the screen (motion blur,
   scratch overlays), which stand down in the eyes.
 
@@ -139,7 +144,26 @@ your front hand.
 | `vr_aimLaser` | 1 | 0 no marker, 1 laser dot, 2 laser dot and a beam |
 | `vr_twoHanded` | 1 | 1 the off-hand grip held in front aims with both hands |
 | `vr_leftHanded` | 0 | 1 puts the weapon hand on the left |
-| `vr_hapticStrength` | 1 | vibration strength from 0 (off) to 1; PREY's game module sends no vibration |
+| `vr_hapticStrength` | 1 | vibration strength from 0 (off) to 1 |
+
+## Weapon position
+
+While you aim with the controller, each gun appears full size in your weapon
+hand, with its barrel along your controller's aim and the laser. A gun whose
+model draws Tommy's hand is held by that hand's wrist; the others are held
+under and behind their barrel. Shots leave from the gun's muzzle; a muzzle
+pushed into a wall fires from your side of it. If a gun doesn't sit
+naturally, nudge it relative to the controller:
+
+| Setting | Default | Direction |
+| --- | --- | --- |
+| `vr_weaponOffsetX` | 0 | along the controller's aim, in game units |
+| `vr_weaponOffsetY` | 0 | to the controller's left |
+| `vr_weaponOffsetZ` | 0 | up |
+| `vr_weaponPitch` | 0 | tilt in degrees; positive tilts down |
+
+Aiming with your head (`vr_aimMode 0`), the gun stays ahead of your eyes as on
+the desktop.
 
 ## Comfort
 
@@ -224,8 +248,9 @@ resolution stays off in VR. MSAA (`r_multiSamples`) and SMAA work as well. See
 ## Multiplayer
 
 Your aim reaches the server the same way a mouse's does, so a VR player can
-join an openPR06 server without anything extra on the server. Shots leave from
-your view, as they do on the desktop.
+join an openPR06 server without anything extra on the server. The server can't
+see your hand, so it fires your shots from your view, as on the desktop; only
+your own game draws them leaving the gun in your hand.
 
 ## Troubleshooting
 

@@ -679,24 +679,8 @@ void hhPlayerView::DrawViewOverlays( bool allowCapture ) {
 //	death and vehicles play flat on the virtual screen.
 //------------------------------------------------------
 bool hhPlayerView::GetVRView( vrFrameState_t &frame, float &trackingYaw ) {
-	if ( vrSystem == NULL || !vrSystem->IsActive() || player == NULL || gameLocal.GetLocalPlayer() != player ) {
-		return false;
-	}
-	const renderView_t *view = player->GetRenderView();
-	// the player's own eye sets viewID; a camera, third person or the death
-	// view leaves it 0
-	if ( view == NULL || view->viewID != player->entityNumber + 1 ) {
-		return false;
-	}
-	if ( gameLocal.inCinematic || player->IsDead() || player->InVehicle() || pm_thirdPerson.GetBool() ) {
-		return false;
-	}
-	vrSystem->GetFrameState( frame );
-	if ( !frame.active || !frame.stereo ) {
-		return false;
-	}
-	trackingYaw = frame.bodyYaw + player->GetDeltaViewAngles().yaw;
-	return true;
+	// the same rule holds the gun in the hand (hhPlayer::GetVRView)
+	return player != NULL && static_cast<hhPlayer *>( player )->GetVRView( frame, trackingYaw );
 }
 
 //------------------------------------------------------
@@ -749,32 +733,37 @@ float hhPlayerView::VRComfortVignette( float trackingYaw ) {
 //------------------------------------------------------
 // GetVRAimMarker
 //	where the weapon hand's shot lands (vr_aimLaser), while the controller
-//	aims. Prey fires from the player's eye along its view, which the hand
-//	steers, so the shot's path is traced from there. The marker stands in
-//	for the crosshair on the virtual screen, which would hang at the HUD's
-//	depth off the line of fire; it marks nothing while the crosshair would
-//	be away (the GUI hand up, a world GUI in focus, no weapon).
+//	aims: the path the gun in the hand fires along (hhPlayer::GetVRHandAim),
+//	from this draw's pose. A beam (vr_aimLaser 2) leaves the drawn gun's
+//	muzzle, or the hand without one. The marker stands in for the crosshair
+//	on the virtual screen, which would hang at the HUD's depth off the line
+//	of fire; it marks nothing while the crosshair would be away (the GUI hand
+//	up, a world GUI in focus, no weapon).
 //------------------------------------------------------
-bool hhPlayerView::GetVRAimMarker( const vrFrameState_t &frame, const renderView_t *view, const idVec3 &headOrigin, vrAimMarker_t &marker ) {
+bool hhPlayerView::GetVRAimMarker( const vrFrameState_t &frame, const idVec3 &headOrigin, bool weaponHeld,
+		const idVec3 &weaponOrigin, const idMat3 &weaponAxis, vrAimMarker_t &marker ) {
 	hhPlayer *hhplayer = static_cast<hhPlayer *>( player );
 	if ( frame.aimMode != VR_AIM_HAND || frame.aimLaser == VR_AIM_LASER_OFF || player->health <= 0 || player->spectating ) {
-		return false;
-	}
-	if ( !frame.aim[ frame.weaponHand == VR_HAND_LEFT ? VR_HAND_LEFT : VR_HAND_RIGHT ].valid ) {
 		return false;
 	}
 	if ( !hhplayer->CrosshairWanted() ) {
 		return false;
 	}
+	idVec3 start;
+	idMat3 aimAxis;
+	if ( !hhplayer->GetVRHandAim( start, aimAxis ) ) {
+		return false;
+	}
 
 	trace_t trace;
-	const idVec3 start = view->vieworg;
-	gameLocal.clip.TracePoint( trace, start, start + view->viewaxis[0] * VR_AIM_RANGE, MASK_SHOT_RENDERMODEL, player );
-	marker.muzzle = start;
+	gameLocal.clip.TracePoint( trace, start, start + aimAxis[0] * VR_AIM_RANGE, MASK_SHOT_RENDERMODEL, player );
+	if ( !weaponHeld || !hhplayer->weapon.IsValid() || !hhplayer->weapon->GetVRMuzzle( weaponOrigin, weaponAxis, marker.muzzle ) ) {
+		marker.muzzle = start;
+	}
 	marker.target = trace.endpos;
 	marker.hit = trace.fraction < 1.0f;
 
-	// round a corner the eye can see what the head can't
+	// round a corner the hand can see what the head can't
 	marker.hidden = false;
 	const idVec3 toTarget = marker.target - headOrigin;
 	const float distance = toTarget.Length();
@@ -820,12 +809,19 @@ bool hhPlayerView::VRView( idUserInterface *hud, const renderView_t *view, const
 	}
 	gameSoundWorld->PlaceListener( headOrigin, headAxis, player->entityNumber + 1, gameLocal.time, hud ? hud->State().GetString( "location" ) : "Undefined" );
 
+	// the gun in the weapon hand, placed from this draw's pose: the hand
+	// moves every headset frame, whether or not a game tic ran
+	idVec3 weaponOrigin;
+	idMat3 weaponAxis;
+	const bool weaponHeld = hhplayer->GetVRWeaponTransform( weaponOrigin, weaponAxis );
+	if ( weaponHeld ) {
+		hhplayer->weapon->PresentVRHold( weaponOrigin, weaponAxis );
+	}
+
 	const idMaterial *whiteMaterial = declManager->FindMaterial( "_white" );
 	vrAimMarker_t aimMarker;
-	vrAimMarked = GetVRAimMarker( frame, view, headOrigin, aimMarker );
-	// no gun is held in the hand yet, so a beam would leave the eye: the
-	// dot alone marks the shot
-	const int aimLaser = VR_AIM_LASER_DOT;
+	vrAimMarked = GetVRAimMarker( frame, headOrigin, weaponHeld, weaponOrigin, weaponAxis, aimMarker );
+	const int aimLaser = frame.aimLaser;
 	const float zoomScale = VRZoomScale();
 	const float vignette = VRComfortVignette( trackingYaw );
 	const bool viewEffects = !g_skipViewEffects.GetBool();
@@ -840,6 +836,12 @@ bool hhPlayerView::VRView( idUserInterface *hud, const renderView_t *view, const
 	if ( cvarSystem->GetCVarInteger( "vr_debug" ) >= 2 ) {
 		// the head's up shows which way the gravity frame stands
 		gameLocal.Printf( "VR drawn head %d (%s) up (%s) vignette %.3f\n", frame.frameNumber, headOrigin.ToString( 2 ), headAxis[2].ToString( 2 ), vignette );
+		if ( weaponHeld ) {
+			// the held gun in the head's own axes, and where a beam leaves it
+			const idVec3 local = ( weaponOrigin - headOrigin ) * headAxis.Transpose();
+			gameLocal.Printf( "VR held weapon %d (%s) head-relative (%s) muzzle (%s)\n", frame.frameNumber, weaponOrigin.ToString( 2 ),
+				local.ToString( 2 ), vrAimMarked ? aimMarker.muzzle.ToString( 2 ) : "none" );
+		}
 	}
 
 	for ( int eye = 0; eye < VR_NUM_EYES; eye++ ) {
