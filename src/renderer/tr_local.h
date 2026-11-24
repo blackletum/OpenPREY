@@ -1603,6 +1603,7 @@ extern idCVar r_rendererModernLightingParity;	// diagnostic override forcing lig
 extern idCVar r_rendererModernAutoPromote;	// allow gated default modern-visible promotion
 extern idCVar r_rendererPromotionEvidence;	// Phase 8 evidence token required before auto-promotion
 extern idCVar r_rendererShaderReload;	// allow runtime reload of the internal modern GL shader library
+extern idCVar r_rendererShaderAllGLSLVersions;	// compile the modern GL shader library for every supported GLSL version
 extern idCVar r_rendererModernVisibleDepth;	// opt-in graph-backed modern depth/shadow-depth execution
 extern idCVar r_rendererModernDepthDebug;	// show graph-backed modern depth resources as a debug overlay
 extern idCVar r_rendererModernOpaque;	// opt-in graph-backed modern opaque G-buffer execution

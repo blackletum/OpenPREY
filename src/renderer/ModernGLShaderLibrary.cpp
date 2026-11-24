@@ -3268,12 +3268,46 @@ void R_ModernGLShaderLibrary_Init( const renderBackendCaps_t &caps, const render
 	}
 
 	rg_modernGLShaderLibraryStats.initialized = true;
-	rg_modernGLShaderLibraryStats.validatedGLSLVersionCount = versionCount;
-	for ( int i = 0; i < versionCount; ++i ) {
-		for ( int kind = 0; kind < MODERN_GL_SHADER_PROGRAM_KIND_COUNT; ++kind ) {
-			R_ModernGLShaderLibrary_CreateProgram( versions[i], static_cast<modernGLShaderProgramKind_t>( kind ) );
+	// Every caller asks for the highest GLSL version that linked, so the lower
+	// versions are only compiled for renderer validation. A cold driver cache
+	// otherwise pays for all of them on the first launch after an update.
+	const bool allVersions = r_rendererShaderAllGLSLVersions.GetBool();
+	const int startMsec = Sys_Milliseconds();
+	common->Printf( "Modern GL shader library: compiling %d programs (GLSL %d%s); a cold driver cache can take a while\n",
+		allVersions ? MODERN_GL_SHADER_PROGRAM_KIND_COUNT * versionCount : MODERN_GL_SHADER_PROGRAM_KIND_COUNT,
+		versions[versionCount - 1], allVersions ? " and every lower version" : "" );
+	if ( allVersions ) {
+		rg_modernGLShaderLibraryStats.validatedGLSLVersionCount = versionCount;
+		for ( int i = 0; i < versionCount; ++i ) {
+			for ( int kind = 0; kind < MODERN_GL_SHADER_PROGRAM_KIND_COUNT; ++kind ) {
+				R_ModernGLShaderLibrary_CreateProgram( versions[i], static_cast<modernGLShaderProgramKind_t>( kind ) );
+			}
 		}
+	} else {
+		bool linkedVersion[4] = { false, false, false, false };
+		for ( int kind = 0; kind < MODERN_GL_SHADER_PROGRAM_KIND_COUNT; ++kind ) {
+			// Highest version first; a lower one that links replaces the failure.
+			const int failedBefore = rg_modernGLShaderLibraryStats.failedProgramCount;
+			for ( int i = versionCount - 1; i >= 0; --i ) {
+				if ( R_ModernGLShaderLibrary_CreateProgram( versions[i], static_cast<modernGLShaderProgramKind_t>( kind ) ) ) {
+					if ( i != versionCount - 1 ) {
+						common->Printf( "Modern GL shader library: %s falls back to GLSL %d\n",
+							ModernGLShaderProgramKind_Name( static_cast<modernGLShaderProgramKind_t>( kind ) ), versions[i] );
+					}
+					rg_modernGLShaderLibraryStats.failedProgramCount = failedBefore;
+					linkedVersion[i] = true;
+					break;
+				}
+			}
+		}
+		int linkedVersions = 0;
+		for ( int i = 0; i < versionCount; ++i ) {
+			linkedVersions += linkedVersion[i] ? 1 : 0;
+		}
+		rg_modernGLShaderLibraryStats.validatedGLSLVersionCount = linkedVersions;
 	}
+	common->Printf( "Modern GL shader library: %d programs ready in %d ms\n",
+		rg_modernGLShaderLibraryStats.programCount, Sys_Milliseconds() - startMsec );
 
 	if ( rg_modernGLShaderLibraryStats.programCount > 0
 		&& rg_modernGLShaderLibraryStats.failedProgramCount == 0
