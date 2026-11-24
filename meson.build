@@ -2028,6 +2028,7 @@ glew_dedicated_dep = disabler()
 stb_vorbis_dep = disabler()
 ogg_dep = disabler()
 vorbisfile_dep = disabler()
+zlibng_dep = disabler()
 openal_dep = disabler()
 sdl3_dep = disabler()
 macos_graphics_bridge_dep = disabler()
@@ -2068,6 +2069,15 @@ if build_engine
     required: true,
     fallback: ['ogg', 'libogg_dep'],
     default_options: fallback_opt,
+  )
+
+  # PK4 members inflate through zlib-ng's native zng_* API, so it cannot clash
+  # with a system zlib that another dependency brings in.
+  zlibng_dep = dependency(
+    'zlib-ng',
+    required: true,
+    fallback: 'zlib-ng',
+    default_options: fallback_opt + ['tests=disabled', 'gzfileop=false'],
   )
 
   # libvorbis calls alloca() and uses M_PI, which glibc hides under strict
@@ -2205,7 +2215,7 @@ if build_engine
     endif
   endif
 
-  deps = [glew_dep, openal_dep, stb_vorbis_dep, ogg_dep, vorbisfile_dep]
+  deps = [glew_dep, openal_dep, stb_vorbis_dep, ogg_dep, vorbisfile_dep, zlibng_dep]
 
   if host_system == 'windows'
     windows_shell_dep = cc.find_library('shell32', required: true)
@@ -2289,7 +2299,7 @@ if renderer_module_only_client
     compile_args: true,
     includes: true,
   )
-  client_deps = [glew_headers_dep, openal_dep, stb_vorbis_dep, ogg_dep, vorbisfile_dep]
+  client_deps = [glew_headers_dep, openal_dep, stb_vorbis_dep, ogg_dep, vorbisfile_dep, zlibng_dep]
   if host_system == 'windows'
     client_deps += [
       cc.find_library('Dbghelp', required: true),
@@ -2506,6 +2516,7 @@ if windows_gl_free_ded
     stb_vorbis_dep,
     ogg_dep,
     vorbisfile_dep,
+    zlibng_dep,
     cc.find_library('Dbghelp', required: true),
     cc.find_library('bcrypt', required: true),
     cc.find_library('Iphlpapi', required: true),
@@ -2530,6 +2541,7 @@ if build_engine and host_system == 'linux'
     stb_vorbis_dep,
     ogg_dep,
     vorbisfile_dep,
+    zlibng_dep,
     dependency('threads', required: true),
     cc.find_library('dl', required: true),
   ]
