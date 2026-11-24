@@ -6,6 +6,11 @@
 
 #include "../Game_local.h"
 
+#include <condition_variable>
+#include <deque>
+#include <mutex>
+#include <thread>
+
 bool idAnimManager::forceExport = false;
 
 idCVar g_useGeneratedAnimCache( "g_useGeneratedAnimCache", "1", CVAR_GAME | CVAR_BOOL | CVAR_ARCHIVE, "load valid generated binary animation caches" );
@@ -19,7 +24,6 @@ static const unsigned int GENERATED_ANIM_VERSION = 1;
 static const int MAX_GENERATED_ANIM_FRAMES = 1 << 20;
 static const int MAX_GENERATED_ANIM_JOINTS = 4096;
 static const long long MAX_GENERATED_ANIM_DATA_BYTES = (long long)512 * 1024 * 1024;
-static const int GENERATED_ANIM_FLOAT_CHUNK = 4096;
 
 struct generatedAnimSourceInfo_t {
 	int			length;
@@ -75,19 +79,6 @@ static bool ReadGeneratedAnimString( idFile *file, idStr &value, int maxLength )
 	return true;
 }
 
-static bool WriteGeneratedAnimString( idFile *file, const char *value ) {
-	if ( value == NULL ) {
-		value = "";
-	}
-	const size_t valueLength = strlen( value );
-	if ( valueLength > MAX_STRING_CHARS ) {
-		return false;
-	}
-	const int length = (int)valueLength;
-	return file->WriteInt( length ) == sizeof( length ) &&
-		( length == 0 || file->Write( value, length ) == length );
-}
-
 static bool ReadGeneratedAnimFloats( idFile *file, float *values, int count ) {
 	if ( count < 0 || ( count > 0 && values == NULL ) ) {
 		return false;
@@ -106,38 +97,181 @@ static bool ReadGeneratedAnimFloats( idFile *file, float *values, int count ) {
 	return true;
 }
 
-static bool WriteGeneratedAnimFloats( idFile *file, const float *values, int count ) {
-	if ( count < 0 || ( count > 0 && values == NULL ) ) {
-		return false;
-	}
-	const long long byteCount = (long long)count * sizeof( float );
-	if ( byteCount > 0x7fffffff ) {
-		return false;
-	}
-	if ( count == 0 ) {
-		return true;
-	}
-	if ( !Swap_IsBigEndian() ) {
-		return file->Write( values, (int)byteCount ) == byteCount;
-	}
-
-	float swapped[ GENERATED_ANIM_FLOAT_CHUNK ];
-	for ( int offset = 0; offset < count; offset += GENERATED_ANIM_FLOAT_CHUNK ) {
-		const int chunkCount = Min( GENERATED_ANIM_FLOAT_CHUNK, count - offset );
-		memcpy( swapped, values + offset, chunkCount * sizeof( float ) );
-		LittleRevBytes( swapped, sizeof( float ), chunkCount );
-		if ( file->Write( swapped, chunkCount * sizeof( float ) ) != chunkCount * sizeof( float ) ) {
-			return false;
-		}
-	}
-	return true;
-}
-
 static void SplitGeneratedAnimTimestamp( ID_TIME_T timestamp, unsigned int &low, unsigned int &high ) {
 	const unsigned long long value = (unsigned long long)timestamp;
 	low = (unsigned int)( value & 0xffffffffu );
 	high = (unsigned int)( value >> 32 );
 }
+
+/*
+====================
+generatedAnimBuffer_t
+
+Builds a generated animation cache in memory, byte for byte what idFile's
+WriteInt, WriteUnsignedInt and WriteVec3 put on disk.
+====================
+*/
+struct generatedAnimBuffer_t {
+	idList< byte >	bytes;
+
+
+	void Raw( const void *data, int length ) {
+		if ( length <= 0 ) {
+			return;
+		}
+		const int start = bytes.Num();
+		if ( start + length > bytes.NumAllocated() ) {
+			bytes.Resize( Max( start + length, bytes.NumAllocated() * 2 ) );
+		}
+		bytes.SetNum( start + length, false );
+		memcpy( bytes.Ptr() + start, data, length );
+	}
+	void Int( int value ) { const int v = LittleLong( value ); Raw( &v, sizeof( v ) ); }
+	void UnsignedInt( unsigned int value ) { const unsigned int v = LittleLong( value ); Raw( &v, sizeof( v ) ); }
+	void Vec3( const idVec3 &value ) {
+		idVec3 v = value;
+		LittleRevBytes( &v, sizeof( float ), sizeof( v ) / sizeof( float ) );
+		Raw( &v, sizeof( v ) );
+	}
+	bool String( const char *value ) {
+		if ( value == NULL ) {
+			value = "";
+		}
+		const size_t valueLength = strlen( value );
+		if ( valueLength > MAX_STRING_CHARS ) {
+			return false;
+		}
+		Int( (int)valueLength );
+		Raw( value, (int)valueLength );
+		return true;
+	}
+	bool Floats( const float *values, int count ) {
+		if ( count < 0 || ( count > 0 && values == NULL ) ) {
+			return false;
+		}
+		const long long byteCount = (long long)count * sizeof( float );
+		if ( byteCount > 0x7fffffff || (long long)bytes.Num() + byteCount > 0x7fffffff ) {
+			return false;
+		}
+		const int start = bytes.Num();
+		Raw( values, (int)byteCount );
+		if ( Swap_IsBigEndian() ) {
+			LittleRevBytes( bytes.Ptr() + start, sizeof( float ), count );
+		}
+		return true;
+	}
+};
+
+/*
+====================
+idGeneratedAnimWriter
+
+The first visit to a map parses its source animations and writes a binary
+cache for each, hundreds of small files. Creating, writing and closing them
+on the load thread was most of a first visit's extra time. The load thread
+now opens each cache file through the filesystem and builds its bytes in
+memory; this writer writes and closes the files on its own thread while
+the load goes on. A cache that is still being written reads as truncated
+and is rejected, so the animation is parsed again and nothing reads a
+partial file as valid. Shutdown waits for every queued file.
+====================
+*/
+class idGeneratedAnimWriter {
+public:
+	~idGeneratedAnimWriter() { Shutdown(); }
+
+	// Opens relativePath on this (the load) thread once the queue has room,
+	// and hands the open file and data to the writer thread, which writes and
+	// closes it. Every queued file stays open until then, and the C runtime
+	// allows only so many open streams for the whole process: the queue holds
+	// at most MAX_OPEN_FILES, or the filesystem could fail to open a pk4.
+	void Queue( const char *relativePath, idList< byte > &data ) {
+		const size_t size = static_cast<size_t>( data.Num() );
+		{
+			std::unique_lock<std::mutex> lock( mutex );
+			if ( !thread.joinable() ) {
+				stopping = false;
+				thread = std::thread( &idGeneratedAnimWriter::Run, this );
+			}
+			room.wait( lock, [&] {
+				return openFiles < MAX_OPEN_FILES && ( pendingBytes == 0 || pendingBytes + size <= MAX_PENDING_BYTES );
+			} );
+			++openFiles;
+			pendingBytes += size;
+		}
+		idFile *file = fileSystem->OpenFileWrite( relativePath );
+		std::lock_guard<std::mutex> lock( mutex );
+		if ( file == NULL ) {
+			--openFiles;
+			pendingBytes -= size;
+			return;
+		}
+		jobs.emplace_back();
+		jobs.back().file = file;
+		jobs.back().data.Swap( data );
+		ready.notify_one();
+	}
+
+	void Shutdown() {
+		{
+			std::lock_guard<std::mutex> lock( mutex );
+			if ( !thread.joinable() ) {
+				return;
+			}
+			stopping = true;
+		}
+		ready.notify_one();
+		thread.join();
+	}
+
+private:
+	struct job_t {
+		idFile *		file = NULL;
+		idList< byte >	data;
+	};
+
+	static constexpr int MAX_OPEN_FILES = 16;
+	static constexpr size_t MAX_PENDING_BYTES = 64u << 20;
+
+	void Run() {
+		for ( ;; ) {
+			job_t job;
+			{
+				std::unique_lock<std::mutex> lock( mutex );
+				ready.wait( lock, [&] { return stopping || !jobs.empty(); } );
+				if ( jobs.empty() ) {
+					return;
+				}
+				job.file = jobs.front().file;
+				job.data.Swap( jobs.front().data );
+				jobs.pop_front();
+			}
+			const int size = job.data.Num();
+			// The file and its stdio stream belong to this job alone.
+			if ( size > 0 && job.file->Write( job.data.Ptr(), size ) != size ) {
+				common->Printf( "generated animation cache '%s' was not fully written\n", job.file->GetName() );
+			}
+			fileSystem->CloseFile( job.file );
+			{
+				std::lock_guard<std::mutex> lock( mutex );
+				--openFiles;
+				pendingBytes -= static_cast<size_t>( size );
+			}
+			room.notify_all();
+		}
+	}
+
+	std::mutex				mutex;
+	std::condition_variable	ready;
+	std::condition_variable	room;
+	std::deque< job_t >		jobs;
+	std::thread				thread;
+	size_t					pendingBytes = 0;
+	int						openFiles = 0;		// queued or being written
+	bool					stopping = false;
+};
+
+static idGeneratedAnimWriter generatedAnimWriter;
 
 static ID_TIME_T JoinGeneratedAnimTimestamp( unsigned int low, unsigned int high ) {
 	return (ID_TIME_T)( ( (unsigned long long)high << 32 ) | low );
@@ -428,47 +562,38 @@ void idMD5Anim::WriteGeneratedAnim( const char *filename ) const {
 		return;
 	}
 
-	idStr cachePath;
-	GetGeneratedAnimPath( filename, cachePath );
-	idFile *cache = fileSystem->OpenFileWrite( cachePath );
-	if ( cache == NULL ) {
-		return;
-	}
-
 	unsigned int timestampLow = 0;
 	unsigned int timestampHigh = 0;
 	SplitGeneratedAnimTimestamp( sourceInfo.timestamp, timestampLow, timestampHigh );
 
-	bool valid =
-		cache->WriteUnsignedInt( GENERATED_ANIM_MAGIC ) == sizeof( GENERATED_ANIM_MAGIC ) &&
-		cache->WriteUnsignedInt( GENERATED_ANIM_VERSION ) == sizeof( GENERATED_ANIM_VERSION ) &&
-		cache->WriteInt( sourceInfo.length ) == sizeof( sourceInfo.length ) &&
-		cache->WriteInt( sourceInfo.containerChecksum ) == sizeof( sourceInfo.containerChecksum ) &&
-		cache->WriteUnsignedInt( timestampLow ) == sizeof( timestampLow ) &&
-		cache->WriteUnsignedInt( timestampHigh ) == sizeof( timestampHigh ) &&
-		WriteGeneratedAnimString( cache, sourceInfo.fullPath );
-	valid = valid &&
-		cache->WriteInt( numFrames ) == sizeof( numFrames ) &&
-		cache->WriteInt( numJoints ) == sizeof( numJoints ) &&
-		cache->WriteInt( frameRate ) == sizeof( frameRate ) &&
-		cache->WriteInt( numAnimatedComponents ) == sizeof( numAnimatedComponents ) &&
-		cache->WriteVec3( totaldelta ) == sizeof( totaldelta );
+	generatedAnimBuffer_t cache;
+	cache.UnsignedInt( GENERATED_ANIM_MAGIC );
+	cache.UnsignedInt( GENERATED_ANIM_VERSION );
+	cache.Int( sourceInfo.length );
+	cache.Int( sourceInfo.containerChecksum );
+	cache.UnsignedInt( timestampLow );
+	cache.UnsignedInt( timestampHigh );
+	bool valid = cache.String( sourceInfo.fullPath );
+	cache.Int( numFrames );
+	cache.Int( numJoints );
+	cache.Int( frameRate );
+	cache.Int( numAnimatedComponents );
+	cache.Vec3( totaldelta );
 
 	for ( int i = 0; valid && i < numJoints; ++i ) {
 		const jointAnimInfo_t &joint = jointInfo[ i ];
-		valid =
-			WriteGeneratedAnimString( cache, animationLib.JointName( joint.nameIndex ) ) &&
-			cache->WriteInt( joint.parentNum ) == sizeof( joint.parentNum ) &&
-			cache->WriteInt( joint.animBits ) == sizeof( joint.animBits ) &&
-			cache->WriteInt( joint.firstComponent ) == sizeof( joint.firstComponent );
+		valid = cache.String( animationLib.JointName( joint.nameIndex ) );
+		cache.Int( joint.parentNum );
+		cache.Int( joint.animBits );
+		cache.Int( joint.firstComponent );
 	}
 
 	if ( valid ) {
-		valid = WriteGeneratedAnimFloats( cache, bounds[ 0 ][ 0 ].ToFloatPtr(), numFrames * 6 );
+		valid = cache.Floats( bounds[ 0 ][ 0 ].ToFloatPtr(), numFrames * 6 );
 	}
 
-	idList< float > baseFrameData;
 	if ( valid ) {
+		idList< float > baseFrameData;
 		baseFrameData.SetGranularity( 1 );
 		baseFrameData.SetNum( numJoints * 7 );
 		for ( int i = 0; i < numJoints; ++i ) {
@@ -481,20 +606,31 @@ void idMD5Anim::WriteGeneratedAnim( const char *filename ) const {
 			destination[ 5 ] = baseFrame[ i ].t.y;
 			destination[ 6 ] = baseFrame[ i ].t.z;
 		}
-		valid = WriteGeneratedAnimFloats( cache, baseFrameData.Ptr(), baseFrameData.Num() );
+		valid = cache.Floats( baseFrameData.Ptr(), baseFrameData.Num() );
 	}
 
 	if ( valid ) {
-		valid = WriteGeneratedAnimFloats( cache, componentFrames.Ptr(), componentFrames.Num() );
+		valid = cache.Floats( componentFrames.Ptr(), componentFrames.Num() );
 	}
-	if ( valid ) {
-		valid = cache->WriteUnsignedInt( GENERATED_ANIM_END_MAGIC ) == sizeof( GENERATED_ANIM_END_MAGIC );
-	}
-
-	fileSystem->CloseFile( cache );
 	if ( !valid ) {
-		fileSystem->RemoveFile( cachePath );
+		return;
 	}
+	cache.UnsignedInt( GENERATED_ANIM_END_MAGIC );
+
+	idStr cachePath;
+	GetGeneratedAnimPath( filename, cachePath );
+	generatedAnimWriter.Queue( cachePath, cache.bytes );
+}
+
+/*
+====================
+idMD5Anim_FinishGeneratedCacheWrites
+
+Waits until every queued generated animation cache is on disk.
+====================
+*/
+void idMD5Anim_FinishGeneratedCacheWrites( void ) {
+	generatedAnimWriter.Shutdown();
 }
 
 /*
