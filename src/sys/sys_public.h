@@ -99,11 +99,12 @@ class idStr;
 #elif defined(__x86_64__)
 	#define	BUILD_STRING				"macos-x64"
 	#define	CPUSTRING					"x64"
-	#define CPU_EASYARGS				1
+	// Same 64-bit event-argument truncation as linux-x64 below.
+	#define CPU_EASYARGS				0
 #elif defined(__aarch64__) || defined(__arm64__)
 	#define	BUILD_STRING				"macos-arm64"
 	#define	CPUSTRING					"arm64"
-	#define CPU_EASYARGS				1
+	#define CPU_EASYARGS				0
 #else
 	#define	BUILD_STRING				"macos-unknown"
 	#define	CPUSTRING					"unknown"
@@ -153,16 +154,21 @@ class idStr;
 	#define BUILD_OS_ID					2
 	#define CPUSTRING					"ppc"
 	#define CPU_EASYARGS				0
+// The easy path passes every event argument as a 32-bit int. On LP64 that
+// truncates script string and entity pointers, and floats use a different
+// register class. Linux x64 0.15.0 segfaults in idActor::SetAnimState while
+// spawning the player because the anim-state name is that truncated pointer.
+// Use the format-specific callback table, as Win64 does.
 #elif defined(__x86_64__)
 	#define	BUILD_STRING				"linux-x64"
 	#define BUILD_OS_ID					2
 	#define CPUSTRING					"x64"
-	#define CPU_EASYARGS				1
+	#define CPU_EASYARGS				0
 #elif defined(__aarch64__) || defined(__arm64__)
 	#define	BUILD_STRING				"linux-arm64"
 	#define BUILD_OS_ID					2
 	#define CPUSTRING					"arm64"
-	#define CPU_EASYARGS				1
+	#define CPU_EASYARGS				0
 #endif
 
 #define _alloca							alloca
