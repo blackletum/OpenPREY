@@ -1749,7 +1749,18 @@ idCommonLocal::LoadingCheckpoint
 ==================
 */
 void idCommonLocal::LoadingCheckpoint( void ) {
-	if ( !Common_OnMainThread() || session == NULL ) {
+	if ( !Common_OnMainThread() ) {
+		return;
+	}
+#if defined( USE_SDL3 )
+	// Work outside any loading screen reads no window messages: the renderer
+	// compiling its programs on a cold driver cache before the startup screen
+	// exists (a minute or more on the first launch after a driver or engine
+	// update), or a vid_restart reloading every image. Windows marks a window
+	// that reads none for five seconds Not Responding. Throttled to 20 Hz.
+	Sys_SDL_KeepWindowResponsive();
+#endif
+	if ( session == NULL ) {
 		return;
 	}
 	// The startup screen is offered first; a level load's screen otherwise.

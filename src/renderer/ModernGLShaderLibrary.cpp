@@ -9,6 +9,10 @@
 #include "ModernShadowMaps.h"
 #include "PBRMath.h"
 #include "ModernLightGridGLSL.h"
+#include "RendererCaps.h"
+
+#include <chrono>
+#include <thread>
 
 static_assert( MATERIAL_RESOURCE_TABLE_TEXTURE_ARRAY_CAPACITY > 9,
 	"light-grid GLSL sampler-alias ABI drift" );
@@ -2103,28 +2107,6 @@ static void R_ModernGLShaderLibrary_PrintProgramLog( GLuint program, const char 
 	common->Warning( "Modern GL program link failed for '%s':\n%s", label, logBuffer[0] ? logBuffer : "<no info log>" );
 }
 
-static GLuint R_ModernGLShaderLibrary_CompileShader( GLenum shaderType, const char *source, const char *label ) {
-	GLuint shader = glCreateShader( shaderType );
-	if ( shader == 0 ) {
-		common->Warning( "Modern GL shader compile failed for '%s': glCreateShader returned 0", label );
-		return 0;
-	}
-
-	const GLchar *sources[1] = { source };
-	glShaderSource( shader, 1, sources, NULL );
-	glCompileShader( shader );
-
-	GLint compiled = GL_FALSE;
-	glGetShaderiv( shader, GL_COMPILE_STATUS, &compiled );
-	if ( compiled != GL_TRUE ) {
-		R_ModernGLShaderLibrary_PrintShaderLog( shader, label );
-		glDeleteShader( shader );
-		return 0;
-	}
-
-	return shader;
-}
-
 static bool R_ModernGLShaderLibrary_KindUsesDebugColor( modernGLShaderProgramKind_t kind ) {
 	return kind != MODERN_GL_SHADER_DEPTH && kind != MODERN_GL_SHADER_SHADOW_DEPTH;
 }
@@ -3075,18 +3057,29 @@ static void R_ModernGLShaderLibrary_MarkKindReady( modernGLShaderProgramKind_t k
 }
 
 
-static bool R_ModernGLShaderLibrary_CreateProgram( int glslVersion, modernGLShaderProgramKind_t kind ) {
-	if ( rg_modernGLShaderProgramCount >= MODERN_GL_SHADER_MAX_PROGRAMS ) {
-		rg_modernGLShaderLibraryStats.failedProgramCount++;
-		return false;
-	}
+// A program on its way through the driver: compiled and linked, its status not
+// yet asked for. With parallel shader compilation the driver works on every
+// pending program at once, and asking for a status before it is done blocks.
+struct modernGLPendingProgram_t {
+	modernGLShaderProgramInfo_t	info;
+	GLuint						vertexShader;
+	GLuint						fragmentShader;
+	char						context[256];
+};
+
+// Builds the sources, compiles both stages and links, without asking for any
+// status. False only for a failure found before the driver has the program.
+static bool R_ModernGLShaderLibrary_BeginProgram( int glslVersion, modernGLShaderProgramKind_t kind, modernGLPendingProgram_t &pending ) {
+	pending.vertexShader = 0;
+	pending.fragmentShader = 0;
+	pending.context[0] = '\0';
 	const modernGLShaderProgramDescriptor_t *descriptor = R_ModernGLShaderLibrary_DescriptorForKind( kind );
 	if ( descriptor == NULL ) {
 		rg_modernGLShaderLibraryStats.failedProgramCount++;
 		return false;
 	}
 
-	modernGLShaderProgramInfo_t &info = rg_modernGLShaderPrograms[rg_modernGLShaderProgramCount];
+	modernGLShaderProgramInfo_t &info = pending.info;
 	memset( &info, 0, sizeof( info ) );
 	info.kind = kind;
 	info.passCategory = descriptor->passCategory;
@@ -3130,10 +3123,10 @@ static bool R_ModernGLShaderLibrary_CreateProgram( int glslVersion, modernGLShad
 		ModernGLShaderProgramKind_Name( kind ),
 		glslVersion );
 
-	char programContext[256];
+	char *programContext = pending.context;
 	idStr::snPrintf(
 		programContext,
-		sizeof( programContext ),
+		sizeof( pending.context ),
 		"%s pass=%s material=%s glsl=%d key(mat=%u light=%u shadow=%u alpha=%u skin=%u deform=%u grid=%u fog=%u debug=%u tier=%u)",
 		info.name,
 		RenderPassCategory_Name( info.passCategory ),
@@ -3159,49 +3152,86 @@ static bool R_ModernGLShaderLibrary_CreateProgram( int glslVersion, modernGLShad
 	R_ModernGLShaderLibrary_BuildVertexSource( glslVersion, kind, vertexSource, sizeof( vertexSource ) );
 	R_ModernGLShaderLibrary_BuildFragmentSource( glslVersion, kind, fragmentSource, fragmentSourceSize );
 
-	GLuint vertexShader = R_ModernGLShaderLibrary_CompileShader( GL_VERTEX_SHADER, vertexSource, programContext );
-	if ( vertexShader == 0 ) {
-		rg_modernGLShaderLibraryStats.failedProgramCount++;
-		return false;
-	}
-	GLuint fragmentShader = R_ModernGLShaderLibrary_CompileShader( GL_FRAGMENT_SHADER, fragmentSource, programContext );
-	if ( fragmentShader == 0 ) {
-		glDeleteShader( vertexShader );
-		rg_modernGLShaderLibraryStats.failedProgramCount++;
-		return false;
+	const GLenum stages[2] = { GL_VERTEX_SHADER, GL_FRAGMENT_SHADER };
+	const char *sources[2] = { vertexSource, fragmentSource };
+	GLuint *shaders[2] = { &pending.vertexShader, &pending.fragmentShader };
+	for ( int stage = 0; stage < 2; ++stage ) {
+		*shaders[stage] = glCreateShader( stages[stage] );
+		if ( *shaders[stage] == 0 ) {
+			common->Warning( "Modern GL shader compile failed for '%s': glCreateShader returned 0", programContext );
+			if ( stage > 0 ) {
+				glDeleteShader( pending.vertexShader );
+				pending.vertexShader = 0;
+			}
+			rg_modernGLShaderLibraryStats.failedProgramCount++;
+			return false;
+		}
+		const GLchar *text[1] = { sources[stage] };
+		glShaderSource( *shaders[stage], 1, text, NULL );
+		glCompileShader( *shaders[stage] );
 	}
 
 	info.program = glCreateProgram();
 	if ( info.program == 0 ) {
 		common->Warning( "Modern GL program link failed for '%s': glCreateProgram returned 0", programContext );
-		glDeleteShader( vertexShader );
-		glDeleteShader( fragmentShader );
+		glDeleteShader( pending.vertexShader );
+		glDeleteShader( pending.fragmentShader );
+		pending.vertexShader = pending.fragmentShader = 0;
 		rg_modernGLShaderLibraryStats.failedProgramCount++;
 		return false;
 	}
 
-	glAttachShader( info.program, vertexShader );
-	glAttachShader( info.program, fragmentShader );
+	glAttachShader( info.program, pending.vertexShader );
+	glAttachShader( info.program, pending.fragmentShader );
 	glBindAttribLocation( info.program, 0, "attr_Position" );
 	glBindAttribLocation( info.program, 8, "attr_TexCoord0" );
 	glBindAttribLocation( info.program, 12, "attr_DrawRecordIndex" );
 	glLinkProgram( info.program );
+	return true;
+}
+
+// Asks for the program's status (waiting for the driver if it is still
+// working), reports a failed stage or link, and on success reflects the
+// program into the library's next slot.
+static bool R_ModernGLShaderLibrary_FinishProgram( modernGLPendingProgram_t &pending ) {
+	modernGLShaderProgramInfo_t &pendingInfo = pending.info;
+	const char *programContext = pending.context;
+	const int glslVersion = pendingInfo.glslVersion;
+	const modernGLShaderProgramKind_t kind = pendingInfo.kind;
 
 	GLint linked = GL_FALSE;
-	glGetProgramiv( info.program, GL_LINK_STATUS, &linked );
-	glDetachShader( info.program, vertexShader );
-	glDetachShader( info.program, fragmentShader );
-	glDeleteShader( vertexShader );
-	glDeleteShader( fragmentShader );
-
+	glGetProgramiv( pendingInfo.program, GL_LINK_STATUS, &linked );
 	if ( linked != GL_TRUE ) {
-		R_ModernGLShaderLibrary_PrintProgramLog( info.program, programContext );
-		glDeleteProgram( info.program );
-		info.program = 0;
+		// A stage that did not compile explains the failure better than the link.
+		bool stageFailed = false;
+		const GLuint shaders[2] = { pending.vertexShader, pending.fragmentShader };
+		for ( int stage = 0; stage < 2 && !stageFailed; ++stage ) {
+			GLint compiled = GL_FALSE;
+			glGetShaderiv( shaders[stage], GL_COMPILE_STATUS, &compiled );
+			if ( compiled != GL_TRUE ) {
+				R_ModernGLShaderLibrary_PrintShaderLog( shaders[stage], programContext );
+				stageFailed = true;
+			}
+		}
+		if ( !stageFailed ) {
+			R_ModernGLShaderLibrary_PrintProgramLog( pendingInfo.program, programContext );
+		}
+	}
+	glDetachShader( pendingInfo.program, pending.vertexShader );
+	glDetachShader( pendingInfo.program, pending.fragmentShader );
+	glDeleteShader( pending.vertexShader );
+	glDeleteShader( pending.fragmentShader );
+	pending.vertexShader = pending.fragmentShader = 0;
+
+	if ( linked != GL_TRUE || rg_modernGLShaderProgramCount >= MODERN_GL_SHADER_MAX_PROGRAMS ) {
+		glDeleteProgram( pendingInfo.program );
+		pendingInfo.program = 0;
 		rg_modernGLShaderLibraryStats.failedProgramCount++;
 		return false;
 	}
 
+	modernGLShaderProgramInfo_t &info = rg_modernGLShaderPrograms[rg_modernGLShaderProgramCount];
+	info = pendingInfo;
 	info.linked = true;
 	R_GLDebug_LabelProgram( info.program, info.name );
 	if ( !R_ModernGLShaderLibrary_ReflectProgram( info ) ) {
@@ -3248,6 +3278,61 @@ static bool R_ModernGLShaderLibrary_CreateProgram( int glslVersion, modernGLShad
 	return true;
 }
 
+static bool R_ModernGLShaderLibrary_CreateProgram( int glslVersion, modernGLShaderProgramKind_t kind ) {
+	modernGLPendingProgram_t pending;
+	if ( !R_ModernGLShaderLibrary_BeginProgram( glslVersion, kind, pending ) ) {
+		return false;
+	}
+	return R_ModernGLShaderLibrary_FinishProgram( pending );
+}
+
+#ifndef GL_MAX_SHADER_COMPILER_THREADS_KHR
+#define GL_MAX_SHADER_COMPILER_THREADS_KHR 0x91B0
+#endif
+#ifndef GL_COMPLETION_STATUS_KHR
+#define GL_COMPLETION_STATUS_KHR 0x91B1
+#endif
+extern void *GLimp_ExtensionPointer( const char *name );
+
+// GL_KHR_parallel_shader_compile (or its ARB twin, same tokens) lets the driver
+// compile on its own threads and report completion without blocking. Returns
+// whether GL_COMPLETION_STATUS_KHR can be asked for.
+static bool R_ModernGLShaderLibrary_EnableParallelCompile( void ) {
+	if ( !r_rendererShaderParallelCompile.GetBool() ) {
+		return false;
+	}
+	const bool khr = GLCapabilityProbe_HasExtension( "GL_KHR_parallel_shader_compile" );
+	const bool arb = !khr && GLCapabilityProbe_HasExtension( "GL_ARB_parallel_shader_compile" );
+	if ( !khr && !arb ) {
+		return false;
+	}
+	typedef void ( GLAPIENTRY *maxShaderCompilerThreadsProc_t )( GLuint count );
+	maxShaderCompilerThreadsProc_t maxShaderCompilerThreads = reinterpret_cast<maxShaderCompilerThreadsProc_t>(
+		GLimp_ExtensionPointer( khr ? "glMaxShaderCompilerThreadsKHR" : "glMaxShaderCompilerThreadsARB" ) );
+	if ( maxShaderCompilerThreads != NULL ) {
+		// 0xFFFFFFFF: as many threads as the implementation chooses.
+		maxShaderCompilerThreads( 0xFFFFFFFFu );
+	}
+	return true;
+}
+
+// Waits for the driver to finish every pending program, keeping the window
+// reading its messages meanwhile: on a cold driver cache one program can take
+// longer than the five seconds after which Windows calls a window hung.
+static void R_ModernGLShaderLibrary_WaitForPrograms( const modernGLPendingProgram_t *pending, const bool *started, int count ) {
+	for ( int i = 0; i < count; ++i ) {
+		while ( started[i] ) {
+			GLint complete = GL_TRUE;
+			glGetProgramiv( pending[i].info.program, GL_COMPLETION_STATUS_KHR, &complete );
+			if ( complete != GL_FALSE ) {
+				break;
+			}
+			common->LoadingCheckpoint();
+			std::this_thread::sleep_for( std::chrono::milliseconds( 2 ) );
+		}
+	}
+}
+
 void R_ModernGLShaderLibrary_Init( const renderBackendCaps_t &caps, const renderFeatureSet_t &features ) {
 	rg_modernGLShaderLibraryLastCaps = caps;
 	rg_modernGLShaderLibraryLastFeatures = features;
@@ -3273,23 +3358,49 @@ void R_ModernGLShaderLibrary_Init( const renderBackendCaps_t &caps, const render
 	// otherwise pays for all of them on the first launch after an update.
 	const bool allVersions = r_rendererShaderAllGLSLVersions.GetBool();
 	const int startMsec = Sys_Milliseconds();
-	common->Printf( "Modern GL shader library: compiling %d programs (GLSL %d%s); a cold driver cache can take a while\n",
+	const bool parallel = !allVersions && R_ModernGLShaderLibrary_EnableParallelCompile();
+	common->Printf( "Modern GL shader library: compiling %d programs (GLSL %d%s%s); a cold driver cache can take a while\n",
 		allVersions ? MODERN_GL_SHADER_PROGRAM_KIND_COUNT * versionCount : MODERN_GL_SHADER_PROGRAM_KIND_COUNT,
-		versions[versionCount - 1], allVersions ? " and every lower version" : "" );
+		versions[versionCount - 1], allVersions ? " and every lower version" : "", parallel ? ", in parallel" : "" );
 	if ( allVersions ) {
 		rg_modernGLShaderLibraryStats.validatedGLSLVersionCount = versionCount;
 		for ( int i = 0; i < versionCount; ++i ) {
 			for ( int kind = 0; kind < MODERN_GL_SHADER_PROGRAM_KIND_COUNT; ++kind ) {
 				R_ModernGLShaderLibrary_CreateProgram( versions[i], static_cast<modernGLShaderProgramKind_t>( kind ) );
+				// A cold driver cache spends seconds per program; keep the window
+				// reading its messages (nothing redraws here).
+				common->LoadingCheckpoint();
 			}
 		}
 	} else {
 		bool linkedVersion[4] = { false, false, false, false };
+		// Every kind goes to the driver at the highest version before any status
+		// is asked for, so a driver that compiles in parallel works on all of
+		// them at once; the results are taken in kind order, as before.
+		static modernGLPendingProgram_t pending[MODERN_GL_SHADER_PROGRAM_KIND_COUNT];
+		bool started[MODERN_GL_SHADER_PROGRAM_KIND_COUNT];
+		const int topVersion = versionCount - 1;
+		for ( int kind = 0; kind < MODERN_GL_SHADER_PROGRAM_KIND_COUNT; ++kind ) {
+			started[kind] = R_ModernGLShaderLibrary_BeginProgram( versions[topVersion],
+				static_cast<modernGLShaderProgramKind_t>( kind ), pending[kind] );
+			common->LoadingCheckpoint();
+		}
+		if ( parallel ) {
+			R_ModernGLShaderLibrary_WaitForPrograms( pending, started, MODERN_GL_SHADER_PROGRAM_KIND_COUNT );
+		}
 		for ( int kind = 0; kind < MODERN_GL_SHADER_PROGRAM_KIND_COUNT; ++kind ) {
 			// Highest version first; a lower one that links replaces the failure.
-			const int failedBefore = rg_modernGLShaderLibraryStats.failedProgramCount;
-			for ( int i = versionCount - 1; i >= 0; --i ) {
-				if ( R_ModernGLShaderLibrary_CreateProgram( versions[i], static_cast<modernGLShaderProgramKind_t>( kind ) ) ) {
+			// Begin counted its own failure, so count from before it.
+			const int failedBefore = rg_modernGLShaderLibraryStats.failedProgramCount - ( started[kind] ? 0 : 1 );
+			for ( int i = topVersion; i >= 0; --i ) {
+				bool linked;
+				if ( i == topVersion ) {
+					linked = started[kind] && R_ModernGLShaderLibrary_FinishProgram( pending[kind] );
+				} else {
+					linked = R_ModernGLShaderLibrary_CreateProgram( versions[i], static_cast<modernGLShaderProgramKind_t>( kind ) );
+				}
+				common->LoadingCheckpoint();
+				if ( linked ) {
 					if ( i != versionCount - 1 ) {
 						common->Printf( "Modern GL shader library: %s falls back to GLSL %d\n",
 							ModernGLShaderProgramKind_Name( static_cast<modernGLShaderProgramKind_t>( kind ) ), versions[i] );

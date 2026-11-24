@@ -102,6 +102,16 @@ idCVar	com_showLevelLoadTimes( "com_showLevelLoadTimes", "1", CVAR_SYSTEM | CVAR
 static idCVar com_saveGameProfile( "com_saveGameProfile", "0", CVAR_SYSTEM | CVAR_INTEGER, "save profiling: 0 off, 1 phase timings, 2 per-class detail, 3 dictionary and commit detail", 0, 3 );
 static idCVar com_saveGameCommitOnWorker( "com_saveGameCommitOnWorker", "0", CVAR_SYSTEM | CVAR_BOOL, "experimental checkpoint file transaction on a worker; frame-time qualification pending" );
 static idCVar com_saveGameCopyOnWorker( "com_saveGameCopyOnWorker", "0", CVAR_SYSTEM | CVAR_BOOL, "experimental checkpoint copy on storage worker; overall frame-time qualification pending" );
+static idCVar com_loadingSkipObscured( "com_loadingSkipObscured", "1", CVAR_SYSTEM | CVAR_BOOL | CVAR_NOCHEAT,
+	"skip loading-screen redraws while the game window is minimized or fully covered by other windows; "
+	"events, loading music and network traffic are still serviced" );
+#if defined( USE_SDL3 ) && !defined( ID_DEDICATED )
+bool Sys_SDL_IsGameWindowObscured( void );
+#endif
+// While the window is obscured, the next time PacifierUpdate services the
+// window, sound and network (and looks again whether it can be seen).
+static double sessionObscuredLoadingRecheckMsec = 0;
+static bool sessionObscuredLoadingReported = false;
 static idCVar com_loadingWarmFirstFrame( "com_loadingWarmFirstFrame", "1", CVAR_SYSTEM | CVAR_BOOL,
 	"single player: draw a level's first view once, unseen, before the loading screen hands over, so the first frame of play does no one-time work" );
 static idCVar com_saveGameAutosaveOnWorker( "com_saveGameAutosaveOnWorker", "1", CVAR_SYSTEM | CVAR_BOOL,
@@ -8287,6 +8297,8 @@ void idSessionLocal::ExecuteMapChange( bool noFadeWipe ) {
 	// window is on now.
 	loadingFramePacer.Configure( openQ4_GetDisplayRefreshHz(), Session_FindPresentationCap() );
 	loadingFramePacer.Reset();
+	sessionObscuredLoadingRecheckMsec = 0;
+	sessionObscuredLoadingReported = false;
 
 	// close console and remove any prints from the notify lines
 	console->Close();
@@ -10753,9 +10765,40 @@ void idSessionLocal::PacifierUpdate() {
 	// redraw's measured cost, from the offer to the end of the present, so a
 	// slow present path slows the cadence instead of consuming the load.
 	const double offerMsec = LoadingPresentation_Now();
+	if ( offerMsec < sessionObscuredLoadingRecheckMsec ) {
+		return;
+	}
 	if ( !loadingFramePacer.Due( offerMsec ) ) {
 		return;
 	}
+
+	// Nobody can see a minimized or fully covered window, and its present can
+	// block for far longer than the frame takes to draw (a covered window's
+	// swap is throttled by the compositor), which the pacer would charge to up
+	// to its whole presentation share of the load. Keep the window, the music
+	// and the network serviced at a modest rate instead, and present again
+	// as soon as the window shows.
+	bool obscured = false;
+#if defined( USE_SDL3 ) && !defined( ID_DEDICATED )
+	obscured = com_loadingSkipObscured.GetBool() && insideExecuteMapChange && Sys_SDL_IsGameWindowObscured();
+#endif
+	if ( obscured != sessionObscuredLoadingReported ) {
+		sessionObscuredLoadingReported = obscured;
+		if ( cvarSystem->GetCVarInteger( "com_loadingFrameTrace" ) > 0 ) {
+			common->Printf( "LOADING_OBSCURED %d\n", obscured ? 1 : 0 );
+		}
+	}
+	if ( obscured ) {
+		sessionObscuredLoadingRecheckMsec = offerMsec + 50.0;
+		SetPlayingSoundWorld();
+		Session_ServiceLoadingSound();
+		Sys_GenerateEvents();
+		lastPacifierTime = Sys_Milliseconds();
+		idAsyncNetwork::client.PacifierUpdate();
+		idAsyncNetwork::server.PacifierUpdate();
+		return;
+	}
+	sessionObscuredLoadingRecheckMsec = 0;
 	const float pacifierIntervalMs = static_cast<float>( loadingFramePacer.Interval() );
 
 	// The pacer admitted this frame; the frame limiter must not sleep on it.

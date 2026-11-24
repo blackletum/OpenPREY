@@ -123,6 +123,38 @@ def validate_draw_cost_is_charged() -> None:
     require_order(reset, "loadingFramePacer.Reset();", "LoadLoadingGui( mapString );", "each load starts a fresh pacer")
 
 
+def validate_obscured_window_skips_redraws() -> None:
+    """A minimized or fully covered window's present can block far longer than the
+    frame takes to draw, and the pacer then charges up to its whole presentation
+    share to the load (issue #12: covered loads ran ~1.67x long). While the window
+    is obscured, PacifierUpdate must skip the redraw without charging the pacer, and
+    still service the window, the loading music and the network."""
+    source = read("src/framework/Session.cpp")
+    body = function_body(source, "void idSessionLocal::PacifierUpdate() {")
+    require(source, 'static idCVar com_loadingSkipObscured( "com_loadingSkipObscured", "1"', "Session.cpp skip cvar")
+    require(body, "Sys_SDL_IsGameWindowObscured()", "PacifierUpdate obscured test")
+    require_order(body, "loadingFramePacer.Due( offerMsec )", "Sys_SDL_IsGameWindowObscured()",
+                  "obscured test runs on the pacer's cadence")
+    require_order(body, "Sys_SDL_IsGameWindowObscured()", "UpdateScreen();", "obscured test before the redraw")
+    obscured = body[body.index("if ( obscured ) {"):]
+    obscured = obscured[: obscured.index("return;")]
+    for fragment in ("Session_ServiceLoadingSound();", "Sys_GenerateEvents();",
+                     "idAsyncNetwork::client.PacifierUpdate();", "idAsyncNetwork::server.PacifierUpdate();"):
+        require(obscured, fragment, "obscured PacifierUpdate servicing")
+    for fragment in ("UpdateScreen();", "loadingFramePacer.Presented("):
+        refuse(obscured, fragment, "obscured PacifierUpdate (no redraw, no pacer charge)")
+
+    backend = read("src/sys/sdl3/sdl3_backend.cpp")
+    test = function_body(backend, "bool Sys_SDL_IsGameWindowObscured(void) {")
+    # Hidden batch runs (r_hiddenWindow, levelshots) keep their presentation.
+    require_order(test, "SDL_WINDOW_HIDDEN", "SDL_WINDOW_MINIMIZED | SDL_WINDOW_OCCLUDED", "hidden is not obscured")
+    covered = function_body(backend, "static bool SDL3_Win32WindowCoveredByOthers(HWND hwnd) {")
+    # The process's own windows (the splash above the game window) never count.
+    require(covered, "process == ownProcess", "own windows ignored")
+    require(covered, "WS_EX_TRANSPARENT", "click-through overlays ignored")
+    require(covered, "dwmwaCloaked", "cloaked windows ignored")
+
+
 def validate_read_count_granularity() -> None:
     """AddToReadCount must not offer a redraw on every 64 KiB chunk; both callers
     read in 64 KiB chunks, which put thousands of offers per load inside asset
@@ -206,6 +238,7 @@ def main() -> None:
     checks = (
         validate_interval_floor,
         validate_draw_cost_is_charged,
+        validate_obscured_window_skips_redraws,
         validate_read_count_granularity,
         validate_presentation_cap_agreement,
         validate_throttle_spin_is_bounded,

@@ -1032,6 +1032,152 @@ bool Sys_SDL_IsGameWindowShown(void) {
 	return (SDL_GetWindowFlags(s_sdlWindow) & (SDL_WINDOW_HIDDEN | SDL_WINDOW_MINIMIZED)) == 0;
 }
 
+#if !defined(OPENQ4_SDL3_POSIX_HOST)
+// Windows does not tell a window that others cover it (SDL3 reports
+// SDL_WINDOW_OCCLUDED only on macOS, X11 and Wayland), so walk the windows
+// above it in z-order and subtract each one's visible frame from its client
+// area. A window only counts when it is drawn opaque: visible, not minimized,
+// not cloaked (other virtual desktops, suspended apps), not click-through or
+// translucent, and not shaped. This process's own windows (the splash, the
+// console) never count, so they cannot hold back the frame that retires them.
+static bool SDL3_Win32WindowCoveredByOthers(HWND hwnd) {
+	typedef HRESULT(WINAPI * DwmGetWindowAttributeFn)(HWND, DWORD, PVOID, DWORD);
+	static DwmGetWindowAttributeFn dwmGetWindowAttribute = NULL;
+	static bool dwmLookedUp = false;
+	if (!dwmLookedUp) {
+		dwmLookedUp = true;
+		HMODULE dwmapi = LoadLibraryA("dwmapi.dll");
+		if (dwmapi != NULL) {
+			dwmGetWindowAttribute = reinterpret_cast<DwmGetWindowAttributeFn>(GetProcAddress(dwmapi, "DwmGetWindowAttribute"));
+		}
+	}
+	const DWORD dwmwaExtendedFrameBounds = 9;	// DWMWA_EXTENDED_FRAME_BOUNDS
+	const DWORD dwmwaCloaked = 14;				// DWMWA_CLOAKED
+
+	RECT client;
+	if (!GetClientRect(hwnd, &client)) {
+		return false;
+	}
+	POINT corners[2] = { { client.left, client.top }, { client.right, client.bottom } };
+	MapWindowPoints(hwnd, HWND_DESKTOP, corners, 2);
+	RECT visible = { corners[0].x, corners[0].y, corners[1].x, corners[1].y };
+	const RECT desktop = { GetSystemMetrics(SM_XVIRTUALSCREEN), GetSystemMetrics(SM_YVIRTUALSCREEN),
+		GetSystemMetrics(SM_XVIRTUALSCREEN) + GetSystemMetrics(SM_CXVIRTUALSCREEN),
+		GetSystemMetrics(SM_YVIRTUALSCREEN) + GetSystemMetrics(SM_CYVIRTUALSCREEN) };
+	if (!IntersectRect(&visible, &visible, &desktop)) {
+		return true;	// entirely off screen
+	}
+
+	HRGN remaining = CreateRectRgnIndirect(&visible);
+	if (remaining == NULL) {
+		return false;
+	}
+	const DWORD ownProcess = GetCurrentProcessId();
+	bool covered = false;
+	int examined = 0;
+	for (HWND above = GetWindow(hwnd, GW_HWNDPREV); above != NULL && examined < 1024;
+		above = GetWindow(above, GW_HWNDPREV), ++examined) {
+		if (!IsWindowVisible(above) || IsIconic(above)) {
+			continue;
+		}
+		DWORD process = 0;
+		GetWindowThreadProcessId(above, &process);
+		if (process == ownProcess) {
+			continue;
+		}
+		const LONG_PTR exStyle = GetWindowLongPtr(above, GWL_EXSTYLE);
+		if ((exStyle & WS_EX_TRANSPARENT) != 0) {
+			continue;
+		}
+		if ((exStyle & WS_EX_LAYERED) != 0) {
+			// Opaque only with a full constant alpha and no colour key;
+			// UpdateLayeredWindow content (per-pixel alpha) fails the query.
+			COLORREF key = 0;
+			BYTE alpha = 0;
+			DWORD flags = 0;
+			if (!GetLayeredWindowAttributes(above, &key, &alpha, &flags) || (flags & LWA_COLORKEY) != 0 ||
+				((flags & LWA_ALPHA) != 0 && alpha < 255)) {
+				continue;
+			}
+		}
+		RECT frame;
+		bool haveFrame = false;
+		if (dwmGetWindowAttribute != NULL) {
+			DWORD cloaked = 0;
+			if (SUCCEEDED(dwmGetWindowAttribute(above, dwmwaCloaked, &cloaked, sizeof(cloaked))) && cloaked != 0) {
+				continue;
+			}
+			// The window rectangle includes the invisible resize borders.
+			haveFrame = SUCCEEDED(dwmGetWindowAttribute(above, dwmwaExtendedFrameBounds, &frame, sizeof(frame)));
+		}
+		if (!haveFrame && !GetWindowRect(above, &frame)) {
+			continue;
+		}
+		RECT overlap;
+		if (!IntersectRect(&overlap, &frame, &visible)) {
+			continue;
+		}
+		HRGN shape = CreateRectRgn(0, 0, 0, 0);
+		const bool shaped = shape != NULL && GetWindowRgn(above, shape) != ERROR;
+		if (shape != NULL) {
+			DeleteObject(shape);
+		}
+		if (shaped) {
+			continue;
+		}
+		HRGN cover = CreateRectRgnIndirect(&frame);
+		if (cover == NULL) {
+			continue;
+		}
+		const int result = CombineRgn(remaining, remaining, cover, RGN_DIFF);
+		DeleteObject(cover);
+		if (result == NULLREGION) {
+			covered = true;
+			break;
+		}
+		if (result == ERROR) {
+			break;
+		}
+	}
+	DeleteObject(remaining);
+	return covered;
+}
+#endif
+
+// True while nothing of the game window can be seen: minimized, or covered by
+// other windows (on Windows, by the test above; elsewhere where the platform
+// reports occlusion). A hidden window is not obscured: hidden batch runs keep
+// their usual presentation. A loading screen skips its redraws while this
+// holds, since a covered window's present can block for far longer than it
+// draws. Checked at most every 100 ms.
+bool Sys_SDL_IsGameWindowObscured(void) {
+	static Uint64 lastCheckMsec = 0;
+	static bool obscured = false;
+	if (s_sdlAppInBackground || !s_sdlVideoReferenceHeld || s_sdlWindow == NULL || !SDL_IsMainThread()) {
+		lastCheckMsec = 0;
+		obscured = false;
+		return false;
+	}
+	const Uint64 now = SDL_GetTicks();
+	if (lastCheckMsec != 0 && now - lastCheckMsec < 100) {
+		return obscured;
+	}
+	lastCheckMsec = now > 0 ? now : 1;
+	const SDL_WindowFlags flags = SDL_GetWindowFlags(s_sdlWindow);
+	if ((flags & SDL_WINDOW_HIDDEN) != 0) {
+		obscured = false;
+	} else if ((flags & (SDL_WINDOW_MINIMIZED | SDL_WINDOW_OCCLUDED)) != 0) {
+		obscured = true;
+	} else {
+#if !defined(OPENQ4_SDL3_POSIX_HOST)
+		obscured = win32.hWnd != NULL && SDL3_Win32WindowCoveredByOthers(win32.hWnd);
+#else
+		obscured = false;
+#endif
+	}
+	return obscured;
+}
+
 // The refresh rate of the display the game window is on, 0 when unknown, for
 // the frame-pacing reports. Looked up at most twice a second.
 float Sys_SDL_GetWindowRefreshHz(void) {
