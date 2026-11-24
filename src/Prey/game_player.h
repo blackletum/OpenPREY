@@ -377,6 +377,24 @@ public:
 	virtual float		CalcFov( bool honorZoom );	
 	virtual void		MangleControls(usercmd_t *cmd);
 	virtual	void		UpdateCrosshairs( void );
+	bool				CrosshairWanted( void );	// openPR06: the weapon crosshair is up (UpdateCrosshairs, the VR aim marker)
+
+	// openPR06 VR (src/framework/VRSystem.h), after openQ4's idPlayer. Tracked
+	// poses hang off the eye in the player's gravity frame:
+	// GetEyePosition() + pose.origin * VR_TrackingAxis( trackingYaw ) * GetEyeAxis().
+	// GetVRView: the frame's poses, while the headset shows this local
+	// player's own first-person view (not cameras, cutscenes, third person,
+	// death or vehicles)
+	bool				GetVRView( vrFrameState_t &frame, float &trackingYaw );
+	// the weapon hand aims (vr_aimMode 1) with a tracked controller
+	bool				IsVRHandAiming( void );
+	// where the weapon hand aims from, and along: its aim pose in the world,
+	// kept short of whatever lies between the eye and the hand
+	bool				GetVRHandAim( idVec3 &origin, idMat3 &axis );
+	// the view weapon held in the weapon hand at true scale (VR_WeaponTransform)
+	bool				GetVRWeaponTransform( idVec3 &origin, idMat3 &axis );
+	// a pulse in the local player's controllers: the weapon hand, the other, or both
+	void				VRVibrate( bool weaponHand, bool otherHand, float amplitude, int durationMsec );
 
 	void				SetOverlayGui(const char *guiName);
 

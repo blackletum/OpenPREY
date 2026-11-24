@@ -71,6 +71,15 @@ where nothing a loading-screen redraw touches is half-built:
 | Collision model vertices, edges, polygons | every 256 vertices/edges, each polygon |
 | Level image header prediction | each image |
 | `idFile_InZip::Seek` | each 32 KiB re-inflated |
+| `R_ModernGLShaderLibrary_Init`, `RB_LoadARBProgramSet` | each GL program compiled |
+
+On SDL3 builds every checkpoint also pumps the window's messages, throttled to
+20 Hz (`Sys_SDL_KeepWindowResponsive`), even where no loading screen exists
+yet. The renderer compiles its programs before the startup screen can draw,
+and on a cold driver shader cache (the first launch after a driver or engine
+update) that took a minute or more with nothing reading messages, so Windows
+marked the window Not Responding (#41). The pump only moves the messages into
+SDL's queue; the frame loop handles them once the work ends.
 
 Rules for new checkpoints: only on the main thread's own loop, between items;
 never while GL or Vulkan state for an item is half set, never inside the
@@ -80,6 +89,23 @@ inside font registration (a redraw can register fonts).
 **Presenting while waiting.** Where the main thread waits for a worker it keeps
 presenting: a retained document parse (`UI_RetainedTakePrefetched`) and a level
 image file still being read by the prefetcher (`idLevelImagePrefetch::Settle`).
+
+**Not presenting when nobody can see it.** While a level loads with the game
+window minimized or fully covered by other windows, the pacifier skips its
+redraws. Every 50 ms it still pumps the window, services the loading music and
+sends the network keep-alives, and it presents again within about 100 ms of the
+window showing. A covered window's present is throttled by the compositor and
+can block for far longer than the frame takes to draw, and the pacer charged
+that to its whole 40% share: covered loads ran 1.7-1.9 times as long as visible
+ones (#12). `Sys_SDL_IsGameWindowObscured` decides, at most every 100 ms. SDL
+reports occlusion on macOS, X11 and Wayland. On Windows, which does not, it
+walks the windows above the game window in z-order and subtracts each opaque
+one's frame from the client area, ignoring this process's own windows (the
+splash), cloaked windows (other virtual desktops), click-through or translucent
+layered windows and shaped ones. A hidden window (`r_hiddenWindow`, batch
+captures) is not obscured and presents as before. `com_loadingSkipObscured 0`
+turns this off. `com_loadingFrameTrace 1` logs `LOADING_OBSCURED 1` and
+`LOADING_OBSCURED 0` as the state changes.
 
 **Less work.** Three costs that dominated gaps were removed outright, with
 identical results:

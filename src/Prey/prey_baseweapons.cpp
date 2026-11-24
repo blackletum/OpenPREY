@@ -110,6 +110,8 @@ hhWeapon::hhWeapon() {
 	fl.networkSync = true;
 	cameraShakeOffset.Zero(); //rww - had to move here to avoid den/nan/blah in spawn
 	//HUMANHEAD END
+	vrHoldKnown = false;
+	vrHoldGrip.Zero();
 
 	Clear();
 }
@@ -388,6 +390,7 @@ void hhWeapon::Clear( void ) {
 	idealState		= "";
 	animBlendFrames	= 0;
 	animDoneTime	= 0;
+	examineEndTime	= 0;
 
 	lightOn			= false;
 
@@ -703,6 +706,93 @@ void hhWeapon::GetJointHandle( const char* jointName, weaponJointHandle_t& handl
 	if( worldModel.IsValid() ) {
 		handle.world = worldModel->GetAnimator()->GetJointHandle( jointName );
 	}
+}
+
+/*
+================
+hhWeapon::GetVRHold
+
+openPR06 VR: how the view model holds its gun, so VR_WeaponTransform can put
+it in the weapon hand at true scale (openQ4's rvWeapon::GetVRHold). PREY's
+view models hang off the eye, pointing along the view, so the barrel is the
+model's forward axis: their barrel joints are jaws, arrow nocks and grenade
+bodies, too varied to steer by. The grip is the wrist of the hand the model
+draws holding it, the left for a gun attached to the left hand (the bow),
+in the first frame of the idle animation; a model without one is gripped
+behind and under its barrel joint.
+================
+*/
+void hhWeapon::GetVRHold( idVec3 &barrel, idVec3 &grip ) {
+	barrel.Set( 1.0f, 0.0f, 0.0f );
+	if ( !vrHoldKnown ) {
+		vrHoldKnown = true;
+		// unmeasured: where PREY's gun models sit under the right of the eye
+		vrHoldGrip.Set( 13.0f, -5.0f, -7.0f );
+		idAnimator *animator = GetAnimator();
+		const idDict *weaponDict = dict != NULL ? dict : &spawnArgs;
+		const bool leftHanded = !idStr::Icmp( weaponDict->GetString( "joint_attach" ), "Lattach_gun" );
+		const idRenderModel *model = animator != NULL ? animator->ModelHandle() : NULL;
+		const int idleAnim = animator != NULL ? animator->GetAnim( "idle" ) : 0;
+		const idAnim *idle = idleAnim ? animator->GetAnim( idleAnim ) : NULL;
+		const idMD5Anim *md5 = idle != NULL ? idle->MD5Anim( 0 ) : NULL;
+		const int numJoints = animator != NULL ? animator->NumJoints() : 0;
+		if ( model != NULL && md5 != NULL && animator->ModelDef() != NULL && numJoints > 0
+				&& numJoints == model->NumJoints() && numJoints == md5->NumJoints() ) {
+			idJointMat *joints = ( idJointMat * )_alloca16( numJoints * sizeof( joints[0] ) );
+			gameEdit->ANIM_CreateAnimFrame( model, md5, numJoints, joints, 0,
+				animator->ModelDef()->GetVisualOffset(), animator->RemoveOrigin() );
+			const jointHandle_t wrist = animator->GetJointHandle( leftHanded ? "L_Wrist" : "R_Wrist" );
+			const jointHandle_t barrelJoint = fireController != NULL ? fireController->GetBarrelJointView() : INVALID_JOINT;
+			if ( wrist != INVALID_JOINT && wrist < numJoints ) {
+				vrHoldGrip = joints[ wrist ].ToVec3();
+			} else if ( barrelJoint != INVALID_JOINT && barrelJoint < numJoints ) {
+				const idVec3 muzzle = joints[ barrelJoint ].ToVec3();
+				vrHoldGrip.Set( Max( 4.0f, muzzle.x - 10.0f ), muzzle.y, muzzle.z - 3.0f );
+			}
+		}
+		gameLocal.DPrintf( "VR hold %s: grip %s\n", weaponDict->GetString( "classname" ), vrHoldGrip.ToString( 1 ) );
+	}
+	grip = vrHoldGrip;
+}
+
+/*
+================
+hhWeapon::GetVRMuzzle
+
+openPR06 VR: the barrel joint where the view model is drawn at
+weaponOrigin/weaponAxis, for the beam of the aim marker (vr_aimLaser 2)
+================
+*/
+bool hhWeapon::GetVRMuzzle( const idVec3 &weaponOrigin, const idMat3 &weaponAxis, idVec3 &muzzle ) {
+	hhWeaponFireController *controller = ( altFireController != NULL && spawnArgs.GetBool( "altModeWeapon" ) && WEAPON_ALTMODE ) ? altFireController : fireController;
+	const jointHandle_t joint = controller != NULL ? controller->GetBarrelJointView() : INVALID_JOINT;
+	idAnimator *animator = GetAnimator();
+	idVec3 jointOrigin;
+	idMat3 jointAxis;
+	if ( joint == INVALID_JOINT || animator == NULL || !animator->GetJointTransform( joint, gameLocal.time, jointOrigin, jointAxis ) ) {
+		return false;
+	}
+	muzzle = weaponOrigin + jointOrigin * weaponAxis;
+	return true;
+}
+
+/*
+================
+hhWeapon::PresentVRHold
+
+openPR06 VR: the hand moves every headset frame, game tic or not. The
+physics (hhPhysics_StaticWeapon) holds the gun in the hand on each tic, which
+is where shots leave from; each draw re-places the drawn model from that
+draw's pose, as openQ4's presentation transform does.
+================
+*/
+void hhWeapon::PresentVRHold( const idVec3 &origin, const idMat3 &axis ) {
+	if ( modelDefHandle == -1 || IsHidden() ) {
+		return;
+	}
+	renderEntity.origin = origin;
+	renderEntity.axis = axis;
+	gameRenderWorld->UpdateEntityDef( modelDefHandle, &renderEntity );
 }
 
 /*
@@ -1209,7 +1299,9 @@ void hhWeapon::PresentWeapon( bool showViewModel ) {
 	renderEntity.allowSurfaceInViewID = owner->entityNumber+1;
 
 	// crunch the depth range so it never pokes into walls this breaks the machine gun gui
-	renderEntity.weaponDepthHack = true;
+	// openPR06 VR: a gun held in the hand is drawn at its true depth, behind
+	// whatever the hand reaches into, as openQ4 draws it
+	renderEntity.weaponDepthHack = !owner->IsVRHandAiming();
 
 	// present the model
 	if ( showViewModel ) {
@@ -1669,10 +1761,15 @@ void hhWeapon::Event_PlayAnim( int channel, const char *animname ) {
 		//HUMANHEAD END
 		GetAnimator()->Clear( channel, gameLocal.GetTime(), FRAME2MS( animBlendFrames ) );
 		animDoneTime = 0;
+		examineEndTime = 0;
 	} else {
 		//Show(); AOB - removed so we can use hidden weapons  Hope this doesn't fuck to many things
 		GetAnimator()->PlayAnim( channel, anim, gameLocal.GetTime(), FRAME2MS( animBlendFrames ) );
 		animDoneTime = GetAnimator()->CurrentAnim( channel )->GetEndTime();
+		// openPR06: Tommy turns a newly acquired weapon over in his hands
+		// (initialPickup, or the soul stripper's initialPickupC); the player
+		// view pulls focus onto it until the anim ends or another replaces it
+		examineEndTime = !idStr::Icmpn( animname, "initialPickup", 13 ) ? animDoneTime : 0;
 		if ( worldModel.GetEntity() ) {
 			anim = worldModel.GetEntity()->GetAnimator()->GetAnim( animname );
 			if ( anim ) {
@@ -1855,6 +1952,11 @@ hhWeapon::GetPhysicsToVisualTransform
 bool hhWeapon::GetPhysicsToVisualTransform( idVec3 &origin, idMat3 &axis ) {
 	bool bResult = hhAnimatedEntity::GetPhysicsToVisualTransform( origin, axis );
 
+	// openPR06 VR: the hand holds the gun; the camera's shake stays out of it
+	if ( owner.IsValid() && owner->IsVRHandAiming() ) {
+		return bResult;
+	}
+
 	assert(!FLOAT_IS_NAN(cameraShakeOffset.x));
 	assert(!FLOAT_IS_NAN(cameraShakeOffset.y));
 	assert(!FLOAT_IS_NAN(cameraShakeOffset.z));
@@ -1929,8 +2031,10 @@ void hhWeapon::Event_PlayCycle( int channel, const char *animname ) {
 		//HUMANHEAD END
 		GetAnimator()->Clear( channel, gameLocal.GetTime(), FRAME2MS( animBlendFrames ) );
 		animDoneTime = 0;
+		examineEndTime = 0;
 	} else {
 		//Show();AOB - removed so we can use hidden weapons  Hope this doesn't fuck to many things
+		examineEndTime = 0;
 
 		// NLANOTE - Used to be CARandom
 		GetAnimator()->CycleAnim( channel, anim, gameLocal.GetTime(), FRAME2MS( animBlendFrames ) );
@@ -2026,6 +2130,9 @@ void hhWeapon::PrecomputeTraceInfo() {
 	idVec3 eyePos = owner->GetEyePosition();
 	idMat3 weaponAxis = GetAxis();
 	float traceDist = 1024.0f;	// was CM_MAX_TRACE_DIST
+
+	// openPR06 VR: a gun in the hand points where the hand aims, from the hand
+	owner->GetVRHandAim( eyePos, weaponAxis );
 
 	// Perform eye trace
 	gameLocal.clip.TracePoint( eyeTraceInfo, eyePos, eyePos + weaponAxis[0] * traceDist, 

@@ -4873,7 +4873,7 @@ static const char *const MAINMENU_RESET_VIDEO_CVARS[] = {
 	"r_bloomRadius", "r_hdrWhitePoint", "r_hdrSaturation", "r_hdrContrast", "r_crtAmount", "r_crtChromatic",
 	// The retained page's rows beyond the stock ones
 	"r_resolutionScaleMode", "r_resolutionScaleSharpness", "r_shadowMapSize", "r_shadowMapFilterMode", "r_softParticles",
-	"r_temporalAA", "r_bloomThreshold", "r_motionBlurStrength", "r_glowStrength"
+	"r_temporalAA", "r_bloomThreshold", "r_motionBlurStrength", "r_glowStrength", "r_depthOfField", "r_depthOfFieldRadius"
 };
 
 /*

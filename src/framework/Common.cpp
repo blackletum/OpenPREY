@@ -187,7 +187,7 @@ idCVar com_showFramePacing( "com_showFramePacing", "0", CVAR_INTEGER | CVAR_SYST
 idCVar com_showMemoryUsage( "com_showMemoryUsage", "0", CVAR_BOOL|CVAR_SYSTEM|CVAR_NOCHEAT, "show total and per frame memory usage" );
 idCVar com_showAsyncStats( "com_showAsyncStats", "0", CVAR_BOOL|CVAR_SYSTEM|CVAR_NOCHEAT, "show async network stats" );
 idCVar com_showSoundDecoders( "com_showSoundDecoders", "0", CVAR_BOOL|CVAR_SYSTEM|CVAR_NOCHEAT, "show sound decoders" );
-idCVar com_timestampPrints( "com_timestampPrints", "0", CVAR_SYSTEM, "print time with each console print, 1 = msec, 2 = sec", 0, 2, idCmdSystem::ArgCompletion_Integer<0,2> );
+idCVar com_timestampPrints( "com_timestampPrints", "0", CVAR_SYSTEM, "print time with each console print, 1 = sec, 2 = msec", 0, 2, idCmdSystem::ArgCompletion_Integer<0,2> );
 idCVar com_timescale( "timescale", "1", CVAR_SYSTEM | CVAR_FLOAT, "scales the time", 0.1f, 10.0f );
 idCVar com_logFile( "logFile", "0", CVAR_SYSTEM | CVAR_NOCHEAT, "1 = buffer log, 2 = flush after each print", 0, 2, idCmdSystem::ArgCompletion_Integer<0,2> );
 idCVar com_logFileName( "logFileName", "qconsole.log", CVAR_SYSTEM | CVAR_NOCHEAT, "name of log file, if empty, qconsole.log will be used" );
@@ -1789,7 +1789,18 @@ idCommonLocal::LoadingCheckpoint
 ==================
 */
 void idCommonLocal::LoadingCheckpoint( void ) {
-	if ( !Common_OnMainThread() || session == NULL ) {
+	if ( !Common_OnMainThread() ) {
+		return;
+	}
+#if defined( USE_SDL3 )
+	// Work outside any loading screen reads no window messages: the renderer
+	// compiling its programs on a cold driver cache before the startup screen
+	// exists (a minute or more on the first launch after a driver or engine
+	// update), or a vid_restart reloading every image. Windows marks a window
+	// that reads none for five seconds Not Responding. Throttled to 20 Hz.
+	Sys_SDL_KeepWindowResponsive();
+#endif
+	if ( session == NULL ) {
 		return;
 	}
 	// The startup screen is offered first; a level load's screen otherwise.
@@ -8284,6 +8295,7 @@ void idCommonLocal::LoadGameDLL( void ) {
 	gameImport.declManager				= ::declManager;
 	gameImport.AASFileManager			= ::AASFileManager;
 	gameImport.collisionModelManager	= ::collisionModelManager;
+	gameImport.vrSystem					= ::vrSystem;	// openPR06: appended to v7 (Game.h)
 #if defined( INGAME_PROFILER_ENABLED ) && INGAME_PROFILER_ENABLED
 	gameImport.profiler					= NULL;
 #endif

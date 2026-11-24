@@ -65,6 +65,54 @@ jobs:
               --out ".tmp/ci-paks/${pak}.pk4"
           done
 
+  # The Android host, touch and GLES checks openQ4's push verification runs.
+  # They compile small host-side harnesses (clang++/g++, javac); the native
+  # NDK build and APK verification stay in android-build.yml.
+  android-host:
+    name: Android Host and GLES Checks
+    needs: scaffold-contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout openPR06
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+
+      - name: Setup Java for Android host storage validation
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Run Android host checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile \
+            tools/build/android_cross.py \
+            tools/build/android_elf.py \
+            tools/build/prepare_android_deps.py \
+            tools/build/verify_android_apk.py \
+            tools/tests/android_emulator_smoke.py \
+            tools/tests/android_device_qualification.py
+          for test in \
+            android_build android_touch_input android_touch_controls \
+            renderer_gles_dispatch renderer_gles_alpha renderer_gles_upload \
+            android_host_storage android_retail_data android_retail_import \
+            android_document_source android_setup_task android_setup_flow \
+            android_touch_setup android_touch_layout android_interface_setup \
+            android_private_export android_document_export android_async \
+            android_basepath android_console_input android_lifecycle \
+            android_savepath android_window_lifecycle; do
+            echo "::group::${test}"
+            python "tools/tests/${test}.py"
+            echo "::endgroup::"
+          done
+
   unified-gamelib:
     name: Unified GameLib (${{ matrix.platform }})
     needs: scaffold-contracts
@@ -88,6 +136,37 @@ jobs:
             dedicated: openPR06-ded_x64
             renderer_gl: renderer-gl_x64.so
             renderer_vk: renderer-vk_x64.so
+          # The macOS lanes match openQ4's push verification: ARM64 in both
+          # graphics bridges, and one Intel lane so the x86_64 slice keeps
+          # building. The macOS client links its OpenGL renderer statically,
+          # so no renderer-gl module is staged there.
+          - platform: macOS ARM64 OpenGL
+            os: macos-15
+            arch: arm64
+            macos_graphics_bridge: opengl
+            module: game_arm64.dylib
+            client: openPR06-client_arm64
+            dedicated: openPR06-ded_arm64
+            renderer_gl: ""
+            renderer_vk: renderer-vk_arm64.dylib
+          - platform: macOS ARM64 Metal
+            os: macos-15
+            arch: arm64
+            macos_graphics_bridge: metal
+            module: game_arm64.dylib
+            client: openPR06-client_arm64
+            dedicated: openPR06-ded_arm64
+            renderer_gl: ""
+            renderer_vk: renderer-vk_arm64.dylib
+          - platform: macOS Intel x64 OpenGL
+            os: macos-15-intel
+            arch: x64
+            macos_graphics_bridge: opengl
+            module: game_x64.dylib
+            client: openPR06-client_x64
+            dedicated: openPR06-ded_x64
+            renderer_gl: ""
+            renderer_vk: renderer-vk_x64.dylib
 
     steps:
       - name: Checkout openPR06
@@ -167,6 +246,20 @@ jobs:
           powershell -NoProfile -ExecutionPolicy Bypass -File tools/build/prepare_windows_openal.ps1 -Architecture "x64" -OutputRoot $outputRoot
           "OPENPR06_OPENAL_ROOT=$outputRoot" >> $env:GITHUB_ENV
 
+      # Same pinned OpenAL Soft the macOS release lanes bundle.
+      - name: Prepare pinned OpenAL Soft (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          prepared_root="${GITHUB_WORKSPACE}/.tmp/openal-soft-macos-${{ matrix.arch }}"
+          bash tools/build/prepare_macos_openal_soft.sh \
+            --architecture "${{ matrix.arch }}" \
+            --deployment-target 11.0 \
+            --output-root "${prepared_root}"
+          echo "OPENPR06_MACOS_OPENAL_ROOT=${prepared_root}" >> "${GITHUB_ENV}"
+          echo "PKG_CONFIG_PATH=${prepared_root}/lib/pkgconfig" >> "${GITHUB_ENV}"
+
       - name: Configure, build, and stage (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -185,13 +278,32 @@ jobs:
           bash tools/build/meson_setup.sh compile -C builddir
           bash tools/build/meson_setup.sh install -C builddir --no-rebuild --skip-subprojects
 
+      - name: Configure, build, and stage (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Keep Meson subprojects on the main project's macOS 11.0 floor.
+          export MACOSX_DEPLOYMENT_TARGET=11.0
+          bash tools/build/meson_setup.sh setup --wipe builddir . --backend ninja --buildtype debug --wrap-mode=forcefallback -Dbuild_engine=true -Dbuild_games=true -Dbuild_renderer_gl=true -Dbuild_renderer_vk=true -Dplatform_backend=sdl3 "-Dmacos_graphics_bridge=${{ matrix.macos_graphics_bridge }}" -Dmacos_openal_provider=system
+          bash tools/build/meson_setup.sh compile -C builddir
+          bash tools/build/meson_setup.sh install -C builddir --no-rebuild --skip-subprojects
+          bash tools/build/prepare_macos_openal_soft.sh \
+            --verify-only \
+            --architecture "${{ matrix.arch }}" \
+            --deployment-target 11.0 \
+            --output-root "${OPENPR06_MACOS_OPENAL_ROOT}" \
+            --stage-install-dir .install
+
       - name: Verify unified staged payload
         shell: bash
         run: |
           set -euo pipefail
           test -f ".install/${{ matrix.client }}"
           test -f ".install/${{ matrix.dedicated }}"
-          test -f ".install/${{ matrix.renderer_gl }}"
+          if [ -n "${{ matrix.renderer_gl }}" ]; then
+            test -f ".install/${{ matrix.renderer_gl }}"
+          fi
           test -f ".install/${{ matrix.renderer_vk }}"
           test -f ".install/basepr/${{ matrix.module }}"
           test -f ".install/basepr/pak0.pk4"
@@ -210,3 +322,15 @@ jobs:
             echo "Split GameLib artifacts must not be staged; openPR06 ships one game_<arch> module."
             exit 1
           fi
+
+      # Checks the staged binaries' install names, exported GetGameAPI and
+      # bundled OpenAL on macOS, as the release lanes do.
+      - name: Validate staged binaries and package layout (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/validation/openq4_validate.py push \
+            --skip-build \
+            --install \
+            --skip-python-tests

@@ -64,6 +64,8 @@ struct Session {
 } sessLocal,*session=&sessLocal;
 struct Console {bool active=false;bool Active(){return active;}} consoleValue,*console=&consoleValue;
 struct Game {bool cinematic=false;bool InCinematic(){return cinematic;}} gameValue,*game=&gameValue;
+// openPR06 reads cinematics through framework/PreyGameCompat.h; Prey's v7 idGame has no InCinematic.
+static bool PreyGame_InCinematic(){return gameValue.cinematic;}
 static bool retainedOpen=false,loading=false;
 static bool RetainedUI_IsOpen(){return retainedOpen;}
 static bool openQ4_AcceptingLoadingContinueInput(){return loading;}

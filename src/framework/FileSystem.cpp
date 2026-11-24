@@ -2074,7 +2074,7 @@ idCVar	idFileSystemLocal::fs_searchAddons( "fs_searchAddons", "0", CVAR_SYSTEM |
 idCVar	idFileSystemLocal::fs_validateOfficialPaks( "fs_validateOfficialPaks", "1", CVAR_SYSTEM | CVAR_INIT | CVAR_BOOL, "verify required official Prey media pk4 files on startup" );
 idCVar	idFileSystemLocal::fs_cacheVerifiedPaks( "fs_cacheVerifiedPaks", "1", CVAR_SYSTEM | CVAR_INIT | CVAR_BOOL, "skip re-hashing an openPR06 runtime pack whose size, times, file id and zip directory are unchanged since it passed its checksum check; 0 hashes every pack at every startup" );
 static idCVar fs_reusePackHandles( "fs_reusePackHandles", "1", CVAR_SYSTEM | CVAR_BOOL, "reuse idle read handles of a pk4 instead of opening the pack file again for every member read" );
-idCVar	idFileSystemLocal::fs_cacheLooseDirectories( "fs_cacheLooseDirectories", "1", CVAR_SYSTEM | CVAR_BOOL, "during a level load, remember which loose search-path directories do not exist, so a lookup skips them instead of failing an open in each (case-insensitive filesystems only)" );
+idCVar	idFileSystemLocal::fs_cacheLooseDirectories( "fs_cacheLooseDirectories", "1", CVAR_SYSTEM | CVAR_BOOL, "during a level load, remember which loose search-path directories do not exist, so a lookup skips them instead of failing an open in each" );
 
 idFileSystemLocal	fileSystemLocal;
 idFileSystem *		fileSystem = &fileSystemLocal;
@@ -2238,8 +2238,14 @@ search root, and remembered. A lookup under a directory known to be missing
 skips the open. Every directory the engine creates goes through CreateOSPath,
 which forgets all negative answers, so files written during the load are
 always found; only a directory created by another process mid-load is not
-seen until the next level load. A case-sensitive filesystem resolves case
-through directory listings, so the memo stays off there.
+seen until the next level load.
+
+A case-sensitive filesystem (fs_caseSensitiveOS 1) finds a loose file in any
+letter case, so there a directory counts as missing only when no letter case
+of it exists: ResolveCaseInsensitiveOSPath answers that, once per directory.
+Without the memo every probe repeated that walk, a stat per path segment and
+a directory listing where the spelling differed; on Linux one startup and
+roadhouse load made 2.4 million stat calls and 360,000 directory reads.
 ===========
 */
 static bool FS_IsOSDirectory( const char *osPath ) {
@@ -2270,7 +2276,7 @@ void idFileSystemLocal::SetLooseDirectoryCacheActive( bool active ) {
 	looseDirectoryExists.clear();
 	looseDirectoryChecks = 0;
 	looseDirectorySkips = 0;
-	looseDirectoryCacheActive = active && fs_cacheLooseDirectories.GetBool() && !fs_caseSensitiveOS.GetBool();
+	looseDirectoryCacheActive = active && fs_cacheLooseDirectories.GetBool();
 }
 
 bool idFileSystemLocal::LooseDirectoryMissingLocked( const std::string &key, const std::string &osPath ) {
@@ -2278,7 +2284,11 @@ bool idFileSystemLocal::LooseDirectoryMissingLocked( const std::string &key, con
 	if ( found != looseDirectoryExists.end() ) {
 		return !found->second;
 	}
-	const bool exists = FS_IsOSDirectory( osPath.c_str() );
+	bool exists = FS_IsOSDirectory( osPath.c_str() );
+	if ( !exists && fs_caseSensitiveOS.GetBool() ) {
+		idStr resolved;
+		exists = ResolveCaseInsensitiveOSPath( osPath.c_str(), resolved, false );
+	}
 	looseDirectoryChecks++;
 	looseDirectoryExists.emplace( key, exists );
 	return !exists;

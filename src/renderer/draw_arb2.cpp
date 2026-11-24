@@ -18985,6 +18985,9 @@ static void RB_LoadARBProgramSet( bool startupEagerOnly ) {
 	for ( i = 0; progs[i].name[0]; i++ ) {
 		if ( !startupEagerOnly || RB_ShouldEagerLoadARBProgram( progs[i] ) ) {
 			R_LoadARBProgram( i );
+			// Keeps the window reading its messages through a cold driver
+			// cache; nothing redraws here.
+			common->LoadingCheckpoint();
 		}
 	}
 }

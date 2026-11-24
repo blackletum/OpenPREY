@@ -308,6 +308,13 @@ Motion blur (`r_motionBlur 1`, on in the `maximum` preset) smears the scene alon
 - `r_motionBlurStrength` (0.45), `r_motionBlurMaxPixels` (10) and `r_motionBlurSamples` (8, 16 on `maximum`) tune the length multiplier, the longest smear and its quality. `r_motionBlurDebug 1` shows the motion vectors instead of the blur.
 - `rendererMotionBlurStatus` prints what motion blur actually did: how many views it drew, why any were skipped, and the strength, length and sample count in use. `rendererMotionBlurStatus reset` clears the counters.
 
+## Depth of Field
+
+The first time Tommy raises a weapon he turns it over in his hands. While he does, the focus pulls onto the weapon: the world behind it goes soft, the weapon and his hands stay sharp, and the focus lets go as the weapon comes up. It works on OpenGL and Vulkan, with or without the other post-processing effects, and never in a VR headset.
+
+- `r_depthOfField 0` turns it off (default 1): Options > Video > Advanced FX > Depth of Field.
+- `r_depthOfFieldRadius` (9) is the widest blur, in pixels of a 1080-line view; it scales with the window, so the look is the same at any resolution. 0 also turns it off. It is the Blur Strength slider under the same heading.
+
 ## Resolution Scale
 
 | Setting | Default | What it does |

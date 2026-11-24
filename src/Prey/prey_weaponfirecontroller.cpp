@@ -178,6 +178,11 @@ bool hhWeaponFireController::LaunchProjectiles( const idVec3& pushVelocity ) {
 		owner->AddProjectilesFired( numProjectiles );
 	}
 
+	// openPR06 VR: each shot kicks the weapon hand, a spread of pellets harder
+	if( owner.IsValid() ) {
+		owner->VRVibrate( true, false, Min( 1.0f, 0.5f + 0.05f * static_cast<float>( numProjectiles ) ), 40 );
+	}
+
 	//HUMANHEAD bjk PATCH 7-27-06
 	if( gameLocal.isMultiplayer ) {
 		owner->inventory.lastShot[owner->GetWeaponNum( self->spawnArgs.GetString( "classname" ) )] = gameLocal.time + 1000;
@@ -195,19 +200,24 @@ idMat3 hhWeaponFireController::DetermineAimAxis( const idVec3& muzzlePos, const 
 	float traceDist = 1024.0f;	// was CM_MAX_TRACE_DIST
 	float aimTraceDist;
 	trace_t aimTrace = self->GetEyeTraceInfo();
+
+	// openPR06 VR: a gun in the hand aims where the hand does, from the hand
+	// (hhWeapon::PrecomputeTraceInfo traced the same path)
+	idVec3 eyePos = owner->GetEyePosition();
+	idMat3 aimAxis = weaponAxis;
+	owner->GetVRHandAim( eyePos, aimAxis );
 	
 	//HUMANHEAD bjk
 	if( aimTrace.fraction < 1.0f ) {
-		idVec3 eyePos = owner->GetEyePosition();
 
 		// Perform eye trace
-		gameLocal.clip.TracePoint( aimTrace, eyePos, eyePos + weaponAxis[0] * traceDist * 4.0f, 
+		gameLocal.clip.TracePoint( aimTrace, eyePos, eyePos + aimAxis[0] * traceDist * 4.0f, 
 			MASK_SHOT_RENDERMODEL | CONTENTS_GAME_PORTAL, owner.GetEntity() );
 
 		if ( aimTrace.fraction < 1.0f ) { // CJR:  Check for portals
 			idEntity *ent = gameLocal.entities[ aimTrace.c.entityNum ]; // cannot use GetTraceEntity() as the portal could be bound to something
 			if ( ent && ent->IsType( hhPortal::Type ) ) {
-				aimTrace.endpos = eyePos + weaponAxis[0] * traceDist;
+				aimTrace.endpos = eyePos + aimAxis[0] * traceDist;
 				aimTrace.fraction = 1.0f;
 			}
 		}
@@ -221,11 +231,11 @@ idMat3 hhWeaponFireController::DetermineAimAxis( const idVec3& muzzlePos, const 
 	idVec3		aimDir = aimVector;
 	
 	aimDir.Normalize();
-	aimDir.Lerp( weaponAxis[0], aimDir, hhUtils::CalculateScale(aimTraceDist, aimDist[0], aimDist[1]) );
+	aimDir.Lerp( aimAxis[0], aimDir, hhUtils::CalculateScale(aimTraceDist, aimDist[0], aimDist[1]) );
 	
 	idAngles	aimAngles( aimDir.ToAngles() );
 
-	aimAngles.roll = weaponAxis.ToAngles().roll;
+	aimAngles.roll = aimAxis.ToAngles().roll;
 	return aimAngles.ToMat3();
 }
 
@@ -345,6 +355,20 @@ void hhWeaponFireController::CalculateMuzzlePosition( idVec3& origin, idMat3& ax
 	if( !barrelJoints.Num() || !self->GetJointWorldTransform(barrelJoints.Next(), origin, axis) ) {
 		origin = GetMuzzlePosition();
 		axis = self->GetAxis();
+	}
+
+	// openPR06 VR: a gun in the hand has its muzzle ahead of the hand, which may
+	// be right up against a wall: a shot from there started on the far side. The
+	// muzzle stays short of whatever lies between it and the hand, as
+	// hhPlayer::GetVRHandAim keeps the hand short of what lies between it and the eye.
+	idVec3 handOrigin;
+	idMat3 handAxis;
+	if( owner.IsValid() && owner->GetVRHandAim( handOrigin, handAxis ) ) {
+		trace_t clearance;
+		gameLocal.clip.TracePoint( clearance, handOrigin, origin, MASK_SHOT_RENDERMODEL, owner.GetEntity() );
+		if( clearance.fraction < 1.0f ) {
+			origin = handOrigin + ( clearance.endpos - handOrigin ) * 0.9f;
+		}
 	}
 }
 

@@ -233,6 +233,8 @@
 	"#str_122311"	"Équilibrage des équipes"
 	"#str_122312"	"Exécuter le script de cycle des cartes"
 	"#str_122313"	"Les bots rejoignent la partie au démarrage du serveur et occupent les places libres, jusqu'au nombre maximum de joueurs. Les personnages nommés donnent à chaque bot son modèle, son style et sa voix."
+	"#str_122314"	"Profondeur de champ"
+	"#str_122315"	"Intensité du flou"
 	"#str_200040"	"Carte"
 	"#str_200292"	"Ajouter aux favoris"
 	"#str_200293"	"Supprimer le favori"

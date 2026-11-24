@@ -296,6 +296,9 @@ VIDEO = [
     ], right=[
         heading("#str_122193"),
         slider("r_glowStrength", "#str_122230", 0, 4, 0.05),
+        heading("#str_122314"),
+        toggle("r_depthOfField", "#str_122314"),
+        slider("r_depthOfFieldRadius", "#str_122315", 0, 32, 1),
     ]),
 ]
 

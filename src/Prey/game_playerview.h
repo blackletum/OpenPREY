@@ -27,6 +27,10 @@ public:
 	void				SetDamageLoc(const idVec3 &damageLoc);
 	// HUMANHEAD END
 
+	// openPR06 VR (src/framework/VRSystem.h): true when this frame's eyes
+	// marked the weapon hand's aim, which then stands in for the crosshair
+	bool				VRAimMarked( void ) const { return vrAimMarked; }
+
 protected:
 	virtual void		SingleView(idUserInterface *hud, const renderView_t *view);
 
@@ -34,6 +38,18 @@ protected:
 	void				MotionBlurVision(idUserInterface *hud, const renderView_t *view);
 	void				ApplyLetterBox(const renderView_t *view);
 	void				SpiritVision( idUserInterface *hud, const renderView_t *view );
+
+	// openPR06 VR: the world once per headset eye (game_playerview.cpp)
+	bool				GetVRView( vrFrameState_t &frame, float &trackingYaw );
+	bool				VRView( idUserInterface *hud, const renderView_t *view, const vrFrameState_t &frame, float trackingYaw );
+	bool				GetVRAimMarker( const vrFrameState_t &frame, const idVec3 &headOrigin, bool weaponHeld, const idVec3 &weaponOrigin, const idMat3 &weaponAxis, vrAimMarker_t &marker );
+	float				VRZoomScale( void );
+	float				VRComfortVignette( float trackingYaw );
+	void				UpdateViewOverlays( void );
+	void				DrawViewOverlays( bool allowCapture );
+	void				DrawScreenBlobs( void );
+	// openPR06: depth of field while Tommy examines a newly acquired weapon
+	void				UpdateWeaponExamineFocus( void );
 
 protected:
 	bool				bLetterBox;				// HUMANHEAD pdm: whether we are in letterbox mode
@@ -55,6 +71,19 @@ protected:
 	const idMaterial	*spiritMaterial;		// HUMANHEAD cjr
 	idVec3				lastDamageLocation;		// HUMANHEAD PDM: saved damage location
 	float				hurtValue;				// HUMANHEAD bjk: to smooth the health
+
+	// openPR06 VR, never saved: the comfort vignette's eased strength, and the
+	// tracking yaw, wall-clock and game time it last measured motion at
+	float				vrComfort;
+	float				vrComfortYaw;
+	int					vrComfortTime;
+	int					vrComfortGameTime;
+	bool				vrAimMarked;
+
+	// openPR06, never saved: the eased weapon-examine focus pull and the game
+	// time it last advanced at
+	float				weaponExamineFocus;
+	int					weaponExamineFocusTime;
 };
 
 //HUMANHEAD rww - render demo madness

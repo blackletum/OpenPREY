@@ -218,6 +218,8 @@ public:
 ==============================================================================================
 */
 
+void idMD5Anim_FinishGeneratedCacheWrites( void );
+
 class idMD5Anim {
 private:
 // HUMANHEAD nla - Needed for access in hhBaseAnim

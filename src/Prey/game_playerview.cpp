@@ -9,6 +9,21 @@
 
 const int IMPULSE_DELAY = 150;
 
+// openPR06: the weapon-examine depth of field (UpdateWeaponExamineFocus).
+// The focus pulls in over the first and lets go over the last part of the
+// initialPickup anim, so the world is sharp again as the weapon comes up.
+static const float WEAPON_EXAMINE_FOCUS_IN_SEC = 0.4f;
+static const float WEAPON_EXAMINE_FOCUS_OUT_SEC = 0.6f;
+// roughly where the examine anims hold the weapon; the renderer keeps the
+// depth-hacked view weapon sharp whatever this is (VIEW_DOF_SHARP_VIEW_WEAPON)
+static const float WEAPON_EXAMINE_FOCUS_DISTANCE = 16.0f;
+// the thin lens the renderer is asked for; the f-number is chosen per frame
+// so the far scene's blur reaches r_depthOfFieldRadius
+static const float WEAPON_EXAMINE_FOCAL_LENGTH_MM = 50.0f;
+
+idCVar r_depthOfFieldRadius( "r_depthOfFieldRadius", "9", CVAR_GAME | CVAR_ARCHIVE | CVAR_FLOAT,
+	"widest blur of the weapon-examine depth of field, in pixels of a 1080-line view; 0 turns it off (r_depthOfField turns off all depth of field)", 0.0f, 32.0f );
+
 //HUMANHEAD rww - render demo madness
 #if _HH_RENDERDEMO_HACKS
 	void RENDER_DEMO_VIEWRENDER(const renderView_t *view, const hhPlayerView *pView) {
@@ -50,6 +65,15 @@ hhPlayerView::hhPlayerView() {
 	kickSpeed.Zero();
 	kickLastTime = 0;
 	hurtValue = 100.f;
+
+	vrComfort = 0.0f;
+	vrComfortYaw = 0.0f;
+	vrComfortTime = 0;
+	vrComfortGameTime = 0;
+	vrAimMarked = false;
+
+	weaponExamineFocus = 0.0f;
+	weaponExamineFocusTime = 0;
 }
 
 void hhPlayerView::Save(idSaveGame *savefile) const {
@@ -268,6 +292,9 @@ void hhPlayerView::ClearEffects() {
 
 	// HUMANHEAD pdm
 	mbFinishTime = gameLocal.time;
+
+	weaponExamineFocus = 0.0f;
+	weaponExamineFocusTime = gameLocal.time;
 }
 
 
@@ -535,53 +562,11 @@ void hhPlayerView::SingleView( idUserInterface *hud, const renderView_t *view ) 
 		return;
 	}
 
-	// draw screen blobs	 	
+	// draw screen blobs
 	if ( !pm_thirdPerson.GetBool() && !g_skipViewEffects.GetBool() ) {
-		for ( int i = 0 ; i < MAX_SCREEN_BLOBS ; i++ ) {
-			screenBlob_t	*blob = &screenBlobs[i];
-			if ( blob->finishTime <= gameLocal.time ) {
-				continue;
-			}
-
-			blob->y += blob->driftAmount;
-
-			float	fade = (float)( blob->finishTime - gameLocal.time ) / ( blob->finishTime - blob->startFadeTime );
-			if ( fade > 1.0f ) {
-				fade = 1.0f;
-			}
-			if ( fade ) {
-				renderSystem->SetColor4( 1,1,1,fade );
-				renderSystem->DrawStretchPic( blob->x, blob->y, blob->w, blob->h, blob->s1, blob->t1, blob->s2, blob->t2, blob->material );
-			}
-		}
-
-		// HUMANHEAD: CJR
-		if ( voTotalTime != -1 ) { // Check if the viewOverlay should time out
-			if ( gameLocal.time >= voFinishTime ) {
-				voTotalTime = -1;
-				voRequiresScratchBuffer = false;
-				viewOverlayMaterial = NULL; // Remove the overlay
-			}
-		}
-
-		//HUMANHEAD: aob
-		if( viewOverlayMaterial ) {
-			if ( voRequiresScratchBuffer ) {
-				renderSystem->CaptureRenderToImage( "_scratch" );
-			}
-			renderSystem->SetColor4( viewOverlayColor[0], viewOverlayColor[1], viewOverlayColor[2], viewOverlayColor[3] );
-			renderSystem->DrawStretchPic(0, 0, 640, 480, 0, 1, 1, 0, viewOverlayMaterial);
-		}
-		//HUMANHEAD END
-
-		if ( player->health > 0 && player->health < 25 && static_cast<hhPlayer*>(player)->IsSpiritOrDeathwalking()==false ) {
-			hurtValue += 0.05f*(player->health - hurtValue);
-			if( player->health > 30 )
-				hurtValue = player->health;
-
-			renderSystem->SetColor4( hurtValue/25.0f, 1, 1, 1 );
-			renderSystem->DrawStretchPic(0, 0, 640, 480, 0, 1, 1, 0, hurtMaterial);
-		}
+		DrawScreenBlobs();
+		UpdateViewOverlays();
+		DrawViewOverlays( true );
 	}
 
 	// If this level has a sun corona, then attempt to draw it - CJR
@@ -600,6 +585,316 @@ void hhPlayerView::SingleView( idUserInterface *hud, const renderView_t *view ) 
 			renderSystem->DrawStretchPic( 0.0f, 0.0f, 640.0f, 480.0f, 0.0f, 0.0f, 1.0f, 1.0f, mtr );
 		}
 	}
+}
+
+//------------------------------------------------------
+// DrawScreenBlobs
+//	the screen blobs, drifting once per drawn frame
+//------------------------------------------------------
+void hhPlayerView::DrawScreenBlobs( void ) {
+	for ( int i = 0 ; i < MAX_SCREEN_BLOBS ; i++ ) {
+		screenBlob_t	*blob = &screenBlobs[i];
+		if ( blob->finishTime <= gameLocal.time ) {
+			continue;
+		}
+
+		blob->y += blob->driftAmount;
+
+		float	fade = (float)( blob->finishTime - gameLocal.time ) / ( blob->finishTime - blob->startFadeTime );
+		if ( fade > 1.0f ) {
+			fade = 1.0f;
+		}
+		if ( fade ) {
+			renderSystem->SetColor4( 1,1,1,fade );
+			renderSystem->DrawStretchPic( blob->x, blob->y, blob->w, blob->h, blob->s1, blob->t1, blob->s2, blob->t2, blob->material );
+		}
+	}
+}
+
+//------------------------------------------------------
+// UpdateViewOverlays
+//	times out the view overlay and eases the low-health tint, once per
+//	drawn frame, so a VR frame that draws them into both eyes eases once
+//------------------------------------------------------
+void hhPlayerView::UpdateViewOverlays( void ) {
+	// HUMANHEAD: CJR
+	if ( voTotalTime != -1 ) { // Check if the viewOverlay should time out
+		if ( gameLocal.time >= voFinishTime ) {
+			voTotalTime = -1;
+			voRequiresScratchBuffer = false;
+			viewOverlayMaterial = NULL; // Remove the overlay
+		}
+	}
+
+	if ( player->health > 0 && player->health < 25 && static_cast<hhPlayer*>(player)->IsSpiritOrDeathwalking()==false ) {
+		hurtValue += 0.05f*(player->health - hurtValue);
+		if( player->health > 30 )
+			hurtValue = player->health;
+	}
+}
+
+//------------------------------------------------------
+// DrawViewOverlays
+//	the full-view overlay and the low-health tint. An overlay that reads
+//	the finished scene back (_scratch) is a flat-screen effect: a VR eye
+//	(allowCapture false) leaves it out, as openQ4 does with double vision
+//------------------------------------------------------
+void hhPlayerView::DrawViewOverlays( bool allowCapture ) {
+	//HUMANHEAD: aob
+	if( viewOverlayMaterial && ( allowCapture || !voRequiresScratchBuffer ) ) {
+		if ( voRequiresScratchBuffer ) {
+			renderSystem->CaptureRenderToImage( "_scratch" );
+		}
+		renderSystem->SetColor4( viewOverlayColor[0], viewOverlayColor[1], viewOverlayColor[2], viewOverlayColor[3] );
+		renderSystem->DrawStretchPic(0, 0, 640, 480, 0, 1, 1, 0, viewOverlayMaterial);
+	}
+	//HUMANHEAD END
+
+	if ( player->health > 0 && player->health < 25 && static_cast<hhPlayer*>(player)->IsSpiritOrDeathwalking()==false ) {
+		renderSystem->SetColor4( hurtValue/25.0f, 1, 1, 1 );
+		renderSystem->DrawStretchPic(0, 0, 640, 480, 0, 1, 1, 0, hurtMaterial);
+	}
+}
+
+/*
+===============================================================================
+
+	openPR06 VR: the first-person view once per headset eye.
+
+	openQ4 builds this into its Quake 4 game code (idPlayerView::VRView); this
+	is the Prey game's half of the same contract with the engine
+	(src/framework/VRSystem.h). The engine owns the OpenXR session, paces the
+	frame and turns the controllers into usercmds; the game renders each eye
+	with SetVRRenderTarget and leaves the HUD, menus and cinematics on the
+	virtual screen the headset shows in front of the player.
+
+	Prey's player stands in its own gravity frame (wall-walking, gravity
+	flips, the shuttle's dock rides), so the tracking space hangs off the eye
+	in that frame rather than the world's: a tracked pose lands at
+	eyeOrigin + pose.origin * yaw * eyeAxis, with eyeAxis the player's
+	interpolated gravity frame (hhPlayer::GetEyeAxis) and yaw the tracking
+	yaw, the same mapping hhPlayer uses to turn usercmd angles into its view.
+
+===============================================================================
+*/
+
+//------------------------------------------------------
+// GetVRView
+//	the frame's tracked poses, when this view is one the eyes can show: the
+//	local player's own first-person view. Cameras, cinematics, third person,
+//	death and vehicles play flat on the virtual screen.
+//------------------------------------------------------
+bool hhPlayerView::GetVRView( vrFrameState_t &frame, float &trackingYaw ) {
+	// the same rule holds the gun in the hand (hhPlayer::GetVRView)
+	return player != NULL && static_cast<hhPlayer *>( player )->GetVRView( frame, trackingYaw );
+}
+
+//------------------------------------------------------
+// VRZoomScale
+//	a zoomed weapon magnifies each eye by the ratio of its field of view to
+//	the player's own, eased as the flat screen eases it; the headset's field
+//	of view itself cannot narrow
+//------------------------------------------------------
+float hhPlayerView::VRZoomScale( void ) {
+	hhPlayer *hhplayer = static_cast<hhPlayer *>( player );
+	const float defaultFov = player->DefaultFov();
+	const float zoomedFov = hhplayer->GetZoomFov().GetCurrentValue( gameLocal.time );
+	if ( zoomedFov <= 0.0f || zoomedFov >= defaultFov - 0.01f ) {
+		return 1.0f;
+	}
+	const float scale = idMath::Tan( DEG2RAD( zoomedFov * 0.5f ) ) / idMath::Tan( DEG2RAD( defaultFov * 0.5f ) );
+	return idMath::ClampFloat( 0.05f, 1.0f, scale );
+}
+
+//------------------------------------------------------
+// VRComfortVignette
+//	how strongly to vignette this frame (vr_comfortVignette): artificial
+//	motion only, the player's speed and the turning the head did not do (the
+//	rate of the tracking yaw). A change of more than 15 degrees in a frame is
+//	a snap turn or a recentre, a cut rather than motion. While game time
+//	stands still (paused, g_stopTime) the speed the player stopped at would
+//	hold the edges dark, so only turning counts.
+//------------------------------------------------------
+float hhPlayerView::VRComfortVignette( float trackingYaw ) {
+	const float setting = idMath::ClampFloat( 0.0f, 1.0f, cvarSystem->GetCVarFloat( "vr_comfortVignette" ) );
+	const int now = sys->Milliseconds();
+	const float seconds = vrComfortTime > 0 ? idMath::ClampFloat( 0.0f, 0.25f, ( now - vrComfortTime ) * 0.001f ) : 0.0f;
+	float turnRate = 0.0f;
+	if ( seconds > 0.0f ) {
+		const float delta = idMath::AngleNormalize180( trackingYaw - vrComfortYaw );
+		if ( idMath::Fabs( delta ) < 15.0f ) {
+			turnRate = delta / seconds;
+		}
+	}
+	const bool gameMoved = gameLocal.time != vrComfortGameTime;
+	vrComfortYaw = trackingYaw;
+	vrComfortTime = now;
+	vrComfortGameTime = gameLocal.time;
+	const float speed = gameMoved ? player->GetPhysics()->GetLinearVelocity().Length() : 0.0f;
+	const float target = setting > 0.0f ? VR_ComfortMotion( speed, turnRate ) : 0.0f;
+	vrComfort = VR_ComfortEase( vrComfort, target, seconds );
+	return vrComfort * setting;
+}
+
+//------------------------------------------------------
+// GetVRAimMarker
+//	where the weapon hand's shot lands (vr_aimLaser), while the controller
+//	aims: the path the gun in the hand fires along (hhPlayer::GetVRHandAim),
+//	from this draw's pose. A beam (vr_aimLaser 2) leaves the drawn gun's
+//	muzzle, or the hand without one. The marker stands in for the crosshair
+//	on the virtual screen, which would hang at the HUD's depth off the line
+//	of fire; it marks nothing while the crosshair would be away (the GUI hand
+//	up, a world GUI in focus, no weapon).
+//------------------------------------------------------
+bool hhPlayerView::GetVRAimMarker( const vrFrameState_t &frame, const idVec3 &headOrigin, bool weaponHeld,
+		const idVec3 &weaponOrigin, const idMat3 &weaponAxis, vrAimMarker_t &marker ) {
+	hhPlayer *hhplayer = static_cast<hhPlayer *>( player );
+	if ( frame.aimMode != VR_AIM_HAND || frame.aimLaser == VR_AIM_LASER_OFF || player->health <= 0 || player->spectating ) {
+		return false;
+	}
+	if ( !hhplayer->CrosshairWanted() ) {
+		return false;
+	}
+	idVec3 start;
+	idMat3 aimAxis;
+	if ( !hhplayer->GetVRHandAim( start, aimAxis ) ) {
+		return false;
+	}
+
+	trace_t trace;
+	gameLocal.clip.TracePoint( trace, start, start + aimAxis[0] * VR_AIM_RANGE, MASK_SHOT_RENDERMODEL, player );
+	if ( !weaponHeld || !hhplayer->weapon.IsValid() || !hhplayer->weapon->GetVRMuzzle( weaponOrigin, weaponAxis, marker.muzzle ) ) {
+		marker.muzzle = start;
+	}
+	marker.target = trace.endpos;
+	marker.hit = trace.fraction < 1.0f;
+
+	// round a corner the hand can see what the head can't
+	marker.hidden = false;
+	const idVec3 toTarget = marker.target - headOrigin;
+	const float distance = toTarget.Length();
+	if ( frame.head.valid && distance > 8.0f ) {
+		trace_t sight;
+		gameLocal.clip.TracePoint( sight, headOrigin, marker.target - toTarget * ( 4.0f / distance ), MASK_SHOT_RENDERMODEL, player );
+		marker.hidden = sight.fraction < 1.0f;
+	}
+	return true;
+}
+
+//------------------------------------------------------
+// VRView
+//	The world once per eye, each from its tracked pose with its own off-axis
+//	frustum. Overlays that tint the world (the view overlay, the low-health
+//	tint, spirit walk's, fades) go into the eyes; screen blobs go to the
+//	virtual screen with the HUD, which the caller draws next. Motion blur,
+//	scratch-capture overlays, the sun corona's 2D flare and screen shake are
+//	flat-screen effects and stand down. False when the frame has no eye to
+//	render into: the caller then draws the flat view.
+//------------------------------------------------------
+bool hhPlayerView::VRView( idUserInterface *hud, const renderView_t *view, const vrFrameState_t &frame, float trackingYaw ) {
+	if ( view == NULL || !renderSystem->SetVRRenderTarget( 0 ) ) {
+		// tiled screenshots deliberately render to the desktop: the pose is
+		// still valid, but no eye target belongs to this draw
+		return false;
+	}
+	hhPlayer *hhplayer = static_cast<hhPlayer *>( player );
+
+	// the tracking space: at the eye, in the player's gravity frame
+	const idVec3 eyeOrigin = hhplayer->GetEyePosition();
+	const idMat3 eyeAxis = hhplayer->GetEyeAxis();
+	const idMat3 tracking = VR_TrackingAxis( trackingYaw ) * eyeAxis;
+	const idVec3 correction = VR_HeadOffsetCorrection( frame );
+
+	// the listener follows the tracked head, and the vignette centres on
+	// where it looks, in both eyes
+	idVec3 headOrigin = eyeOrigin;
+	idMat3 headAxis = view->viewaxis;
+	if ( frame.head.valid ) {
+		headOrigin = eyeOrigin + ( frame.head.origin + correction ) * tracking;
+		headAxis = frame.head.axis * tracking;
+	}
+	gameSoundWorld->PlaceListener( headOrigin, headAxis, player->entityNumber + 1, gameLocal.time, hud ? hud->State().GetString( "location" ) : "Undefined" );
+
+	// the gun in the weapon hand, placed from this draw's pose: the hand
+	// moves every headset frame, whether or not a game tic ran
+	idVec3 weaponOrigin;
+	idMat3 weaponAxis;
+	const bool weaponHeld = hhplayer->GetVRWeaponTransform( weaponOrigin, weaponAxis );
+	if ( weaponHeld ) {
+		hhplayer->weapon->PresentVRHold( weaponOrigin, weaponAxis );
+	}
+
+	const idMaterial *whiteMaterial = declManager->FindMaterial( "_white" );
+	vrAimMarker_t aimMarker;
+	vrAimMarked = GetVRAimMarker( frame, headOrigin, weaponHeld, weaponOrigin, weaponAxis, aimMarker );
+	const int aimLaser = frame.aimLaser;
+	const float zoomScale = VRZoomScale();
+	const float vignette = VRComfortVignette( trackingYaw );
+	const bool viewEffects = !g_skipViewEffects.GetBool();
+	if ( viewEffects ) {
+		UpdateViewOverlays();
+	}
+	const bool spiritWalking = viewEffects && hhplayer->IsSpiritWalking();
+	if ( spiritWalking && !spiritMaterial ) {
+		spiritMaterial = declManager->FindMaterial( player->spawnArgs.GetString( "mtr_spiritwalk" ) );
+	}
+
+	if ( cvarSystem->GetCVarInteger( "vr_debug" ) >= 2 ) {
+		// the head's up shows which way the gravity frame stands
+		gameLocal.Printf( "VR drawn head %d (%s) up (%s) vignette %.3f\n", frame.frameNumber, headOrigin.ToString( 2 ), headAxis[2].ToString( 2 ), vignette );
+		if ( weaponHeld ) {
+			// the held gun in the head's own axes, and where a beam leaves it
+			const idVec3 local = ( weaponOrigin - headOrigin ) * headAxis.Transpose();
+			gameLocal.Printf( "VR held weapon %d (%s) head-relative (%s) muzzle (%s)\n", frame.frameNumber, weaponOrigin.ToString( 2 ),
+				local.ToString( 2 ), vrAimMarked ? aimMarker.muzzle.ToString( 2 ) : "none" );
+		}
+	}
+
+	for ( int eye = 0; eye < VR_NUM_EYES; eye++ ) {
+		if ( eye > 0 && !renderSystem->SetVRRenderTarget( eye ) ) {
+			break;
+		}
+		// the eye in tracking space, then carried into the gravity frame
+		renderView_t eyeView = *view;
+		VR_BuildEyeView( frame, eye, vec3_origin, trackingYaw, eyeView );
+		eyeView.vieworg = eyeOrigin + eyeView.vieworg * eyeAxis;
+		eyeView.viewaxis = eyeView.viewaxis * eyeAxis;
+		// the eye as the lens shows it, whatever a weapon's zoom magnifies
+		const renderView_t lensView = eyeView;
+		if ( zoomScale < 1.0f ) {
+			eyeView.fovTanLeft *= zoomScale;
+			eyeView.fovTanRight *= zoomScale;
+			eyeView.fovTanUp *= zoomScale;
+			eyeView.fovTanDown *= zoomScale;
+			eyeView.fov_x = RAD2DEG( 2.0f * idMath::ATan( idMath::Tan( DEG2RAD( eyeView.fov_x * 0.5f ) ) * zoomScale ) );
+			eyeView.fov_y = RAD2DEG( 2.0f * idMath::ATan( idMath::Tan( DEG2RAD( eyeView.fov_y * 0.5f ) ) * zoomScale ) );
+		}
+
+		gameRenderWorld->RenderScene( &eyeView );
+
+		if ( viewEffects && !player->spectating ) {
+			DrawViewOverlays( false );
+			if ( spiritWalking ) {
+				renderSystem->SetColor4( 1, 1, 1, 1 );
+				renderSystem->DrawStretchPic( 0, 0, 640, 480, 0, 1, 1, 0, spiritMaterial );
+			}
+		}
+		VR_DrawComfortVignette( lensView, headAxis[0], vignette, vignette > 0.01f ? whiteMaterial : NULL );
+		if ( vrAimMarked ) {
+			VR_DrawAimMarker( eyeView, aimMarker, aimLaser, whiteMaterial );
+		}
+		if ( viewEffects ) {
+			ScreenFade();
+		}
+	}
+	renderSystem->SetVRRenderTarget( -1 );
+
+	// the virtual screen, in front of the eyes: the screen blobs here, then
+	// the HUD the caller draws
+	if ( viewEffects && !player->spectating && !pm_thirdPerson.GetBool() ) {
+		DrawScreenBlobs();
+	}
+	return true;
 }
 
 // Hermite()
@@ -755,17 +1050,87 @@ void hhPlayerView::SetLetterBox(bool on) {
 }
 
 //------------------------------------------------------
+// UpdateWeaponExamineFocus
+//
+// openPR06: the first time Tommy raises a weapon he turns it over in his hands
+// (the weapon's initialPickup anim, weapon_base::NewRaise). Pull the focus
+// onto the weapon while he does: the renderer blurs the world behind it and
+// keeps the view weapon sharp (idRenderSystem::SetViewDepthOfField,
+// r_depthOfField). Eased in game time, so a pause holds the focus where it is.
+//------------------------------------------------------
+void hhPlayerView::UpdateWeaponExamineFocus( void ) {
+	const int now = gameLocal.time;
+	if ( now < weaponExamineFocusTime ) {
+		// a new map or a restored game restarted the clock
+		weaponExamineFocus = 0.0f;
+	}
+	const float seconds = idMath::ClampFloat( 0.0f, 0.1f, MS2SEC( now - weaponExamineFocusTime ) );
+	weaponExamineFocusTime = now;
+
+	float target = 0.0f;
+	const hhWeapon *weapon = player->weapon.GetEntity();
+	if ( weapon != NULL && !weapon->IsHidden() && player->CanShowWeaponViewmodel()
+			&& !player->spectating && !player->IsDead() && !gameLocal.inCinematic && !pm_thirdPerson.GetBool() ) {
+		const int examineEnd = weapon->GetExamineEndTime();
+		if ( examineEnd - SEC2MS( WEAPON_EXAMINE_FOCUS_OUT_SEC ) > now ) {
+			target = 1.0f;
+		}
+	}
+
+	if ( weaponExamineFocus < target ) {
+		weaponExamineFocus = Min( target, weaponExamineFocus + seconds / WEAPON_EXAMINE_FOCUS_IN_SEC );
+	} else if ( weaponExamineFocus > target ) {
+		weaponExamineFocus = Max( target, weaponExamineFocus - seconds / WEAPON_EXAMINE_FOCUS_OUT_SEC );
+	}
+
+	// smoothstep, so the pull starts and settles gently
+	const float eased = weaponExamineFocus * weaponExamineFocus * ( 3.0f - 2.0f * weaponExamineFocus );
+	const float radius = r_depthOfFieldRadius.GetFloat();
+	renderViewDepthOfField_t dof;
+	if ( eased > 0.0f && radius > 0.0f ) {
+		// The renderer's thin lens blurs a pixel at distance d by
+		// K * ( 1 - S / d ), S the focus distance, with
+		// K = f^2 / ( N * ( S - f ) ) / 36 mm * viewWidth (all in mm). Pick N
+		// so K is radius at the view's height (radius is in 1080-line pixels):
+		// the far scene is almost fully soft, nearer surfaces less so.
+		const float width = static_cast<float>( Max( 1, renderSystem->GetScreenWidth() ) );
+		const float height = static_cast<float>( Max( 1, renderSystem->GetScreenHeight() ) );
+		const float f = WEAPON_EXAMINE_FOCAL_LENGTH_MM;
+		const float focusMm = WEAPON_EXAMINE_FOCUS_DISTANCE * 25.4f;
+		const float k = radius * height / 1080.0f;
+		dof.amount = eased;
+		dof.flags = VIEW_DOF_SHARP_VIEW_WEAPON;
+		dof.focusDistance = WEAPON_EXAMINE_FOCUS_DISTANCE;
+		dof.focalLength = f;
+		dof.fStop = f * f * width / ( ( focusMm - f ) * 36.0f * k );
+		dof.maxBlur = radius;
+	}
+	renderSystem->SetViewDepthOfField( dof );
+}
+
+//------------------------------------------------------
 // RenderPlayerView
 //------------------------------------------------------
 void hhPlayerView::RenderPlayerView( idUserInterface *hud ) {
 	const renderView_t *view = player->GetRenderView();
 	const bool previousUseUIViewportFor2D = renderSystem->GetUseUIViewportFor2D();
 
+	// before any RenderScene below: the renderer latches it onto each view
+	UpdateWeaponExamineFocus();
+
 	// Retail PREY.exe emits view damage/effect overlays as fullscreen 2D passes,
 	// not HUD quads constrained to the UI viewport safe-area.
 	renderSystem->SetUseUIViewportFor2D( false );
 
-	if ( g_skipViewEffects.GetBool() ) {
+	// openPR06 VR: the eyes take the first-person view while a headset presents
+	vrFrameState_t vrFrame;
+	float vrTrackingYaw = 0.0f;
+	vrAimMarked = false;
+	if ( GetVRView( vrFrame, vrTrackingYaw ) && VRView( hud, view, vrFrame, vrTrackingYaw ) ) {
+		if ( !g_skipViewEffects.GetBool() ) {
+			ApplyLetterBox( view );
+		}
+	} else if ( g_skipViewEffects.GetBool() ) {
 		SingleView( hud, view );
 	} else {
 		if (gameLocal.time < mbFinishTime) {

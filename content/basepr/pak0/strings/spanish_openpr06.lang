@@ -233,6 +233,8 @@
 	"#str_122311"	"Equilibrio de equipos"
 	"#str_122312"	"Ejecutar script de ciclo de mapas"
 	"#str_122313"	"Los bots entran al iniciar el servidor y ocupan las plazas libres, hasta el máximo de jugadores. Los personajes con nombre dan a cada bot su propio modelo, estilo y voz."
+	"#str_122314"	"Profundidad de campo"
+	"#str_122315"	"Intensidad del desenfoque"
 	"#str_200040"	"Mapa"
 	"#str_200292"	"Añadir a favoritos"
 	"#str_200293"	"Eliminar favorito"

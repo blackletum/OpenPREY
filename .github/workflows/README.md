@@ -1,9 +1,12 @@
 # openPR06 workflows
 
-`openpr06-validation.yml` is the active build and validation workflow. Its Windows and
-Linux jobs build the engine, dedicated server, GL and Vulkan renderer modules, and the
-canonical unified `game_<arch>` module from the in-tree `src/game/`, `src/Prey/` and
-`src/preyengine/` sources. It also checks the game source inventory and content pack
+`openpr06-validation.yml` is the active build and validation workflow. Its Windows x64,
+Linux x64, macOS ARM64 (OpenGL and Metal bridge) and macOS Intel x64 (OpenGL) jobs
+build the engine, dedicated server, GL and Vulkan renderers (the macOS client links
+its GL renderer statically), and the canonical unified `game_<arch>` module from the
+in-tree `src/game/`, `src/Prey/` and `src/preyengine/` sources. The macOS jobs follow
+openQ4's push-verification lanes and validate the staged binaries as the release
+lanes do. It also checks the game source inventory and content pack
 table, the `basepr/` runtime layout, the high-risk rebase source contracts, and
 openPR06 desktop/icon payloads.
 
@@ -28,10 +31,13 @@ still assume openQ4's split `game-sp`/`game-mp` modules and Quake 4 content. Rem
 gates only after rebuilding source pinning, package assertions, signing, and runtime
 smoke tests around the in-tree game library, `game_<arch>`, and `basepr/`.
 `android-build.yml` came with the upstream engine merge and now builds and
-verifies an openPR06 arm64 APK for PREY. It is not in `manual-release.yml` or
-active validation yet: release signing (`signing: release`, the default) needs
-secrets and a certificate openPR06 does not have, and `signing: ci` signs with a
-throwaway key for testing only. See `docs/dev/android-build.md` (openPR06 status).
+verifies an openPR06 arm64 APK for PREY. It is not in `manual-release.yml` yet:
+release signing (`signing: release`, the default) needs secrets and a
+certificate openPR06 does not have, and `signing: ci` signs with a throwaway key
+for testing only. See `docs/dev/android-build.md` (openPR06 status). Active
+validation's `android-host` job runs the Android host, touch and GLES checks
+that openQ4's push verification runs (host-compiled harnesses, no NDK); it does
+not build the APK.
 
 `discord-release.yml` only reacts to an already-published release. It does not build or
 publish artifacts. It is off unless the repository variable `DISCORD_RELEASE_ENABLED` is

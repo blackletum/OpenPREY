@@ -186,7 +186,9 @@ The critical path; co-design engine and game-header sides together.
    `game_<arch>` `shared_module` + `openpr06_game_idlib`; `Game.def`; install to game dir.
 2. **Loader** (FW-11): unified-module candidate list (`game_x64`/`gamex86`/legacy aliases)
    rebuilt inside upstream's phase-instrumented `LoadGameDLL`, keeping diagnostics and the
-   macOS universal2 fallback; v7 `gameImport_t` population (13 systems, no `bse` field).
+   macOS universal2 fallback; v7 `gameImport_t` population (13 systems, no `bse` field),
+   plus `vrSystem`, appended after Prey's members in November 2026 so the version and
+   the original offsets stay (`docs/user/vr.md`).
    The separately linked engine/renderer BSE subsystem remains active per D3.
 3. **Call-site contract** (FW-12, conflict-major): re-apply Prey `idGame` signatures
    (`InitFromNewMap/InitFromSaveGame` with `idSoundWorld*`, 4-arg `SetUserInfo`, plain

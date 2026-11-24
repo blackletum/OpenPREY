@@ -5776,6 +5776,9 @@ void idPlayer::Damage( idEntity *inflictor, idEntity *attacker, const idVec3 &di
 			damage = 1;
 		}
 
+		// openPR06 VR: a hit shakes both hands, harder for bigger hits
+		static_cast<hhPlayer *>( this )->VRVibrate( true, true, Min( 1.0f, 0.3f + static_cast<float>( damage ) / 50.0f ), 90 );
+
 		int oldHealth = health;
 		health -= damage;
 

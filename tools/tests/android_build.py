@@ -667,7 +667,8 @@ class AndroidBuildTests(unittest.TestCase):
             scripts.mkdir(parents=True)
             for filename in ("meson_setup.ps1", "game_source_inventory.py"):
                 shutil.copy2(ROOT / "tools/build" / filename, scripts / filename)
-            for module in ("game", "mpgame"):
+            # openPR06's Prey game library trees (tools/build/game_source_inventory.py).
+            for module in ("game", "Prey", "preyengine"):
                 (game / "src" / module).mkdir(parents=True)
                 (game / "src" / module / "Game_local.cpp").write_text("// game\n", encoding="utf-8")
             (build / "meson-private").mkdir(parents=True)
@@ -716,7 +717,7 @@ class AndroidBuildTests(unittest.TestCase):
                 [sys.executable, str(scripts / 'game_source_inventory.py'), str(project)],
                 check=True, capture_output=True, text=True).stdout)["sourceDigest"])
             # A new source file changes what Meson compiles, so it reconfigures.
-            (game / "src/mpgame/Added.cpp").write_text("// new game file\n", encoding="utf-8")
+            (game / "src/Prey/Added.cpp").write_text("// new game file\n", encoding="utf-8")
             self.assertEqual([call[0] for call in invoke()], ["setup", "compile"])
 
     def test_ndk_target_and_missing_tools(self) -> None:

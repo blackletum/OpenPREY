@@ -90,6 +90,9 @@ class hhWeapon: public hhAnimatedEntity {
 		void				PutAside( void );			// nla
 		void				PutUpright( void );			// nla
 		virtual	int			GetAnimDoneTime( void ) const { return( animDoneTime ); }	// nla
+		// openPR06: when the first-raise examine (an initialPickup* anim,
+		// weapon_base::NewRaise) ends, or 0 while no examine is playing
+		int					GetExamineEndTime( void ) const { return( examineEndTime ); }
 
 		bool				ShowCrosshair( void ) const;
 		idEntity*			DropItem( const idVec3 &velocity, int activateDelay, int removeDelay, bool died );
@@ -172,6 +175,15 @@ class hhWeapon: public hhAnimatedEntity {
 
 		void				PrecomputeTraceInfo();
 		const trace_t&		GetEyeTraceInfo() const { return eyeTraceInfo; }
+
+		// openPR06 VR (hhPlayer::GetVRWeaponTransform): how the view model holds
+		// its gun, in model space, for VR_WeaponTransform
+		void				GetVRHold( idVec3 &barrel, idVec3 &grip );
+		// the muzzle where the weapon is drawn in the hand this frame
+		bool				GetVRMuzzle( const idVec3 &weaponOrigin, const idMat3 &weaponAxis, idVec3 &muzzle );
+		// re-places the drawn view model in the hand for this draw, whether or
+		// not a game tic ran since the last one
+		void				PresentVRHold( const idVec3 &origin, const idMat3 &axis );
 
 		void				SetViewAnglesSensitivity( float fov );
 
@@ -266,6 +278,10 @@ class hhWeapon: public hhAnimatedEntity {
 		idVec3				cameraShakeOffset;
 		hhPhysics_StaticWeapon	physicsObj;
 
+		// openPR06 VR, never saved: measured once from the idle animation
+		bool				vrHoldKnown;
+		idVec3				vrHoldGrip;
+
 		// 0 - no hands, 1 - right, 2 - left, 3 - both
 		int					handedness;  // nla - For determining which hands can be up with which weapons
 
@@ -286,6 +302,7 @@ class hhWeapon: public hhAnimatedEntity {
 		idStr				idealState;
 		int					animBlendFrames;
 		int					animDoneTime;
+		int					examineEndTime;		// openPR06: never saved, a restored examine just plays sharp
 
 		//HUMANHEAD: aob - made hhPlayer
 		idEntityPtr<hhPlayer> owner;

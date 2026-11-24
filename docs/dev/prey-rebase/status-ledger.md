@@ -42,6 +42,27 @@ The retail runs above are representative, not an exhaustive per-map, localizatio
 subtitle/censor/audio, platform, or renderer-backend matrix. Item rows therefore retain
 conservative validation states unless that evidence directly exercises them.
 
+Later evidence:
+
+- **VR (OpenXR), 2026-11-24.** PREY's game module renders its first-person
+  view per eye (`hhPlayerView::VRView`, `src/Prey/game_playerview.cpp`), with
+  `gameImport_t::vrSystem` appended to the v7 import table.
+  `tools/tests/openxr_vr_prey_smoke.py` passed on OpenGL and Vulkan against
+  openQ4's simulated OpenXR runtime on `game/feedingtowerb`: stereo projection
+  plus HUD quad, parallax, head turn, aim marker depth, comfort vignette,
+  rifle zoom, and the head turning upside down with `setPlayerGravity 0 0 1066`.
+  No real headset has run it; the gun in the hand, the body, physical crouch,
+  haptics and vehicle stereo remain openQ4-only (`docs/user/vr.md`).
+- **VR weapon hand, 2026-11-24.** `vr_aimMode 1` holds the view weapon in the
+  weapon hand (`hhPlayer::GetVRWeaponTransform`, re-placed per draw by
+  `hhWeapon::PresentVRHold`), fires from it along the hand's aim, draws the
+  `vr_aimLaser 2` beam from its barrel joint, and pulses the controllers on
+  shots and hits. The same smoke passed on OpenGL and Vulkan with new checks:
+  a 15 cm controller move moves the held rifle 5.9 units in the head's frame
+  with game time stopped, the beam adds to the dot, and the trigger's shots
+  pulse the right hand for 40 ms. The body, physical crouch and vehicle
+  stereo remain openQ4-only.
+
 ## Item ledger
 
 | Catalog ID | Disposition | Implementation | Validation | Evidence / next action |

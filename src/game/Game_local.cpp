@@ -25,6 +25,7 @@ idUserInterfaceManager *	uiManager = NULL;
 idDeclManager *				declManager = NULL;
 idAASFileManager *			AASFileManager = NULL;
 idCollisionModelManager *	collisionModelManager = NULL;
+idVRSystem *				vrSystem = NULL;				// openPR06 VR (gameImport_t::vrSystem)
 idCVar *					idCVar::staticVars = NULL;
 
 // HUMANHEAD pdm
@@ -109,6 +110,7 @@ extern "C" gameExport_t *GetGameAPI( gameImport_t *import ) {
 		declManager					= import->declManager;
 		AASFileManager				= import->AASFileManager;
 		collisionModelManager		= import->collisionModelManager;
+		vrSystem					= import->vrSystem;
 
 		// HUMANHEAD pdm
 #if INGAME_PROFILER_ENABLED
@@ -157,6 +159,7 @@ void TestGameAPI( void ) {
 	testImport.declManager				= ::declManager;
 	testImport.AASFileManager			= ::AASFileManager;
 	testImport.collisionModelManager	= ::collisionModelManager;
+	testImport.vrSystem					= ::vrSystem;
 
 	// HUMANHEAD pdm
 #if INGAME_PROFILER_ENABLED
@@ -430,6 +433,9 @@ void idGameLocal::Shutdown( void ) {
 	// shutdown the model exporter
 	idModelExport::Shutdown();
 
+	// generated animation caches still being written
+	idMD5Anim_FinishGeneratedCacheWrites();
+
 	idEvent::Shutdown();
 
 	delete[] locationEntities;
@@ -450,8 +456,8 @@ void idGameLocal::Shutdown( void ) {
 	delete mapFile;
 	mapFile = NULL;
 
-	// free the collision map
-	collisionModelManager->FreeMap();
+	// MapShutdown, called above, already released the map's collision models;
+	// a second FreeMap here would take their reference count below zero.
 
 	ShutdownConsoleCommands();
 
@@ -1786,6 +1792,15 @@ void idGameLocal::MapShutdown( void ) {
 	idClipModel::ClearTraceModelCache();
 
 	ShutdownAsyncNetwork();
+
+	// Drop this map's collision-model reference before clearing the name, and
+	// free every model nothing references any more. The engine's collision
+	// manager keeps models until they are purged (as openQ4's game does here);
+	// releasing them only at game shutdown pinned each visited map in the
+	// fixed MAX_SUBMODELS table, and the fifth campaign map loaded in one
+	// session failed with "LoadModel: no free slots".
+	collisionModelManager->FreeMap( GetMapName() );
+	collisionModelManager->PurgeModels();
 
 	mapFileName.Clear();
 
