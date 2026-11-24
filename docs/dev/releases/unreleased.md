@@ -82,7 +82,7 @@ Engine changes merged from openQ4 are listed in openQ4's own release notes. They
 
 ## Build and CI
 
-- `openpr06-validation.yml` builds the engine, dedicated server, OpenGL and Vulkan renderers and the unified game module as debug builds on Windows x64 and Linux x64, then checks the staged payload. The Linux lane installs its native development packages and the Windows lane prepares an OpenAL Soft runtime before staging.
+- `openpr06-validation.yml` builds the engine, dedicated server, OpenGL and Vulkan renderers and the unified game module as debug builds on Windows x64, Linux x64, macOS ARM64 (OpenGL and Metal bridge) and macOS Intel x64 (OpenGL), then checks the staged payload. The Linux lane installs its native development packages, the Windows and macOS lanes prepare an OpenAL Soft runtime before staging, and the macOS lanes validate the staged binaries as the release lanes do.
 - Fixed debug-only build failures in the game library on MSVC x64 and GCC, and header spellings that resolved only on case-insensitive filesystems.
 - VS Code launch configurations come in OpenGL and Vulkan variants and cover the deathwalk maps.
 
@@ -97,4 +97,4 @@ Engine changes merged from openQ4 are listed in openQ4's own release notes. They
 - Multi-view demos and the demo repeater are compiled out (`OPENPR06_ENABLE_MVD=0`, `OPENPR06_ENABLE_REPEATER=0`), along with openQ4's engine-side bot integration.
 - ModernGL and Vulkan feature parity with PREY's original interaction stages is deferred; OpenGL stays the default.
 - Checksums for the CD-era numbered `pak000.pk4`–`pak004.pk4` layout aren't recorded yet; those packs are checked for presence only.
-- macOS, ARM64 and the inherited release, signing and publishing workflows stay switched off until they're rebuilt for openPR06.
+- The inherited openQ4 macOS Debug, macOS Sanitizer, Universal2 and Linux ARM64 cross workflows stay switched off until they're rebuilt for openPR06; macOS builds come from active CI and the release lanes instead.
