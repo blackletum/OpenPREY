@@ -90,6 +90,9 @@ class hhWeapon: public hhAnimatedEntity {
 		void				PutAside( void );			// nla
 		void				PutUpright( void );			// nla
 		virtual	int			GetAnimDoneTime( void ) const { return( animDoneTime ); }	// nla
+		// openPR06: when the first-raise examine (an initialPickup* anim,
+		// weapon_base::NewRaise) ends, or 0 while no examine is playing
+		int					GetExamineEndTime( void ) const { return( examineEndTime ); }
 
 		bool				ShowCrosshair( void ) const;
 		idEntity*			DropItem( const idVec3 &velocity, int activateDelay, int removeDelay, bool died );
@@ -286,6 +289,7 @@ class hhWeapon: public hhAnimatedEntity {
 		idStr				idealState;
 		int					animBlendFrames;
 		int					animDoneTime;
+		int					examineEndTime;		// openPR06: never saved, a restored examine just plays sharp
 
 		//HUMANHEAD: aob - made hhPlayer
 		idEntityPtr<hhPlayer> owner;

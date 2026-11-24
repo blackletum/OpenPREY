@@ -48,6 +48,8 @@ protected:
 	void				UpdateViewOverlays( void );
 	void				DrawViewOverlays( bool allowCapture );
 	void				DrawScreenBlobs( void );
+	// openPR06: depth of field while Tommy examines a newly acquired weapon
+	void				UpdateWeaponExamineFocus( void );
 
 protected:
 	bool				bLetterBox;				// HUMANHEAD pdm: whether we are in letterbox mode
@@ -77,6 +79,11 @@ protected:
 	int					vrComfortTime;
 	int					vrComfortGameTime;
 	bool				vrAimMarked;
+
+	// openPR06, never saved: the eased weapon-examine focus pull and the game
+	// time it last advanced at
+	float				weaponExamineFocus;
+	int					weaponExamineFocusTime;
 };
 
 //HUMANHEAD rww - render demo madness

@@ -56,6 +56,7 @@
 #include "../ModernGLExecutor.h"
 #include "../TemporalPresentation.h"
 #include "../MotionBlurCore.h"
+#include "../DepthOfFieldCore.h"
 
 #undef snprintf
 #undef vsnprintf
@@ -160,7 +161,8 @@ enum vkPostPassKind_t {
 	VK_POST_GLOW_BLUR,
 	VK_POST_GLOW_COMPOSITE,
 	VK_POST_VOLUMETRIC_INJECT,
-	VK_POST_VOLUMETRIC_COMPOSITE
+	VK_POST_VOLUMETRIC_COMPOSITE,
+	VK_POST_DEPTH_OF_FIELD
 };
 
 // scene shader modules, created the first time a pass needs one
@@ -182,6 +184,7 @@ enum vkPostSceneModule_t {
 	VK_POST_MODULE_MOTION_VECTORS_REACTIVE_FRAG,
 	VK_POST_MODULE_SKY_MASK,
 	VK_POST_MODULE_GLOW,
+	VK_POST_MODULE_DEPTH_OF_FIELD,
 	VK_POST_SCENE_MODULE_COUNT
 };
 
@@ -208,7 +211,8 @@ static const vkPostModuleSource_t vkPostSceneModuleSources[ VK_POST_SCENE_MODULE
 	{ vk_post_motionvectors_reactive_vert_spv, vk_post_motionvectors_reactive_vert_spv_size, "post reactive coverage vertex" },
 	{ vk_post_motionvectors_reactive_frag_spv, vk_post_motionvectors_reactive_frag_spv_size, "post reactive coverage fragment" },
 	{ vk_post_skymask_frag_spv, vk_post_skymask_frag_spv_size, "post portal-sky mask fragment" },
-	{ vk_post_glow_frag_spv, vk_post_glow_frag_spv_size, "post Prey glow fragment" }
+	{ vk_post_glow_frag_spv, vk_post_glow_frag_spv_size, "post Prey glow fragment" },
+	{ vk_post_depthoffield_frag_spv, vk_post_depthoffield_frag_spv_size, "post depth of field fragment" }
 };
 
 // RB_BLOOM_MAX_LEVELS and RB_BLOOM_BASE_WEIGHTS (draw_common.cpp)
@@ -2564,6 +2568,57 @@ static bool VK_Post_MotionBlur( const viewDef_t *viewDef, idRenderTexture *scene
 	return drew;
 }
 
+// ---- depth of field (RB_STD_DepthOfField) ----
+
+// std140 layout of DepthOfFieldBlock in post_depthoffield.frag
+typedef struct vkPostDepthOfFieldBlock_s {
+	float	texInfo[ 4 ];
+	float	dofParams[ 4 ];
+} vkPostDepthOfFieldBlock_t;
+
+// openPR06: the depth of field the game published (SetDepthOfFieldView) and
+// RenderScene latched onto the main view. Returns true when it drew into the
+// scene.
+static bool VK_Post_DepthOfField( const viewDef_t *viewDef, idRenderTexture *sceneTarget ) {
+	if ( viewDef == NULL || viewDef->depthOfFieldAmount <= 0.0f || !r_depthOfField.GetBool()
+			|| r_skipPostProcess.GetBool() || !VK_Post_IsMainSceneView( viewDef ) || viewDef->obliqueNearPlane ) {
+		return false;
+	}
+	const int width = VK_Post_ViewWidth( viewDef );
+	const int height = VK_Post_ViewHeight( viewDef );
+	const float radiusPixels = DepthOfFieldCore_RadiusPixels( viewDef->depthOfFieldAmount,
+		r_depthOfFieldRadius.GetFloat(), height );
+	if ( width <= 0 || !DepthOfFieldCore_Visible( radiusPixels ) ) {
+		return false;
+	}
+	const VkShaderModule fragModule = VK_Post_SceneModule( VK_POST_MODULE_DEPTH_OF_FIELD );
+	if ( fragModule == VK_NULL_HANDLE || VK_Exec_ActiveRenderTexture() != sceneTarget ) {
+		return false;
+	}
+	idImage *depthImage = VK_Post_FinalDepth( viewDef );
+	idImage *scene = VK_Post_CaptureScene( viewDef );
+	if ( depthImage == NULL || scene == NULL ) {
+		return false;
+	}
+
+	vkPostDepthOfFieldBlock_t block;
+	memset( &block, 0, sizeof( block ) );
+	block.texInfo[ 0 ] = 1.0f / (float)width;
+	block.texInfo[ 1 ] = 1.0f / (float)height;
+	block.texInfo[ 2 ] = 1.0f - 0.5f / (float)width;
+	block.texInfo[ 3 ] = 1.0f - 0.5f / (float)height;
+	block.dofParams[ 0 ] = radiusPixels;
+	block.dofParams[ 1 ] = viewDef->depthOfFieldFocus;
+	block.dofParams[ 2 ] = viewDef->projectionMatrix[ 10 ];
+	block.dofParams[ 3 ] = viewDef->projectionMatrix[ 14 ];
+
+	const VkDescriptorSet sets[ 2 ] = { VK_Post_Descriptor( scene ), VK_Post_Descriptor( depthImage ) };
+	const int uniformOffset = VK_Exec_InteractionUniformAlloc( &block, sizeof( block ) );
+	const VkPipeline pipeline = VK_Exec_PostPipeline( VK_POST_DEPTH_OF_FIELD, vkPost.fullscreenVert, fragModule,
+			GLS_SRCBLEND_ONE | GLS_DSTBLEND_ZERO );
+	return VK_Post_DrawSceneRect( viewDef, pipeline, sets, 2, uniformOffset );
+}
+
 // ---- bloom, tone map and grade (RB_STD_Bloom) ----
 
 typedef struct vkPostBloomBlurBlock_s {
@@ -3707,6 +3762,12 @@ static bool VK_Post_DrawSceneEffectsInView( const viewDef_t *viewDef ) {
 	if ( !VK_Exec_SetRenderTarget( sceneTarget, sceneCubeFace ) ) {
 		VK_Post_WarnOnce( motionBlurWarned, "r_motionBlur" );
 		return drew;
+	}
+	// openPR06: the depth of field the game asked for, before bloom like GL
+	static bool depthOfFieldLogged = false;
+	if ( VK_Post_DepthOfField( viewDef, sceneTarget ) ) {
+		drew = true;
+		VK_Post_LogFirstDraw( depthOfFieldLogged, "depth of field", "" );
 	}
 	if ( bloomPass ) {
 		const bool linearScene = R_ModernGLExecutor_PBRLinearSceneActive();

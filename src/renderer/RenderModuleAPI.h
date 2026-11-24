@@ -118,7 +118,9 @@
 //      game's precomputed image-program results when an input comes from
 //      outside the shipped packs (a stale module would call past the
 //      vtable). Upstream openQ4 numbers this 36.
-#define RENDER_API_VERSION			37
+// 38 - openPR06: idRenderSystem appends SetDepthOfFieldView, the depth of
+//      field the game asks for while the player examines a new weapon.
+#define RENDER_API_VERSION			38
 #define RENDER_API_ENTRY_POINT		"GetRenderAPI"
 
 class idSys;

@@ -3190,6 +3190,21 @@ bool idRenderSystemLocal::SetUnderwaterView( float amount, const idVec3 &tint, f
 
 /*
 ===============
+idRenderSystemLocal::SetDepthOfFieldView
+
+openPR06: publishes the depth of field for the player views RenderScene builds
+from now on (RenderWorld.cpp latches it per view). Both back ends draw it as a
+scene pass after motion blur and before bloom (RB_STD_DepthOfField,
+VK_Post_DepthOfField); r_depthOfField turns it off.
+===============
+*/
+void idRenderSystemLocal::SetDepthOfFieldView( float amount, float focusDistance ) {
+	depthOfFieldAmount = idMath::ClampFloat( 0.0f, 1.0f, amount );
+	depthOfFieldFocus = idMath::ClampFloat( 1.0f, 4096.0f, focusDistance );
+}
+
+/*
+===============
 idRenderSystemLocal::GetRenderTextureSize
 ===============
 */

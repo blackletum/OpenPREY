@@ -520,6 +520,10 @@ idCVar r_underwaterCaustics( "r_underwaterCaustics", "0.06", CVAR_RENDERER | CVA
 idCVar r_underwaterBloom( "r_underwaterBloom", "1.0", CVAR_RENDERER | CVAR_ARCHIVE | CVAR_FLOAT, "halo suspended particulate throws around lights underwater", 0.0f, 4.0f );
 idCVar r_underwaterAberration( "r_underwaterAberration", "0.35", CVAR_RENDERER | CVAR_ARCHIVE | CVAR_FLOAT, "channel separation toward the edges of the underwater view", 0.0f, 4.0f );
 idCVar r_underwaterParticles( "r_underwaterParticles", "0.25", CVAR_RENDERER | CVAR_ARCHIVE | CVAR_FLOAT, "marine snow drifting past the underwater view", 0.0f, 2.0f );
+// openPR06 depth of field (idRenderSystem::SetDepthOfFieldView): the game asks for it while the
+// player examines a newly acquired weapon
+idCVar r_depthOfField( "r_depthOfField", "1", CVAR_RENDERER | CVAR_ARCHIVE | CVAR_BOOL, "enable the depth of field the game asks for, such as while examining a newly acquired weapon" );
+idCVar r_depthOfFieldRadius( "r_depthOfFieldRadius", "9", CVAR_RENDERER | CVAR_ARCHIVE | CVAR_FLOAT, "largest depth of field blur radius, in pixels of a 1080-line view (scaled with the view height)", 0.0f, 32.0f );
 idCVar r_underwaterVisibility( "r_underwaterVisibility", "1.0", CVAR_RENDERER | CVAR_ARCHIVE | CVAR_FLOAT, "scales how far you can see through a liquid before it fogs out", 0.01f, 8.0f );
 idCVar r_celShading( "r_celShading", "0", CVAR_RENDERER | CVAR_ARCHIVE | CVAR_BOOL, "cel shade model entities: quantized lighting plus silhouette outlines on players, monsters, moveables and the view weapon" );
 idCVar r_celShadingWorld( "r_celShadingWorld", "0", CVAR_RENDERER | CVAR_ARCHIVE | CVAR_BOOL, "extend cel shading to BSP world geometry, adding banded lighting and screen-space edge outlines" );
@@ -6932,6 +6936,7 @@ void idRenderSystemLocal::BeginLevelLoad( void ) {
 	// of the new map, costing a full-screen copy per loading-screen present.
 	underwaterAmount = 0.0f;
 	underwaterTint.Zero();
+	depthOfFieldAmount = 0.0f;
 
 	// The caller runs declManager->BeginLevelLoad() immediately before this, and
 	// that purge can reach the generated glyph atlas materials. Put them back

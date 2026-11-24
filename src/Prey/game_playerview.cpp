@@ -9,6 +9,15 @@
 
 const int IMPULSE_DELAY = 150;
 
+// openPR06: the weapon-examine depth of field (UpdateWeaponExamineFocus).
+// The focus pulls in over the first and lets go over the last part of the
+// initialPickup anim, so the world is sharp again as the weapon comes up.
+static const float WEAPON_EXAMINE_FOCUS_IN_SEC = 0.4f;
+static const float WEAPON_EXAMINE_FOCUS_OUT_SEC = 0.6f;
+// roughly where the examine anims hold the weapon; the renderer keeps the
+// depth-hacked view weapon sharp whatever this is
+static const float WEAPON_EXAMINE_FOCUS_DISTANCE = 16.0f;
+
 //HUMANHEAD rww - render demo madness
 #if _HH_RENDERDEMO_HACKS
 	void RENDER_DEMO_VIEWRENDER(const renderView_t *view, const hhPlayerView *pView) {
@@ -56,6 +65,9 @@ hhPlayerView::hhPlayerView() {
 	vrComfortTime = 0;
 	vrComfortGameTime = 0;
 	vrAimMarked = false;
+
+	weaponExamineFocus = 0.0f;
+	weaponExamineFocusTime = 0;
 }
 
 void hhPlayerView::Save(idSaveGame *savefile) const {
@@ -274,6 +286,9 @@ void hhPlayerView::ClearEffects() {
 
 	// HUMANHEAD pdm
 	mbFinishTime = gameLocal.time;
+
+	weaponExamineFocus = 0.0f;
+	weaponExamineFocusTime = gameLocal.time;
 }
 
 
@@ -1027,11 +1042,53 @@ void hhPlayerView::SetLetterBox(bool on) {
 }
 
 //------------------------------------------------------
+// UpdateWeaponExamineFocus
+//
+// openPR06: the first time Tommy raises a weapon he turns it over in his hands
+// (the weapon's initialPickup anim, weapon_base::NewRaise). Pull the focus
+// onto the weapon while he does: the renderer blurs the world behind it and
+// keeps the view weapon sharp (idRenderSystem::SetDepthOfFieldView,
+// r_depthOfField). Eased in game time, so a pause holds the focus where it is.
+//------------------------------------------------------
+void hhPlayerView::UpdateWeaponExamineFocus( void ) {
+	const int now = gameLocal.time;
+	if ( now < weaponExamineFocusTime ) {
+		// a new map or a restored game restarted the clock
+		weaponExamineFocus = 0.0f;
+	}
+	const float seconds = idMath::ClampFloat( 0.0f, 0.1f, MS2SEC( now - weaponExamineFocusTime ) );
+	weaponExamineFocusTime = now;
+
+	float target = 0.0f;
+	const hhWeapon *weapon = player->weapon.GetEntity();
+	if ( weapon != NULL && !weapon->IsHidden() && player->CanShowWeaponViewmodel()
+			&& !player->spectating && !player->IsDead() && !gameLocal.inCinematic && !pm_thirdPerson.GetBool() ) {
+		const int examineEnd = weapon->GetExamineEndTime();
+		if ( examineEnd - SEC2MS( WEAPON_EXAMINE_FOCUS_OUT_SEC ) > now ) {
+			target = 1.0f;
+		}
+	}
+
+	if ( weaponExamineFocus < target ) {
+		weaponExamineFocus = Min( target, weaponExamineFocus + seconds / WEAPON_EXAMINE_FOCUS_IN_SEC );
+	} else if ( weaponExamineFocus > target ) {
+		weaponExamineFocus = Max( target, weaponExamineFocus - seconds / WEAPON_EXAMINE_FOCUS_OUT_SEC );
+	}
+
+	// smoothstep, so the pull starts and settles gently
+	const float eased = weaponExamineFocus * weaponExamineFocus * ( 3.0f - 2.0f * weaponExamineFocus );
+	renderSystem->SetDepthOfFieldView( eased, WEAPON_EXAMINE_FOCUS_DISTANCE );
+}
+
+//------------------------------------------------------
 // RenderPlayerView
 //------------------------------------------------------
 void hhPlayerView::RenderPlayerView( idUserInterface *hud ) {
 	const renderView_t *view = player->GetRenderView();
 	const bool previousUseUIViewportFor2D = renderSystem->GetUseUIViewportFor2D();
+
+	// before any RenderScene below: the renderer latches it onto each view
+	UpdateWeaponExamineFocus();
 
 	// Retail PREY.exe emits view damage/effect overlays as fullscreen 2D passes,
 	// not HUD quads constrained to the UI viewport safe-area.

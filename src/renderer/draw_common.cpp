@@ -47,6 +47,7 @@ If you have questions concerning this license or the applicable additional terms
 #include "RendererMetrics.h"
 #include "ScenePackets.h"
 #include "MotionBlurCore.h"
+#include "DepthOfFieldCore.h"
 #include "ARBHeatHazeDepthReject.h"
 
 #ifndef GL_FRAMEBUFFER_SRGB
@@ -4813,6 +4814,159 @@ static void RB_STD_MotionBlur( void ) {
 		logged = true;
 		common->Printf( "OpenGL: first motion blur pass drew%s\n",
 			rbMotionVectorImageValid ? " (with object vectors)" : " (camera only)" );
+	}
+}
+
+/*
+=====================
+Depth of field (openPR06)
+
+The game publishes it through idRenderSystem::SetDepthOfFieldView while the
+player examines a newly acquired weapon; RenderScene latches it onto the main
+view. A scene pass after motion blur and before bloom, so the soft world
+still feeds the bloom and the tone map. DepthOfFieldCore.h holds the focus
+model both back ends share.
+=====================
+*/
+enum rbDepthOfFieldUniformIndex_t {
+	RB_DEPTH_OF_FIELD_UNIFORM_TEX_INFO = 0,
+	RB_DEPTH_OF_FIELD_UNIFORM_PARAMS,
+	RB_DEPTH_OF_FIELD_UNIFORM_COUNT
+};
+
+static newShaderStage_t rbDepthOfFieldStage;
+static bool rbDepthOfFieldStageInitialized = false;
+
+static void RB_InitDepthOfFieldStage( void ) {
+	if ( rbDepthOfFieldStageInitialized ) {
+		return;
+	}
+
+	memset( &rbDepthOfFieldStage, 0, sizeof( rbDepthOfFieldStage ) );
+	rbDepthOfFieldStage.glslProgram = true;
+	idStr::Copynz( rbDepthOfFieldStage.glslProgramName, "depthoffield.fs", sizeof( rbDepthOfFieldStage.glslProgramName ) );
+
+	static const rbBuiltinUniformDef_t uniforms[RB_DEPTH_OF_FIELD_UNIFORM_COUNT] = {
+		{ "texInfo", 4 },
+		{ "dofParams", 4 }
+	};
+	rbDepthOfFieldStage.numShaderParms = RB_DEPTH_OF_FIELD_UNIFORM_COUNT;
+	for ( int i = 0; i < RB_DEPTH_OF_FIELD_UNIFORM_COUNT; i++ ) {
+		idStr::Copynz( rbDepthOfFieldStage.shaderParmNames[i], uniforms[i].name, sizeof( rbDepthOfFieldStage.shaderParmNames[i] ) );
+		rbDepthOfFieldStage.shaderParmNumRegisters[i] = uniforms[i].components;
+	}
+
+	rbDepthOfFieldStage.numShaderTextures = 2;
+	idStr::Copynz( rbDepthOfFieldStage.shaderTextureNames[0], "Scene", sizeof( rbDepthOfFieldStage.shaderTextureNames[0] ) );
+	idStr::Copynz( rbDepthOfFieldStage.shaderTextureNames[1], "DepthBuffer", sizeof( rbDepthOfFieldStage.shaderTextureNames[1] ) );
+
+	rbDepthOfFieldStageInitialized = true;
+}
+
+static void RB_STD_DepthOfField( void ) {
+	if ( backEnd.viewDef == NULL || backEnd.viewDef->depthOfFieldAmount <= 0.0f || !r_depthOfField.GetBool() ) {
+		return;
+	}
+	if ( r_skipPostProcess.GetBool() || !glConfig.GLSLProgramAvailable || !RB_IsMainScenePostProcessView() ) {
+		return;
+	}
+	// mirrors and portals move the near plane, but those are never main views;
+	// keep the linearised depth honest all the same
+	if ( backEnd.viewDef->obliqueNearPlane ) {
+		return;
+	}
+
+	const int viewportWidth = backEnd.viewDef->viewport.x2 - backEnd.viewDef->viewport.x1 + 1;
+	const int viewportHeight = backEnd.viewDef->viewport.y2 - backEnd.viewDef->viewport.y1 + 1;
+	const float radiusPixels = DepthOfFieldCore_RadiusPixels( backEnd.viewDef->depthOfFieldAmount,
+		r_depthOfFieldRadius.GetFloat(), viewportHeight );
+	if ( viewportWidth <= 0 || !DepthOfFieldCore_Visible( radiusPixels ) ) {
+		return;
+	}
+
+	RB_InitDepthOfFieldStage();
+	if ( !R_ValidateGLSLProgram( &rbDepthOfFieldStage ) ) {
+		return;
+	}
+
+	idImage *sceneImage = globalImages->currentRenderImage;
+	idImage *depthImage = globalImages->currentDepthImage;
+	if ( sceneImage == NULL || depthImage == NULL ) {
+		return;
+	}
+
+	RB_LogComment( "---------- RB_STD_DepthOfField ----------\n" );
+
+	RB_CaptureCurrentRenderImage( viewportWidth, viewportHeight );
+	if ( !backEnd.currentDepthCopied ) {
+		RB_CaptureCurrentDepthImage( viewportWidth, viewportHeight );
+	}
+
+	const int textureWidth = sceneImage->GetOpts().width;
+	const int textureHeight = sceneImage->GetOpts().height;
+	if ( textureWidth <= 0 || textureHeight <= 0 ) {
+		return;
+	}
+
+	backEnd.currentScissor = backEnd.viewDef->scissor;
+
+	RB_BeginFullscreenPostProcessPass(
+		backEnd.viewDef->viewport.x1 + backEnd.viewDef->scissor.x1,
+		backEnd.viewDef->viewport.y1 + backEnd.viewDef->scissor.y1,
+		backEnd.viewDef->scissor.x2 - backEnd.viewDef->scissor.x1 + 1,
+		backEnd.viewDef->scissor.y2 - backEnd.viewDef->scissor.y1 + 1 );
+
+	GL_SelectTexture( 0 );
+	sceneImage->Bind();
+	GL_SelectTexture( 1 );
+	depthImage->Bind();
+	GL_SelectTexture( 0 );
+
+	glUseProgramObjectARB( (GLhandleARB)rbDepthOfFieldStage.glslProgramObject );
+	for ( int i = 0; i < rbDepthOfFieldStage.numShaderTextures; i++ ) {
+		if ( rbDepthOfFieldStage.shaderTextureLocations[i] >= 0 ) {
+			glUniform1iARB( rbDepthOfFieldStage.shaderTextureLocations[i], i );
+		}
+	}
+
+	// the scene texture is normally larger than the view: taps clamp to the
+	// view's own texels, never the stale rest of the texture
+	const GLfloat invWidth = 1.0f / static_cast<GLfloat>( textureWidth );
+	const GLfloat invHeight = 1.0f / static_cast<GLfloat>( textureHeight );
+	const GLfloat texInfo[4] = {
+		invWidth,
+		invHeight,
+		( static_cast<GLfloat>( viewportWidth ) - 0.5f ) * invWidth,
+		( static_cast<GLfloat>( viewportHeight ) - 0.5f ) * invHeight
+	};
+	const GLfloat params[4] = {
+		radiusPixels,
+		backEnd.viewDef->depthOfFieldFocus,
+		backEnd.viewDef->projectionMatrix[10],
+		backEnd.viewDef->projectionMatrix[14]
+	};
+	if ( rbDepthOfFieldStage.shaderParmLocations[RB_DEPTH_OF_FIELD_UNIFORM_TEX_INFO] >= 0 ) {
+		glUniform4fvARB( rbDepthOfFieldStage.shaderParmLocations[RB_DEPTH_OF_FIELD_UNIFORM_TEX_INFO], 1, texInfo );
+	}
+	if ( rbDepthOfFieldStage.shaderParmLocations[RB_DEPTH_OF_FIELD_UNIFORM_PARAMS] >= 0 ) {
+		glUniform4fvARB( rbDepthOfFieldStage.shaderParmLocations[RB_DEPTH_OF_FIELD_UNIFORM_PARAMS], 1, params );
+	}
+
+	RB_DrawFullscreenPostProcessQuad( viewportWidth, viewportHeight, textureWidth, textureHeight );
+
+	glUseProgramObjectARB( 0 );
+	GL_SelectTexture( 1 );
+	globalImages->BindNull();
+	GL_SelectTexture( 0 );
+	globalImages->BindNull();
+	RB_EndFullscreenPostProcessPass();
+
+	// later passes that sample the scene must take the softened image
+	backEnd.currentRenderCopied = false;
+	static bool logged = false;
+	if ( !logged ) {
+		logged = true;
+		common->Printf( "OpenGL: first depth of field pass drew (radius %.1f px)\n", radiusPixels );
 	}
 }
 
@@ -18171,6 +18325,9 @@ void	RB_STD_DrawView( void ) {
 
 	// Apply camera motion blur before bloom.
 	RB_STD_MotionBlur();
+
+	// The depth of field the game asked for, also before bloom (openPR06).
+	RB_STD_DepthOfField();
 
 	// Apply scene bloom before authored post-process overlays that sample _currentRender.
 	RB_STD_Bloom();

@@ -451,6 +451,11 @@ typedef struct viewDef_s {
 	bool				isXraySubview;
 	bool				isGlowView;
 
+	// openPR06 depth of field (SetDepthOfFieldView), latched by RenderScene
+	// onto the main view only; cleared allocation leaves every other view off.
+	float				depthOfFieldAmount;
+	float				depthOfFieldFocus;
+
 	bool				isEditor;
 
 	// rendered into idRenderSystemLocal::PushSceneResolutionScale's crop; the
@@ -1071,6 +1076,7 @@ public:
 	virtual void			GetCardCaps( bool &oldCard, bool &nv10or20 );
 	virtual bool			UploadImage( const char *imageName, const byte *data, int width, int height );
 	virtual bool			UploadImageRegion( const char *imageName, const byte *data, int x, int y, int width, int height, int rowPitch );
+	virtual void			SetDepthOfFieldView( float amount, float focusDistance );
 
 
 	virtual idImage*		CreateImage(const char* name, idImageOpts* opts, textureFilter_t textureFilter);
@@ -1255,6 +1261,12 @@ public:
 	float					underwaterAmount;
 	idVec3					underwaterTint;
 	float					underwaterFogDistance;
+
+	// openPR06: the depth of field SetDepthOfFieldView published for the next main
+	// player view; RenderScene latches it onto each viewID > 0 view it builds.
+	// BeginLevelLoad clears it, like the underwater state above.
+	float					depthOfFieldAmount;
+	float					depthOfFieldFocus;
 	idRenderTexture *		activeRenderTexture;
 	renderPortalSkyCaptureViewCallback_t portalSkyCaptureViewCallback;
 	bool					suppressLevelshotViewModels;
@@ -1495,6 +1507,8 @@ extern idCVar r_crtScanlineStrength;	// scanline intensity
 extern idCVar r_crtMaskStrength;		// phosphor mask intensity
 extern idCVar r_crtCurvature;			// screen curvature
 extern idCVar r_crtChromatic;			// chromatic offset in pixel units
+extern idCVar r_depthOfField;			// depth of field the game asks for (SetDepthOfFieldView)
+extern idCVar r_depthOfFieldRadius;		// largest blur radius at 1080 view lines
 extern idCVar r_underwater;				// underwater view post-process
 extern idCVar r_underwaterWarp;
 extern idCVar r_underwaterBlur;

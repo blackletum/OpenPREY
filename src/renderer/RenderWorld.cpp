@@ -1205,6 +1205,13 @@ void idRenderWorldLocal::RenderScene( const renderView_t *renderView, int render
 		parms->renderView.forceUpdate = true;
 	}
 
+	// openPR06: only a player view takes the published depth of field. A
+	// headset eye never does: a focus the eye cannot follow is uncomfortable.
+	if ( !independent && parms->renderView.viewID > 0 && !parms->renderView.asymmetricFov ) {
+		parms->depthOfFieldAmount = tr.depthOfFieldAmount;
+		parms->depthOfFieldFocus = tr.depthOfFieldFocus;
+	}
+
 	// r_screenFraction below native on ES, or the legacy mode 0 crop anywhere:
 	// render the world into a smaller rect before any 2D is drawn, so the HUD and
 	// menus keep their own resolution. On ES the back end blits it back out to the

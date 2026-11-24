@@ -388,6 +388,7 @@ void hhWeapon::Clear( void ) {
 	idealState		= "";
 	animBlendFrames	= 0;
 	animDoneTime	= 0;
+	examineEndTime	= 0;
 
 	lightOn			= false;
 
@@ -1669,10 +1670,15 @@ void hhWeapon::Event_PlayAnim( int channel, const char *animname ) {
 		//HUMANHEAD END
 		GetAnimator()->Clear( channel, gameLocal.GetTime(), FRAME2MS( animBlendFrames ) );
 		animDoneTime = 0;
+		examineEndTime = 0;
 	} else {
 		//Show(); AOB - removed so we can use hidden weapons  Hope this doesn't fuck to many things
 		GetAnimator()->PlayAnim( channel, anim, gameLocal.GetTime(), FRAME2MS( animBlendFrames ) );
 		animDoneTime = GetAnimator()->CurrentAnim( channel )->GetEndTime();
+		// openPR06: Tommy turns a newly acquired weapon over in his hands
+		// (initialPickup, or the soul stripper's initialPickupC); the player
+		// view pulls focus onto it until the anim ends or another replaces it
+		examineEndTime = !idStr::Icmpn( animname, "initialPickup", 13 ) ? animDoneTime : 0;
 		if ( worldModel.GetEntity() ) {
 			anim = worldModel.GetEntity()->GetAnimator()->GetAnim( animname );
 			if ( anim ) {
@@ -1929,8 +1935,10 @@ void hhWeapon::Event_PlayCycle( int channel, const char *animname ) {
 		//HUMANHEAD END
 		GetAnimator()->Clear( channel, gameLocal.GetTime(), FRAME2MS( animBlendFrames ) );
 		animDoneTime = 0;
+		examineEndTime = 0;
 	} else {
 		//Show();AOB - removed so we can use hidden weapons  Hope this doesn't fuck to many things
+		examineEndTime = 0;
 
 		// NLANOTE - Used to be CARandom
 		GetAnimator()->CycleAnim( channel, anim, gameLocal.GetTime(), FRAME2MS( animBlendFrames ) );

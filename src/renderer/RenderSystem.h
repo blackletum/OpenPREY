@@ -954,6 +954,14 @@ public:
 	// with nothing uploaded, for any other image or a rectangle outside it;
 	// the caller then uploads the image whole.
 	virtual bool UploadImageRegion( const char *imageName, const byte *data, int x, int y, int width, int height, int rowPitch ) = 0;
+
+	// Appended slot, render API 38. openPR06: depth of field for the next main
+	// scene view RenderScene receives (the latch lives on that view, so the
+	// value is safe to change every frame and never reaches a subview).
+	// amount 0..1 pulls the focus in; focusDistance is the in-focus distance
+	// in world units. The view weapon's depth-hacked range is always sharp.
+	// The game publishes it every frame, before RenderScene; amount 0 is off.
+	virtual void SetDepthOfFieldView( float amount, float focusDistance ) = 0;
 };
 
 extern idRenderSystem *		renderSystem;
