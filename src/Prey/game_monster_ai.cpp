@@ -886,6 +886,24 @@ void hhMonsterAI::GetCurrentModelTransform( idVec3 &origin, idMat3 &axis ) const
 	}
 }
 
+/*
+================
+EvaluateBoundHead
+
+openPR06: when the actor is bound, the team master (often an idle mover, e.g.
+the salvageboss vent the "goat" stands on) owns the team's physics and may not
+run it, so this direct Evaluate is the only thing moving the head.  Evaluating
+outside idEntity::RunPhysics skips UpdateFromPhysics, which left the head's
+render entity frozen while the body animated (the head drifted off the neck
+whenever no head animation happened to refresh it).
+================
+*/
+static void EvaluateBoundHead( idEntity *headEnt ) {
+	if ( headEnt->GetPhysics()->Evaluate( gameLocal.time - gameLocal.previousTime, gameLocal.time ) ) {
+		headEnt->UpdateVisuals();
+	}
+}
+
 void hhMonsterAI::UpdateModelTransform( void ) {
 	idVec3 origin;
 	idMat3 axis;
@@ -896,14 +914,14 @@ void hhMonsterAI::UpdateModelTransform( void ) {
 		} else {
 			renderEntity.axis = axis * GetPhysics()->GetAxis();
 		}
-		if ( GetBindMaster() && bindJoint != INVALID_JOINT ) { 
+		if ( GetBindMaster() && bindJoint != INVALID_JOINT ) {
 			if ( head.IsValid() && head->GetPhysics() ) {
-				head->GetPhysics()->Evaluate(gameLocal.time-gameLocal.previousTime, gameLocal.time);
+				EvaluateBoundHead( head.GetEntity() );
 			}
 			renderEntity.origin = origin;
 		} else {
 			if ( GetBindMaster() && head.IsValid() && head->GetPhysics() ) {
-				head->GetPhysics()->Evaluate(gameLocal.time-gameLocal.previousTime, gameLocal.time);
+				EvaluateBoundHead( head.GetEntity() );
 			}
 			renderEntity.origin = GetPhysics()->GetOrigin() + origin * renderEntity.axis;
 		}
