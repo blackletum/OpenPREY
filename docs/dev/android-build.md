@@ -15,7 +15,9 @@ As of 22 November 2026 the Android build produces a verified arm64 APK for
 PREY: a push-triggered CI probe of `.github/workflows/android-build.yml`
 (`signing: ci`) ran `tools/build/build_android_release.sh` (Meson native build,
 Gradle `assembleRelease`), signed the APK with a throwaway key and passed
-`tools/build/verify_android_apk.py`. What changed from openQ4's host:
+`tools/build/verify_android_apk.py`. The same probe passed again on 24 November
+2026 at `03498bae0`, with the `android-host` checks. What changed from openQ4's
+host:
 
 - The GLES module (`librenderer-gles_arm64.so`) supplies its own
   `R_ARBProgramUsesInteractionInputs`, `R_LoadARBProgramsForStartup` and
@@ -40,6 +42,16 @@ Gradle `assembleRelease`), signed the APK with a throwaway key and passed
   `-Popenq4*` Gradle properties, the `OPENQ4_*` host environment variables, the
   `openq4-package-*` manifest files and the SigmaTouch `Quake4_*` bridge
   ([mobile/README.md](../../mobile/README.md)).
+- Active validation (`openpr06-validation.yml`, job `android-host`) runs the
+  Android host, touch and GLES checks openQ4's push verification runs. The
+  native NDK build and APK verification run only in `android-build.yml`.
+- The [player guide](../user/android-setup.md) is openQ4's, adapted. Gaps it
+  records against openQ4: PREY's menus have no **Android setup** entry (the
+  engine's `openAndroidSetup` command and `controls.touchLayout` state are
+  unused); `PreyGame_InCinematic` is gated to false, so touch input is not held
+  back during cinematics; and PREY's game module never sets
+  `ui_touchCanReload`, `ui_touchCanZoom` or `ui_radialOwner`, so the reload and
+  zoom buttons stay hidden and there is no weapon wheel.
 
 Remaining before a release lane: the signing secrets below, and every device
 check. No openPR06 APK has been installed on a device.
@@ -86,7 +98,7 @@ The engine embeds BSE and each game mode keeps its own idlib archive.
 The [standalone Android application](../../mobile/android/README.md) packages
 these native outputs using Gradle and SDLActivity. It supports ordinary SDL
 gamepad, keyboard, mouse and menu input, plus the experimental first-party
-gameplay controls described in the [player guide](https://github.com/themuffinator/openQ4/blob/main/docs/user/android-setup.md).
+gameplay controls described in the [player guide](../user/android-setup.md).
 Sigma Touch remains an optional compatible external host. Device gameplay
 remains a separate validation step.
 

@@ -50,7 +50,7 @@ of openPR06 releases.
 | Linux ARM64 (preview) | Release lane (`ubuntu-24.04-arm`) | None yet on real hardware | `-preview` `.tar.xz` and `aarch64` AppImage, with detached debug symbols |
 | Steam Deck / SteamOS | `openPR06-steamdeck` launcher staged by Linux builds | Inherited from openQ4, not yet checked with PREY | In the Linux x64 package |
 | macOS, Apple silicon (preview) | Release lane (`macos-15`), OpenGL and Metal-bridge variants | None yet | Unsigned, unnotarized `openPR06.app` in `-unsigned.tar.gz`, with dSYM symbols. See [macOS Support Data](macos-support-data.md) to report a run |
-| Android | Inherited openQ4 sources; the GLES renderer and Android host aren't ported to PREY | None | Not supported |
+| Android | openPR06 APK builds in a test workflow; see the [Android guide](android-setup.md) | None yet on a device | No download yet: the release needs a signing key |
 
 The [platform support roadmap](../dev/platform-support.md) lists the evidence a
 platform needs before openPR06 claims it.

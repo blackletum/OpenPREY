@@ -26,7 +26,7 @@ It is a roadmap, not a release-support claim.
 | Linux ARM64 | Release lane (`ubuntu-24.04-arm`): `-preview` archive, AppImage and debug symbols | Real-hardware Prey runtime evidence pending | Preview |
 | macOS arm64 (OpenGL, Metal bridge) | Release lane (`macos-15`): unsigned `-unsigned.tar.gz` and dSYMs, or signed DMGs when the Apple secrets exist | Prey runtime and package evidence pending | Preview; experimental and gated for first-class |
 | macOS x64/universal2 | Inherited tooling only | None | Not a release target |
-| Android | Native build fails: the GLES renderer lacks PREY's ARB-program hooks; the host app is still openQ4's | None | Not supported |
+| Android arm64 | `android-build.yml` builds and verifies the openPR06 APK (CI probe, `signing: ci`, 2026-11-22); active CI runs the Android host, touch and GLES checks; no release lane until the signing secrets exist ([android-build.md](android-build.md#release-signing)) | None: no APK installed on a device; the GLES module does not draw PREY's ARB interaction programs | Not released; experimental |
 
 The active workflow is `.github/workflows/openpr06-validation.yml`. It validates
 deterministic `pak0.pk4`/`pak1.pk4` inputs, one staged `game_<arch>` module,

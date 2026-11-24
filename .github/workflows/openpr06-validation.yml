@@ -65,6 +65,54 @@ jobs:
               --out ".tmp/ci-paks/${pak}.pk4"
           done
 
+  # The Android host, touch and GLES checks openQ4's push verification runs.
+  # They compile small host-side harnesses (clang++/g++, javac); the native
+  # NDK build and APK verification stay in android-build.yml.
+  android-host:
+    name: Android Host and GLES Checks
+    needs: scaffold-contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout openPR06
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+
+      - name: Setup Java for Android host storage validation
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Run Android host checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile \
+            tools/build/android_cross.py \
+            tools/build/android_elf.py \
+            tools/build/prepare_android_deps.py \
+            tools/build/verify_android_apk.py \
+            tools/tests/android_emulator_smoke.py \
+            tools/tests/android_device_qualification.py
+          for test in \
+            android_build android_touch_input android_touch_controls \
+            renderer_gles_dispatch renderer_gles_alpha renderer_gles_upload \
+            android_host_storage android_retail_data android_retail_import \
+            android_document_source android_setup_task android_setup_flow \
+            android_touch_setup android_touch_layout android_interface_setup \
+            android_private_export android_document_export android_async \
+            android_basepath android_console_input android_lifecycle \
+            android_savepath android_window_lifecycle; do
+            echo "::group::${test}"
+            python "tools/tests/${test}.py"
+            echo "::endgroup::"
+          done
+
   unified-gamelib:
     name: Unified GameLib (${{ matrix.platform }})
     needs: scaffold-contracts
