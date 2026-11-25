@@ -145,8 +145,9 @@ game folder before connecting, such as an extracted texture or map, still makes
 the client restart into pure mode.
 
 The experimental level-load option (`com_levelLoadModernization 1`, off by
-default) keeps similar caches of decoded models, maps, collision data and
-animations under `generated/`. A pure server's clients never read those either.
+default) keeps similar caches of decoded models, maps and collision data under
+`generated/`, and the game keeps one of decoded animations (on by default). A
+pure server's clients never read those either.
 Anything a client loaded from them before connecting is loaded again from the
 original game files when the server's map loads.
 

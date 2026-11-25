@@ -960,6 +960,16 @@ void idGameLocal::LoadMap( const char *mapName, int randseed ) {
 	DialogSoundMode( false );
 	// HUMANHEAD END
 
+	// openPR06: animations decoded from the generated cache are trusted only
+	// while no pure lock (or fs_restrict) holds: once the filesystem refuses
+	// those reads, derive them again from the pure paks before this map uses them.
+	if ( !fileSystem->GeneratedCacheReadsEnabled( GENERATED_CACHE_ANIMATION ) ) {
+		const int reloadedAnims = animationLib.ReloadGeneratedCacheAnims();
+		if ( reloadedAnims > 0 ) {
+			Printf( "%i animations decoded from the generated cache reloaded: generated-cache reads are refused\n", reloadedAnims );
+		}
+	}
+
 	InitAsyncNetwork();
 
 	if ( !sameMap || ( mapFile && mapFile->NeedsReload() ) ) {

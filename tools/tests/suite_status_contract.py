@@ -17,7 +17,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 STATUS = ROOT / "tools" / "tests" / "suite_status.json"
 RUNNER = ROOT / "tools" / "validation" / "run_test_suite.py"
-EXPECTED_GROUPS = {"deferred-release-lane", "pending-source-port", "needs-arguments", "needs-runtime"}
+EXPECTED_GROUPS = {"deferred-release-lane", "needs-arguments", "needs-runtime"}
 
 
 def main() -> int:

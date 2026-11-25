@@ -68,11 +68,19 @@ validated keys. Animation files retain the normalized source path and add a
 nor recommended; a different source package or setting can intentionally cause
 a clean miss and rebuild.
 
-Each animation cache records the source path, source size, timestamp, and
-containing PK4 checksum where applicable. It stores fixed-width values and
-floating-point arrays in a portable byte order; every build uses the same
-format. A stale, truncated, corrupt, or mismatched cache is ignored and rebuilt
-from the installed source animation. Loaded cache data becomes the normal runtime
+Each animation cache (format version 3) records the source's normalized game
+path, size, timestamp, and containing PK4 checksum, or a CRC-32 of the file's
+bytes for a loose source, and ends with its record length and a CRC-32 of the
+record. It stores fixed-width values and floating-point arrays in a
+portable byte order; every build uses the same format. A cache is written to a
+`.banim.tmp` staging file and moved over the final name only once complete, and
+it is read only from `fs_savepath`, never from a PK4 or another search path.
+Every count, frame rate, joint reference, bound and float is checked before the
+data is used. A stale, truncated, corrupt, or mismatched cache is ignored and
+rebuilt from the installed source animation. The animation cache follows
+`g_useGeneratedAnimCache` and `g_writeGeneratedAnimCache`, not
+`com_levelLoadModernization`, but like the engine caches it is not read on a
+pure server or under `fs_restrict`. Loaded cache data becomes the normal runtime
 animation data; openPR06 does not retain a second permanent copy in memory.
 Animation memory reporting also includes base-frame storage.
 

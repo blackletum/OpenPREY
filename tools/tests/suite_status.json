@@ -33,13 +33,6 @@
         "release_tooling_safety"
       ]
     },
-    "pending-source-port": {
-      "reason": "The subject exists in openPR06, but the source still lacks the upstream openQ4 change the test checks, so the test is right to fail. generated_animation_cache and level_load_cache: src/game/anim/Anim.cpp is on generated-animation cache version 1 and lacks openQ4's version 3 validation (CRC trailer, finite and bounded values, staged writes, the level-load animation resource).",
-      "tests": [
-        "generated_animation_cache",
-        "level_load_cache"
-      ]
-    },
     "needs-arguments": {
       "reason": "Build helpers and harness drivers that Meson or a person runs with arguments; run bare they print their usage.",
       "tests": [

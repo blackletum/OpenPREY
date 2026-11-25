@@ -211,7 +211,7 @@ DEFERRED_PREY_API_V7_TESTS = frozenset(
 # openPR06: tools/tests/suite_status.json is the one list of scripts that are
 # expected to fail until their lane or source port lands (issue #62); the
 # profiles skip them too, so the full-suite runner and this runner agree.
-SUITE_STATUS_SKIPPED_GROUPS = ("deferred-release-lane", "pending-source-port")
+SUITE_STATUS_SKIPPED_GROUPS = ("deferred-release-lane",)
 
 
 def suite_status_skipped_tests(root: Path) -> frozenset[str]:

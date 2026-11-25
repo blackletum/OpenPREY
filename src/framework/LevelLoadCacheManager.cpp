@@ -1173,13 +1173,19 @@ idFile *idLevelLoadCacheManager::OpenPreloadedSource( const char *path,
 }
 
 bool idLevelLoadCacheManager::GeneratedCacheReadsEnabled( const generatedCacheKind_t kind ) const {
-	if ( impl == nullptr || !com_levelLoadModernization.GetBool() ) {
+	if ( impl == nullptr ) {
 		return false;
 	}
 	// The game module reads its own animation cache under
 	// g_useGeneratedAnimCache; com_levelLoadCache has never governed it.
+	// openPR06: nor has com_levelLoadModernization. PREY's animation cache is
+	// on by default while the experimental engine caches are off, so only the
+	// filesystem's pure-lock and fs_restrict refusal applies to it.
 	if ( kind == GENERATED_CACHE_ANIMATION ) {
 		return true;
+	}
+	if ( !com_levelLoadModernization.GetBool() ) {
+		return false;
 	}
 	return com_levelLoadCache.GetBool() && IsValidCacheKind( kind );
 }
