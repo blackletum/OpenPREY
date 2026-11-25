@@ -323,7 +323,8 @@ idCVar s_cushionFadeLimit( "s_cushionFadeLimit", "-30", CVAR_FLOAT, "Never cushi
 idCVar s_cushionFadeOver( "s_cushionFadeOver", "10", CVAR_FLOAT, "DB above s_cushionFadeLimit to start ramp to silence" );
 idCVar s_unpauseFadeInTime( "s_unpauseFadeInTime", "250", CVAR_INTEGER, "When unpausing a sound world, milliseconds to fade sounds in over" );
 idCVar s_doorDistanceAdd( "s_doorDistanceAdd", "150", CVAR_FLOAT, "reduce sound volume with this distance when going through a door" );
-idCVar s_quadraticFalloff( "s_quadraticFalloff", "0", CVAR_BOOL, "use quadratic sound distance falloff" );
+// OPENPR06: retail PREY.exe 1.4 defaults to quadratic falloff (Quake 4 1.4.2 ships 0), unarchived
+idCVar s_quadraticFalloff( "s_quadraticFalloff", "1", CVAR_SOUND | CVAR_BOOL, "use quadratic sound distance falloff" );
 idCVar s_drawSounds( "s_drawSounds", "0", CVAR_INTEGER, "", 0, 2, idCmdSystem::ArgCompletion_Integer<0, 2> );
 idCVar s_showVoices( "s_showVoices", "0", CVAR_BOOL, "show active voices" );
 // Retail PREY.exe 1.4 defaults, flags and descriptions.
@@ -372,6 +373,7 @@ idSoundWorldLocal::idSoundWorldLocal()
 	slowmoSpeed = 1.0f;
 	enviroSuitActive = false;
 	underwaterActive = false;
+	spiritWalkActive = false;
 	liquidTest = NULL;
 }
 
@@ -603,6 +605,15 @@ void idSoundWorldLocal::ClearAreaLocations()
 {
 	areaLocations.Clear();
 	listenerAreaName.Clear();
+}
+
+const char* idSoundWorldLocal::AreaLocation( int area ) const
+{
+	if( area < 0 || area >= areaLocations.Num() )
+	{
+		return "";
+	}
+	return areaLocations[area].c_str();
 }
 
 /*
@@ -943,7 +954,8 @@ void idSoundWorldLocal::Update()
 		if( showVoices )
 		{
 			idStr voiceLine;
-			voiceLine = va( "%5.1f db [%3i:%2i] %s", chan->volumeDB, chan->emitter->index, chan->logicalChannel, chan->CanMute() ? "" : " <CANT MUTE>\n" );
+			voiceLine = va( "%5.1f db [%3i:%2i] room %d occl %d %s", chan->volumeDB, chan->emitter->index, chan->logicalChannel,
+				chan->reverbRoomMB, chan->reverbOcclusionMB, chan->CanMute() ? "" : " <CANT MUTE>\n" );
 			idSoundSample* leadinSample = chan->leadinSample;
 			idSoundSample* loopingSample = chan->loopingSample;
 			if( loopingSample == NULL )
@@ -1313,14 +1325,16 @@ void idSoundWorldLocal::ResolveOrigin( const int stackDepth, const soundPortalTr
 	for( int p = 0; p < numPortals; p++ )
 	{
 		exitPortal_t re = renderWorld->GetPortal( soundArea, p );
-		// Prey game portals link a camera's area for the game's PVS; sound
-		// does not travel them here
-		if( renderWorld->IsGamePortal( re.portalHandle ) )
+		// OPENPR06: retail PREY.exe 1.4 ResolveOrigin. A portal closed to sound (a game
+		// portal whose hhArtificialPortal has openSound off, or a portal pair until it
+		// opens) carries none.
+		if( ( re.blockingBits & PS_BLOCK_SOUND ) != 0 )
 		{
 			continue;
 		}
 
 		float occlusionDistance = 0;
+		int portalOcclusion = 0;
 
 		// air blocking windows will block sound like closed doors
 		const bool portalBlocksAudio = SoundPortalBlocksAudio( re );
@@ -1329,6 +1343,7 @@ void idSoundWorldLocal::ResolveOrigin( const int stackDepth, const soundPortalTr
 			// we could just completely cut sound off, but reducing the volume works better
 			// continue;
 			occlusionDistance = s_doorDistanceAdd.GetFloat();
+			portalOcclusion = 1;
 		}
 
 		// what area are we about to go look at
@@ -1349,6 +1364,27 @@ void idSoundWorldLocal::ResolveOrigin( const int stackDepth, const soundPortalTr
 		}
 		if( prev )
 		{
+			continue;
+		}
+
+		// OPENPR06: retail sends sound through a Prey game portal as through a closed door
+		// (s_doorDistanceAdd and one occluding portal more), from its source point on this
+		// side to its destination point on the other, unless the emitter plays noportalflow.
+		if( renderWorld->IsGamePortal( re.portalHandle ) )
+		{
+			// A portal back into its own area (feedingtowerb's glow portals) only lengthens
+			// paths the area's own portals already trace; retail recursed into it to the
+			// depth limit, which multiplies the trace by each such portal.
+			if( otherArea == soundArea || !def->FlowsThroughGamePortals() )
+			{
+				continue;
+			}
+			occlusionDistance += s_doorDistanceAdd.GetFloat();
+			portalOcclusion++;
+			const idVec3 portalSource = renderWorld->GetGamePortalSrc( re.portalHandle );
+			const idVec3 portalDestination = renderWorld->GetGamePortalDst( re.portalHandle );
+			ResolveOrigin( stackDepth + 1, &newStack, otherArea, dist + ( portalSource - soundOrigin ).LengthFast() + occlusionDistance,
+				occludingPortals + portalOcclusion, portalDestination, def );
 			continue;
 		}
 
@@ -1394,7 +1430,7 @@ void idSoundWorldLocal::ResolveOrigin( const int stackDepth, const soundPortalTr
 		idVec3 tlen = source - soundOrigin;
 		float tlenLength = tlen.LengthFast();
 
-		const int childOccludingPortals = occludingPortals + ( portalBlocksAudio ? 1 : 0 );
+		const int childOccludingPortals = occludingPortals + portalOcclusion;
 		ResolveOrigin( stackDepth + 1, &newStack, otherArea, dist + tlenLength + occlusionDistance, childOccludingPortals, source, def );
 	}
 }
@@ -2604,6 +2640,21 @@ void idSoundWorldLocal::SetVoiceDucker( bool active )
 	}
 	FadeSoundClasses( SOUNDCLASS_NORMAL, to, over );
 	FadeSoundClasses( SOUNDCLASS_SPIRITWALK, to, over );
+}
+
+/*
+=================
+idSoundWorldLocal::SetSpiritWalkEffect
+
+Retail PREY.exe 1.4 (vtable slot after SetEnviroSuit): sets a flag the mixer reads for every mono
+voice of the normal class, adding s_lowPassSpirit (-3000 mB) to its EAX occlusion. Spirit-walk,
+voice, music and ducking-line classes stay clear. idGameLocal::SpiritWalkSoundMode pairs it with
+an -8 dB fade of the normal class.
+=================
+*/
+void idSoundWorldLocal::SetSpiritWalkEffect( bool active )
+{
+	spiritWalkActive = active;
 }
 
 /*

@@ -38,6 +38,9 @@ idCVar s_logSpeech( "s_logSpeech", "0", CVAR_SOUND | CVAR_BOOL, "print SOUND_SPE
 idCVar s_skipStartSound( "s_skipStartSound", "0", CVAR_BOOL, "skip starting sounds" );
 idCVar s_useOcclusion( "s_useOcclusion", "1", CVAR_BOOL, "Attenuate sounds based on walls" );
 idCVar s_centerFractionVO( "s_centerFractionVO", "0.75", CVAR_FLOAT, "Portion of VO sounds routed to the center channel" );
+// OPENPR06: retail PREY.exe 1.4 cvars and defaults (EAX occlusion in millibels)
+idCVar s_lowPassPortals( "s_lowPassPortals", "-1500", CVAR_SOUND | CVAR_INTEGER, "Portal low-pass frequency" );
+idCVar s_lowPassSpirit( "s_lowPassSpirit", "-3000", CVAR_SOUND | CVAR_INTEGER, "Spiritwalk low-pass frequency" );
 
 extern idCVar s_playDefaultSound;
 extern idCVar s_noSound;
@@ -56,7 +59,9 @@ static const float SOUND_SHADER_SCREEN_SHAKE_SCALE = 600.0f;
 static const float SOUND_SHADER_MATERIAL_SHAKE_SCALE = 2800.0f;
 static const float SOUND_SHADER_SHAKE_NORMALIZE = 1.0f / 32768.0f;
 static const float SOUND_WORLD_VOLUME_EPSILON = 1.0f / 1024.0f;
-static const int Q4_SOUND_CHANNEL_RADIO_CHATTER = 10;
+// OPENPR06: Quake 4's radio-chatter channel (10) has no counterpart in Prey, whose channel 10 is
+// SND_CHANNEL_LANDING; retail PREY.exe gives no channel its own reverb, centre or dialogue rule.
+static const int Q4_SOUND_CHANNEL_RADIO_CHATTER = -1;
 static const float SOUND_FREQUENCY_SHIFT_MIN = 0.25f;
 static const float SOUND_FREQUENCY_SHIFT_MAX = 4.0f;
 static const float SOUND_ENVIROSUIT_OCCLUSION = 0.5f;
@@ -586,6 +591,8 @@ void idSoundChannel::Reset()
 
 	volumeDB = DB_SILENCE;
 	currentAmplitude = 0.0f;
+	reverbRoomMB = 0;
+	reverbOcclusionMB = 0;
 	lastFrequencyShift = 1.0f;
 	elapsedFrequencyShiftTime = 0.0f;
 }
@@ -1096,6 +1103,13 @@ void idSoundChannel::UpdateHardware( float volumeAdd, int currentTime )
 	bool global = ( parms.soundShaderFlags & SSF_GLOBAL ) != 0;
 	bool omni = ( parms.soundShaderFlags & SSF_OMNIDIRECTIONAL ) != 0;
 	bool emitterIsListener = ( emitter->emitterId == soundWorld->listener.id );
+	if( !omni && ( parms.soundShaderFlags & SSF_OMNI_WHEN_CLOSE ) != 0 )
+	{
+		// retail PREY.exe: unpositioned once the listener is inside minDistance, measured as
+		// the distance falloff measures it
+		const bool noOcclusion = ( parms.soundShaderFlags & SSF_NO_OCCLUSION ) != 0 || !s_useOcclusion.GetBool();
+		omni = ( noOcclusion ? emitter->directDistance : emitter->spatializedDistance ) <= parms.minDistance;
+	}
 
 	int startOffset = 0;
 	bool issueStart = false;
@@ -1164,25 +1178,42 @@ void idSoundChannel::UpdateHardware( float volumeAdd, int currentTime )
 	hardwareVoice->SetDryLevel( dryLevel );
 	hardwareVoice->SetPitch( SoundChannelPlaybackRate( this ) );
 
-	// Retail EAX source state (Quake4.exe 1.4.2): every mono voice feeds the reverb slot of its
-	// own area and the listener's slot. The radio channel stays out of the room and voice-over
-	// is pulled back; while EAX reverb is on, each blocking portal on the traced path occludes
-	// the direct sound and the listener-room send by 1500 mB.
+	// Retail EAX source state (Quake4.exe 1.4.2, and PREY.exe 1.4 with the same slots): every
+	// mono voice feeds the reverb slot of its own area and the listener's slot. In Prey a
+	// noreverb shader has no send (wetLevel 0) and the voice and ducking-line classes are pulled
+	// back by 600 mB; Quake 4's radio and voice-over rules remain for its flags. While EAX reverb
+	// is on, each blocking portal on the traced path occludes the direct sound and the
+	// listener-room send by s_lowPassPortals (-1500 mB), and spirit walk occludes every
+	// normal-class voice by s_lowPassSpirit (-3000 mB) more.
 	int reverbRoomMB = 0;
 	if( IsRadioChatterChannel( this ) )
 	{
 		reverbRoomMB = SOUND_REVERB_ROOM_RADIO_MB;
+	}
+	else if( parms.soundClass == SOUNDCLASS_VOICE || parms.soundClass == SOUNDCLASS_VOICEDUCKER )
+	{
+		reverbRoomMB = SOUND_REVERB_ROOM_VOICE_CLASS_MB;
 	}
 	else if( ( parms.soundShaderFlags & SSF_IS_VO ) != 0 )
 	{
 		reverbRoomMB = SOUND_REVERB_ROOM_VOICEOVER_MB;
 	}
 	int reverbOcclusionMB = 0;
-	if( soundSystemLocal.hardware.HasEFX() && s_useEAXOcclusion.GetBool() && s_useOcclusion.GetBool() &&
-		( parms.soundShaderFlags & SSF_NO_OCCLUSION ) == 0 && emitter->occludingPortalCount > 0 )
+	if( soundSystemLocal.hardware.HasEFX() && s_useOcclusion.GetBool() )
 	{
-		reverbOcclusionMB = SOUND_REVERB_OCCLUSION_PER_PORTAL_MB * emitter->occludingPortalCount;
+		if( soundWorld->spiritWalkActive && parms.soundClass == SOUNDCLASS_NORMAL )
+		{
+			reverbOcclusionMB += s_lowPassSpirit.GetInteger();
+		}
+		if( s_useEAXOcclusion.GetBool() && ( parms.soundShaderFlags & SSF_NO_OCCLUSION ) == 0 && emitter->occludingPortalCount > 0 )
+		{
+			reverbOcclusionMB += s_lowPassPortals.GetInteger() * emitter->occludingPortalCount;
+		}
+		// EAXSOURCE_OCCLUSION's range
+		reverbOcclusionMB = idMath::ClampInt( SOUND_REVERB_MUTED_ROOM_MB, 0, reverbOcclusionMB );
 	}
+	this->reverbRoomMB = reverbRoomMB;
+	this->reverbOcclusionMB = reverbOcclusionMB;
 	hardwareVoice->SetReverbSource( soundSystemLocal.reverb.SlotForArea( emitter->lastValidPortalArea ), reverbRoomMB,
 		reverbOcclusionMB, leadinSample->NumChannels() == 1 );
 
@@ -2193,6 +2224,26 @@ void idSoundEmitterLocal::FadeSound( const s_channelType channel, float to, floa
 		// fade it
 		chan->volumeFade.FadeDB( to, over, soundWorld->GetSoundTime() );
 	}
+}
+
+/*
+========================
+idSoundEmitterLocal::FlowsThroughGamePortals
+
+Retail PREY.exe 1.4 (idSoundEmitterLocal vtable slot 14): false while any channel with a
+sound plays a noportalflow shader.
+========================
+*/
+bool idSoundEmitterLocal::FlowsThroughGamePortals() const
+{
+	for( int i = 0; i < channels.Num(); ++i )
+	{
+		if( channels[i]->leadinSample != NULL && ( channels[i]->parms.soundShaderFlags & SSF_NO_PORTAL_FLOW ) != 0 )
+		{
+			return false;
+		}
+	}
+	return true;
 }
 
 /*

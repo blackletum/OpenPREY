@@ -433,6 +433,12 @@ bool idSoundShader::RebuildTextSource() {
 	if ( parms.soundShaderFlags & SSF_OMNIDIRECTIONAL ) {
 		file.WriteFloatString( "\tomnidirectional\r\n" );
 	}
+	if ( parms.soundShaderFlags & SSF_OMNI_WHEN_CLOSE ) {
+		file.WriteFloatString( "\tomniwhenclose\r\n" );
+	}
+	if ( parms.soundShaderFlags & SSF_NO_PORTAL_FLOW ) {
+		file.WriteFloatString( "\tnoportalflow\r\n" );
+	}
 	if ( parms.soundShaderFlags & SSF_LOOPING ) {
 		file.WriteFloatString( "\tlooping\r\n" );
 	}
@@ -751,9 +757,16 @@ bool idSoundShader::ParseShader( idLexer& src )
 			parms.soundShaderFlags |= SSF_LOOPING;
 		}
 		// no occlusion
-		else if( !token.Icmp( "no_occlusion" ) || !token.Icmp( "noPortalFlow" ) )
+		else if( !token.Icmp( "no_occlusion" ) )
 		{
 			parms.soundShaderFlags |= SSF_NO_OCCLUSION;
+		}
+		// OPENPR06: retail PREY.exe keeps noportalflow apart from no_occlusion: an emitter
+		// playing such a sound is not heard through Prey's game portals (objectportal's hum
+		// would otherwise sound on both sides of the portal)
+		else if( !token.Icmp( "noPortalFlow" ) )
+		{
+			parms.soundShaderFlags |= SSF_NO_PORTAL_FLOW;
 		}
 		// private
 		else if( !token.Icmp( "private" ) )
@@ -781,9 +794,15 @@ bool idSoundShader::ParseShader( idLexer& src )
 			parms.soundShaderFlags |= SSF_UNCLAMPED;
 		}
 		// omnidirectional
-		else if( !token.Icmp( "omnidirectional" ) || !token.Icmp( "omniwhenclose" ) )
+		else if( !token.Icmp( "omnidirectional" ) )
 		{
 			parms.soundShaderFlags |= SSF_OMNIDIRECTIONAL;
+		}
+		// OPENPR06: retail PREY.exe plays an omniwhenclose sound unpositioned only while the
+		// listener is inside its minDistance; beyond that it is directional like any other
+		else if( !token.Icmp( "omniwhenclose" ) )
+		{
+			parms.soundShaderFlags |= SSF_OMNI_WHEN_CLOSE;
 		}
 		else if( !token.Icmp( "onDemand" ) )
 		{

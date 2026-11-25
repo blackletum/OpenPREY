@@ -273,6 +273,8 @@ public:
 
 	float					volumeDB;			// last volume at which this channel will play (calculated in UpdateVolume)
 	float					currentAmplitude;	// the sample's envelope at the current playback position
+	int						reverbRoomMB;		// EAXSOURCE_ROOM and OCCLUSION last sent (s_showVoices)
+	int						reverbOcclusionMB;
 	float					lastFrequencyShift;
 	float					elapsedFrequencyShiftTime;
 
@@ -388,6 +390,7 @@ public:
 	virtual void			SetSlowmoSpeed( float speed );
 	virtual void			SetEnviroSuit( bool active );
 	virtual void			SetVoiceDucker( bool active );
+	virtual void			SetSpiritWalkEffect( bool active );
 	virtual void			SetUnderwater( bool active );
 	virtual void			SetLiquidTest( liquidTest_t test );
 
@@ -426,6 +429,8 @@ public:
 	idList<idSoundEmitterLocal*>	emitters;
 	idStrList			areaLocations;
 	idStr				listenerAreaName;
+	// the location the game registered for an area, "" when none
+	const char*			AreaLocation( int area ) const;
 
 	// Lines that finished on their own keep their last words up for a moment:
 	// the channel's logical clock reaches the end before the voice's last
@@ -448,6 +453,7 @@ public:
 	float					slowmoSpeed;
 	bool					enviroSuitActive;
 	bool					underwaterActive;
+	bool					spiritWalkActive;	// Prey: the game re-applies it after a load, so it is not saved
 	liquidTest_t			liquidTest;
 
 public:
@@ -506,6 +512,10 @@ public:
 
 	void			Update( int currentTime );
 	void			OnReloadSound( const idDecl* decl );
+
+	// OPENPR06: retail Prey's portal flow skips game portals while any channel plays a
+	// noportalflow shader
+	bool			FlowsThroughGamePortals() const;
 
 	//----------------------------------------------
 
@@ -605,6 +615,7 @@ private:
 	void				ResetSlots();
 	void				ShowState( const listener_t& listener );
 	static int			EffectForArea( void* context, int area );
+	static const char*	AreaLocation( int area );
 };
 
 
