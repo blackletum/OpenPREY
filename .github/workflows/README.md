@@ -1,11 +1,13 @@
 # openPR06 workflows
 
-`openpr06-validation.yml` is the active build and validation workflow. Its Windows x64,
-Linux x64, macOS ARM64 (OpenGL and Metal bridge) and macOS Intel x64 (OpenGL) jobs
+`openpr06-validation.yml` is the active build and validation workflow. Its Windows x64
+and ARM64, Linux x64 and ARM64, macOS ARM64 (OpenGL and Metal bridge) and macOS Intel
+x64 (OpenGL) jobs
 build the engine, dedicated server, GL and Vulkan renderers (the macOS client links
 its GL renderer statically), and the canonical unified `game_<arch>` module from the
-in-tree `src/game/`, `src/Prey/` and `src/preyengine/` sources. The macOS jobs follow
-openQ4's push-verification lanes and validate the staged binaries as the release
+in-tree `src/game/`, `src/Prey/` and `src/preyengine/` sources. The ARM64 and macOS
+jobs follow openQ4's push-verification lanes: the ARM64 ones build natively on the
+release's `windows-11-arm` and `ubuntu-24.04-arm` runners, and the macOS ones validate the staged binaries as the release
 lanes do. It also checks the game source inventory and content pack
 table, the `basepr/` runtime layout, the high-risk rebase source contracts, and
 openPR06 desktop/icon payloads.

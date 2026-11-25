@@ -124,18 +124,39 @@ jobs:
         include:
           - platform: Windows x64
             os: windows-2025
+            arch: x64
             module: game_x64.dll
             client: openPR06-client_x64.exe
             dedicated: openPR06-ded_x64.exe
             renderer_gl: renderer-gl_x64.dll
             renderer_vk: renderer-vk_x64.dll
+          # The ARM64 lanes match openQ4's push verification: both build
+          # natively on GitHub's ARM64 runners, the same images the release
+          # lanes use, so ARM64 breakage shows up on the push, not at release.
+          - platform: Windows ARM64
+            os: windows-11-arm
+            arch: arm64
+            module: game_arm64.dll
+            client: openPR06-client_arm64.exe
+            dedicated: openPR06-ded_arm64.exe
+            renderer_gl: renderer-gl_arm64.dll
+            renderer_vk: renderer-vk_arm64.dll
           - platform: Linux x64
             os: ubuntu-24.04
+            arch: x64
             module: game_x64.so
             client: openPR06-client_x64
             dedicated: openPR06-ded_x64
             renderer_gl: renderer-gl_x64.so
             renderer_vk: renderer-vk_x64.so
+          - platform: Linux ARM64
+            os: ubuntu-24.04-arm
+            arch: arm64
+            module: game_arm64.so
+            client: openPR06-client_arm64
+            dedicated: openPR06-ded_arm64
+            renderer_gl: renderer-gl_arm64.so
+            renderer_vk: renderer-vk_arm64.so
           # The macOS lanes match openQ4's push verification: ARM64 in both
           # graphics bridges, and one Intel lane so the x86_64 slice keeps
           # building. The macOS client links its OpenGL renderer statically,
@@ -234,6 +255,16 @@ jobs:
             sleep 10
           done
 
+      # OpenAL Soft is built from source for ARM64, so keep the prepared
+      # install between pushes, as openQ4's push verification does.
+      - name: Restore prepared OpenAL Soft (Windows)
+        if: runner.os == 'Windows'
+        id: openal_cache
+        uses: actions/cache@v6
+        with:
+          path: .tmp/openal-soft-${{ matrix.arch }}
+          key: openal-soft-windows-${{ matrix.arch }}-${{ hashFiles('tools/build/prepare_windows_openal.ps1') }}
+
       # Staging bundles OpenAL32.dll beside the client. The runner has no local
       # src/external/openal-soft runtime, so prepare one as upstream openQ4 does.
       - name: Prepare OpenAL Soft (Windows)
@@ -241,9 +272,16 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          $outputRoot = Join-Path $env:GITHUB_WORKSPACE ".tmp/openal-soft-x64"
-          $env:OPENPR06_VS_TARGET_ARCH = "x64"
-          powershell -NoProfile -ExecutionPolicy Bypass -File tools/build/prepare_windows_openal.ps1 -Architecture "x64" -OutputRoot $outputRoot
+          $outputRoot = Join-Path $env:GITHUB_WORKSPACE ".tmp/openal-soft-${{ matrix.arch }}"
+          $cached = "${{ steps.openal_cache.outputs.cache-hit }}" -eq "true" -and
+            (Test-Path (Join-Path $outputRoot "bin/OpenAL32.dll")) -and (Test-Path (Join-Path $outputRoot "lib/OpenAL32.lib"))
+          if ($cached) {
+            Write-Host "Using the cached OpenAL Soft install: $outputRoot"
+          } else {
+            $env:OPENPR06_VS_TARGET_ARCH = "${{ matrix.arch }}"
+            powershell -NoProfile -ExecutionPolicy Bypass -File tools/build/prepare_windows_openal.ps1 -Architecture "${{ matrix.arch }}" -OutputRoot $outputRoot
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
           "OPENPR06_OPENAL_ROOT=$outputRoot" >> $env:GITHUB_ENV
 
       # Same pinned OpenAL Soft the macOS release lanes bundle.
@@ -265,9 +303,26 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          powershell -NoProfile -ExecutionPolicy Bypass -File tools/build/meson_setup.ps1 setup --wipe builddir . --backend ninja --buildtype debug --wrap-mode=forcefallback -Dbuild_engine=true -Dbuild_games=true -Dbuild_renderer_gl=true -Dbuild_renderer_vk=true
+          $env:OPENPR06_VS_TARGET_ARCH = "${{ matrix.arch }}"
+          $setupArgs = @(
+            "setup", "--wipe", "builddir", ".",
+            "--backend", "ninja",
+            "--buildtype", "debug",
+            "--wrap-mode=forcefallback",
+            "-Dbuild_engine=true",
+            "-Dbuild_games=true",
+            "-Dbuild_renderer_gl=true",
+            "-Dbuild_renderer_vk=true",
+            # The bundled OpenAL import library is x64-only; every lane links the
+            # OpenAL Soft prepared above for its architecture, as the release does.
+            "-Dopenal_root_override=$env:OPENPR06_OPENAL_ROOT"
+          )
+          powershell -NoProfile -ExecutionPolicy Bypass -File tools/build/meson_setup.ps1 @setupArgs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           powershell -NoProfile -ExecutionPolicy Bypass -File tools/build/meson_setup.ps1 compile -C builddir
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           powershell -NoProfile -ExecutionPolicy Bypass -File tools/build/meson_setup.ps1 install -C builddir --no-rebuild --skip-subprojects
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Configure, build, and stage (Linux)
         if: runner.os == 'Linux'

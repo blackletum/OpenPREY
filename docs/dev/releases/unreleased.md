@@ -84,7 +84,7 @@ Engine changes merged from openQ4 are listed in openQ4's own release notes. They
 
 ## Build and CI
 
-- `openpr06-validation.yml` builds the engine, dedicated server, OpenGL and Vulkan renderers and the unified game module as debug builds on Windows x64, Linux x64, macOS ARM64 (OpenGL and Metal bridge) and macOS Intel x64 (OpenGL), then checks the staged payload. The Linux lane installs its native development packages, the Windows and macOS lanes prepare an OpenAL Soft runtime before staging, and the macOS lanes validate the staged binaries as the release lanes do.
+- `openpr06-validation.yml` builds the engine, dedicated server, OpenGL and Vulkan renderers and the unified game module as debug builds on Windows x64 and ARM64, Linux x64 and ARM64, macOS ARM64 (OpenGL and Metal bridge) and macOS Intel x64 (OpenGL), then checks the staged payload. The ARM64 lanes build natively on the same `windows-11-arm` and `ubuntu-24.04-arm` runners as the release, so ARM64 breakage shows up on the push rather than at release time. The Linux lanes install their native development packages, the Windows and macOS lanes prepare an OpenAL Soft runtime before staging (cached between pushes on Windows), and the macOS lanes validate the staged binaries as the release lanes do.
 - Fixed debug-only build failures in the game library on MSVC x64 and GCC, and header spellings that resolved only on case-insensitive filesystems.
 - VS Code launch configurations come in OpenGL and Vulkan variants and cover the deathwalk maps.
 

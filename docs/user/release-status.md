@@ -35,8 +35,8 @@ they don't match these guides. Please don't report bugs against them.
 
 Active CI (`.github/workflows/openpr06-validation.yml`) builds the engine,
 dedicated server, OpenGL and Vulkan renderers and the unified game module on
-Windows x64, Linux x64, macOS Apple silicon (OpenGL and Metal bridge) and macOS
-Intel on every push. Releases come from
+Windows x64 and ARM64, Linux x64 and ARM64, macOS Apple silicon (OpenGL and
+Metal bridge) and macOS Intel on every push. Releases come from
 `.github/workflows/manual-release.yml`, adapted from openQ4's, on openQ4's
 platform set. Every release lane builds, stages, validates and packages the
 unified `game_<arch>` module and `basepr/`, but only Windows x64 has had real
@@ -46,9 +46,9 @@ of openPR06 releases.
 | Platform | Build | Runtime testing | Package |
 |---|---|---|---|
 | Windows x64 | Built in CI | Deepest testing: representative campaign maps, save/load and a two-client listen server | Installer (`-setup.exe`) and zip, with PDB symbols |
-| Windows ARM64 | Release lane (`windows-11-arm`) | None yet | Installer and zip, with PDB symbols |
+| Windows ARM64 | Built in CI; release lane (`windows-11-arm`) | None yet | Installer and zip, with PDB symbols |
 | Linux x64 | Built in CI | Retail gameplay validation still pending | `.tar.xz` and `x86_64` AppImage, with detached debug symbols |
-| Linux ARM64 (preview) | Release lane (`ubuntu-24.04-arm`) | None yet on real hardware | `-preview` `.tar.xz` and `aarch64` AppImage, with detached debug symbols |
+| Linux ARM64 (preview) | Built in CI; release lane (`ubuntu-24.04-arm`) | None yet on real hardware | `-preview` `.tar.xz` and `aarch64` AppImage, with detached debug symbols |
 | Steam Deck / SteamOS | `openPR06-steamdeck` launcher staged by Linux builds | Inherited from openQ4, not yet checked with PREY | In the Linux x64 package |
 | macOS, Apple silicon (preview) | Built in CI; release lane (`macos-15`), OpenGL and Metal-bridge variants | None yet | Unsigned, unnotarized `openPR06.app` in `-unsigned.tar.gz`, with dSYM symbols. See [macOS Support Data](macos-support-data.md) to report a run |
 | Android | openPR06 APK builds in a test workflow; see the [Android guide](android-setup.md) | None yet on a device | No download yet: the release needs a signing key |
