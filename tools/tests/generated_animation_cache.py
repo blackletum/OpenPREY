@@ -195,7 +195,7 @@ def validate_documentation_contract() -> None:
         "g_useGeneratedAnimCache 1",
         "g_writeGeneratedAnimCache 1",
         "stale, truncated, corrupt, or mismatched cache is ignored",
-        "x64 and ARM64 builds use the same format",
+        "portable byte order; every build uses the same",  # openPR06 wording
     ):
         require(guide, token, "level-load cache guide")
 

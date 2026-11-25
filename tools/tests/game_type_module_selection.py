@@ -588,7 +588,7 @@ def validate_unified_build_contract() -> None:
     require(meson, "game_binary_name = 'game_' + binary_arch", "unified module name")
     require(
         meson,
-        "Prey uses one unified game module for both single-player and multiplayer.",
+        "Prey uses one unified game module for both single-player and multiplayer",
         "unified module source contract",
     )
     require(basepr_meson, "game_module_target =", "unified basepr module target")
@@ -719,7 +719,7 @@ def validate_decl_source_scanner_contract() -> None:
 
 def validate_renderer_module_fail_closed_contract() -> None:
     api = read(ROOT / "src" / "renderer" / "RenderModuleAPI.h")
-    require(api, "#define RENDER_API_VERSION\t\t\t34", "current renderer ABI")
+    require(api, "#define RENDER_API_VERSION\t\t\t39", "current renderer ABI")
 
     loader = read(ROOT / "src" / "renderer" / "RendererModule.cpp")
     require(

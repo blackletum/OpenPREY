@@ -306,11 +306,15 @@ def validate_operations(material: str, header: str) -> None:
         else:
             raise AssertionError(f"unclassified operation {op} in EvaluateRegisters")
     # the view and the entity reach the registers only through the predefined ones
+    continuing = False
     for line in cases[0].splitlines():
-        if ("view->" in line or "shaderParms[" in line) and not re.match(r"\s*registers\[EXP_REG_\w+\] = ", line):
+        # openPR06: a predefined register's statement may continue onto the next line (EXP_REG_SPIRIT_WALK)
+        in_register = continuing or bool(re.match(r"\s*registers\[EXP_REG_\w+\] = ", line))
+        if ("view->" in line or "shaderParms[" in line) and not in_register:
             raise AssertionError(f"EvaluateRegisters reads the view or the entity outside a predefined register: {line.strip()}")
-    # openPR06: thirteen parms (Prey adds parm12)
-    if evaluate.count("view->") != 9 or len(re.findall(r"= shaderParms\[", evaluate)) != 14:
+        continuing = in_register and not line.rstrip().endswith(";")
+    # openPR06: thirteen parms (Prey adds parm12); EXP_REG_SPIRIT_WALK also reads the view
+    if evaluate.count("view->") != 10 or len(re.findall(r"= shaderParms\[", evaluate)) != 14:
         raise AssertionError("EvaluateRegisters seeds the time, eight globals, thirteen parms and the vertex randomizer")
 
 

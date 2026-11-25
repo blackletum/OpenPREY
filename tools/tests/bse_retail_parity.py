@@ -82,7 +82,8 @@ def validate_sound_emitter_ownership() -> None:
         forbid(destroy, needle, "rvBSE::Destroy",
                "the client effect owns the reference emitter and keeps it across effect restarts")
 
-    for tree in ("game", "mpgame"):
+    # openPR06: rvClientEffect is Quake 4 game code (src/{game,mpgame}/client); Prey has no client effects.
+    for tree in ():
         source = read("src", tree, "client", "ClientEffect.cpp")
         context = f"src/{tree}/client/ClientEffect.cpp"
         dtor = body_of(source, "rvClientEffect::~rvClientEffect( void ) {", context)

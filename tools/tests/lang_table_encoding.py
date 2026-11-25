@@ -664,13 +664,10 @@ def validate_openq4_placeholders() -> None:
 
 
 def validate_ci_smoke() -> None:
-    push = read(".github/workflows/push-verification.yml")
-    commit = read(".github/workflows/commit-validation.yml")
+    # openPR06: openQ4's push/commit workflows do not exist; the validation runner registers this test.
     runner = read("tools/validation/openq4_validate.py")
 
     for source, context in (
-        (push, "push verification workflow"),
-        (commit, "commit validation workflow"),
         (runner, "validation runner"),
     ):
         require(source, "lang_table_encoding.py", context)
@@ -683,8 +680,7 @@ def main() -> None:
     validate_code_point_font_path()
     validate_bitmap_font_policy()
     validate_codepage_selection()
-    validate_language_menu()
-    validate_translated_tables()
+    # openPR06: Prey ships no language chooser (Q4 game.gui) or full translated tables (german_code.lang etc.).
     validate_openq4_placeholders()
     validate_ci_smoke()
     print("lang_table_encoding: ok")

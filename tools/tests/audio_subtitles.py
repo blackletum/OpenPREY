@@ -21,7 +21,8 @@ def main():
         'void idSoundWorldLocal::RememberSubtitleTail(', 'void idSoundWorldLocal::ForgetSubtitleTails(',
         'int idSoundWorldLocal::GetSubtitles(', 'void SoundDialogueVoices_f(')))
     compiler = os.environ.get('CXX', 'clang++')
-    for name in ('SoundSubtitlesTest', 'SubtitlePagingTest'):
+    # openPR06: SubtitlePagingTest covered Quake 4's src/game/gamesys/SubtitlePaging.h, absent from Prey.
+    for name in ('SoundSubtitlesTest',):
         exe = target / (name + ('.exe' if os.name == 'nt' else ''))
         subprocess.run([compiler, '-std=c++17', '-O2', '-I', str(ROOT), '-I', str(target),
                         str(ROOT / 'tools/tests/native' / (name + '.cpp')), '-o', str(exe)], check=True, cwd=ROOT)

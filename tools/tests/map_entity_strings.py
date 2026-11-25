@@ -162,8 +162,14 @@ def main() -> int:
     try:
         validate_mapfile(ROOT, "engine")
         validate_mapfile(GAME_ROOT, "game-library")
-        validate_game_mode(GAME_ROOT / "src" / "game" / "Game_local.cpp", "single-player")
-        validate_game_mode(GAME_ROOT / "src" / "mpgame" / "Game_local.cpp", "multiplayer")
+        # openPR06: one unified Prey game library (no src/mpgame). Its loader does not apply
+        # .ent/.entx yet; until it does, the user guide must say so.
+        game_local = GAME_ROOT / "src" / "game" / "Game_local.cpp"
+        if "mapFile->ApplyEntityStringFiles()" in read(game_local):
+            validate_game_mode(game_local, "game library")
+        else:
+            require(read(ROOT / "docs" / "user" / "map-entity-strings.md"), "**Not active in openPR06 yet.**",
+                    "map entity-string guide deferral note")
         validate_docs()
     except AssertionError as error:
         print(f"map_entity_strings: FAILED - {error}")

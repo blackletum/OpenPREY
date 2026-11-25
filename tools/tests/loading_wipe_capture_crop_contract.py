@@ -53,6 +53,7 @@ struct {
     bool GetCVarBool(const char *name)const{
         return idStr::Icmp(name,"ui_retained")==0 ? retainedEnabled : reducedMotion;
     }
+    int GetCVarInteger(const char*)const{return 0;}
 } cvarSystemValue,*cvarSystem=&cvarSystemValue;
 void Sys_GenerateEvents(){}
 @PACER@
@@ -74,10 +75,19 @@ struct {float GetFloat()const{return 1.0f;}} com_wipeSeconds;
 struct {void Close(){}} consoleValue,*console=&consoleValue;
 struct idMaterial {} fadeMaterial;
 struct {const idMaterial *FindMaterial(const char*,bool){return &fadeMaterial;}} declManagerValue,*declManager=&declManagerValue;
+// openPR06: Prey wipe-material remap, obscured-loading service and video capture hooks
+const idMaterial *Session_FindCompatibleWipeMaterial(const char *name){return declManager->FindMaterial(name,false);}
+double sessionObscuredLoadingRecheckMsec=0;
+bool sessionObscuredLoadingReported=false;
+void Session_ServiceLoadingSound(){}
+void VideoCapture_BeforePresent(){}
+void VideoCapture_AfterPresent(){}
 struct {int GetReadCount(){return 40;}} fileSystemValue,*fileSystem=&fileSystemValue;
 struct {
     int GetPresentationTime(){return clockMsec;}
     int GetUserCmdTicsForMsecCeil(int msec){return (msec+15)/16;}
+    void Warning(const char*,...){}
+    void Printf(const char*,...){}
 } commonValue,*common=&commonValue;
 struct GUI {
     float shown=0.0f;
@@ -119,6 +129,8 @@ struct idSessionLocal {
     int drawsInsideCrop=0;
     void PublishRetainedLoadingCount(){}
     void PublishRetainedLoadingTip(bool){}
+    void ClearWipe(){}
+    void SetPlayingSoundWorld(){}
     // A client with a screen: a dedicated server skips the capture and the redraws.
     bool IsDedicatedServer() const {return false;}
     void Draw();

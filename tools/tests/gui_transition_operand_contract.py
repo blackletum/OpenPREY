@@ -360,6 +360,7 @@ public:
     void FixupParms(idWindow *) {}
 };
 void Script_Set(idWindow *, idList<idGSWinVar> *) {}
+void Script_Inc(idWindow *, idList<idGSWinVar> *) {}  // openPR06: Prey "inc" command
 void Script_SetLightColor(idWindow *, idList<idGSWinVar> *) {}
 '''
 

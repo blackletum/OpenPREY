@@ -35,7 +35,8 @@ struct idStr { static int Icmp(const char*a,const char*b) {
     while (*a && *b) { int x=(*a>='A'&&*a<='Z')?*a+32:*a; int y=(*b>='A'&&*b<='Z')?*b+32:*b;
         if(x!=y)return x-y; ++a;++b; } return *a-*b;
 } };
-struct idRectangle { float x,y,w,h; };
+struct idRectangle { float x=0,y=0,w=0,h=0; idRectangle()=default; // openPR06: LegacyGuiLayout.h uses the 4-float ctor
+    idRectangle(float ix,float iy,float iw,float ih):x(ix),y(iy),w(iw),h(ih) {} };
 '''
 CHECKS = r'''
 int main() {

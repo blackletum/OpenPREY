@@ -15,8 +15,8 @@ def source(module, mutation=None):
     game = (ROOT / 'src' / module / 'Game_local.cpp').read_text()
     ui = (ROOT / 'src/ui/UserInterface.cpp').read_text()
     precache = body(multiplayer, 'void idMultiplayerGame::Precache(')
-    dictionary = body(game, 'else if ( MATCH( "gui_" ) )')
-    dictionary = dictionary[dictionary.index('{'):]
+    # openPR06: Prey's idGameLocal::CacheDictionaryMedia walks a MatchPrefix( "gui" ) loop.
+    dictionary = body(game[game.index('kv = dict->MatchPrefix( "gui", NULL );'):], 'if ( kv->GetValue().Length() )')
     lookup = body(ui, 'idUserInterface *idUserInterfaceManagerLocal::FindGui(')
     if mutation == 'mp_duplicate':
         precache = precache.replace('true, false, true', 'true')
@@ -35,7 +35,7 @@ def main():
     scratch = ROOT / '.tmp/gui-precache-lifetime'
     scratch.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=scratch) as directory:
-        for module in ('game', 'mpgame'):
+        for module in ('game',):  # openPR06: one unified Prey game library, no src/mpgame
             for mutation in [None] + (['mp_duplicate', 'dictionary_duplicate', 'shared_gameplay'] if args.mutations else []):
                 cpp = Path(directory) / (module + '-' + (mutation or 'production') + '.cpp')
                 exe = cpp.with_suffix('.exe' if os.name == 'nt' else '')

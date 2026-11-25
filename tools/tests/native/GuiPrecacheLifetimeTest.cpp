@@ -37,30 +37,30 @@ struct idUserInterface {
 static idUserInterface* UI_CreateForPath(const char*) { return new idUserInterface; }
 static void openQ4_UpdateInitialization() {}
 // @LOOKUP@
-struct Game { bool isMultiplayer=true; void FindEntityDef(const char*,bool) {} };
+// openPR06: stubs for Prey's idMultiplayerGame::Precache (src/game/MultiplayerGame.cpp).
+#define HUMANHEAD 1
+#define GAME_PLAYERDEFNAME_MP "player_mp"
+#define LAGO_MATERIAL "lagometer"
+struct Game { bool isMultiplayer=true; void FindEntityDef(const char*,bool) {} void FindEntityDefDict(const char*,bool) {} };
 static Game gameLocal;
-struct Decls { void FindSound(const char*,bool) {} void MediaPrint(const char*,...) {} };
+struct Decls { void FindSound(const char*,bool=true) {} void FindMaterial(const char*,bool=true) {} void MediaPrint(const char*,...) {} };
 static Decls decls;
 static auto* declManager = &decls;
-struct idPlayer { static void PrecacheMultiplayerSpawn() {} };
+static const char* obituaryGlyphs[] = {"skull",nullptr};
+static const char* ObituaryMaterial(const char* name) { return name; }
 struct idMultiplayerGame {
-    static constexpr int AS_NUM_SOUNDS=2;
-    static constexpr const char* announcerSoundDefs[2] = {"one","two"};
+    enum { SND_COUNT=2 };
+    static constexpr const char* GlobalSoundStrings[2] = {"one","two"};
     static constexpr const char* MPGuis[4] = {"main.gui","net.gui","hud.gui",nullptr};
     void Precache();
 };
 // @PRECACHE@
+struct GuiValue : std::string { using std::string::string; int Length() const { return int(size()); } };
 struct KeyValue {
-    std::string key,value;
+    std::string key; GuiValue value;
     const char* GetKey() const { return key.c_str(); }
-    const std::string& GetValue() const { return value; }
+    const GuiValue& GetValue() const { return value; }
 };
-#define TIME_THIS_SCOPE(...)
-#define MEM_SCOPED_TAG(...)
-static bool RememberMapMediaPrecache(const char*,const std::string&) { return false; }
-static double OpenQ4_BeginMapMediaPrecacheCall() { return 0; }
-static constexpr int MAP_MEDIA_GUI=0;
-static void OpenQ4_EndMapMediaPrecacheCall(int,double) {}
 static void PrecacheDictionary(const KeyValue* kv) {
     for (int once=0;once<1;++once)
     // @DICTIONARY@

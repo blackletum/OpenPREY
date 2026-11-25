@@ -355,7 +355,8 @@ def test_clustered_decal_executor_is_atomic_and_exact() -> None:
 
     classic = read("src/renderer/draw_common.cpp")
     for token in (
-        "RB_STD_DrawShaderPasses( drawSurfs, processed, RB_DrawSurfIsPreFogMaterialPass )",
+        # openPR06: ordered 2D views pick their own pass filter; world views keep the pre-fog pass
+        "? RB_DrawSurfIsOrdered2DMaterialPass : RB_DrawSurfIsPreFogMaterialPass );",
         "R_ModernGLExecutor_SubmitForwardPlusDecalSurface",
     ):
         require(classic, token, "ordered one-for-one clustered-decal replacement")
@@ -438,16 +439,7 @@ def test_validation_entry_points_include_this_contract() -> None:
     validator = read("tools/validation/openq4_validate.py")
     if validator.count('root / "tools" / "tests" / "renderer_advanced_lighting.py"') != 1:
         raise AssertionError("local validation must include this contract exactly once")
-
-    for workflow_path in (
-        ".github/workflows/commit-validation.yml",
-        ".github/workflows/push-verification.yml",
-    ):
-        workflow = read(workflow_path)
-        if workflow.count("tools/tests/renderer_advanced_lighting.py") != 2:
-            raise AssertionError(
-                f"{workflow_path} must syntax-check and execute this contract exactly once"
-            )
+    # openPR06: no commit/push workflows; CI runs the local validation runner
 
 
 def test_parity_stays_unpromoted_and_follow_ons_have_separate_gates() -> None:

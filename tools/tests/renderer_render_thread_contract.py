@@ -34,7 +34,9 @@ def require_sync(source: str, signature: str, context: str) -> None:
         "void idVertexCache::Alloc(", "void idVertexCache::Free(", "void idVertexCache::Touch(",
         "vertCache_t *idVertexCache::AllocFrameTemp(", "idRenderModel *R_EntityDefDynamicModel(",
         "bool idRenderWorldLocal::ModelTrace(", "bool idRenderWorldLocal::Trace(",
-        "guiPoint_t\tidRenderWorldLocal::GuiTrace(", "void idRenderWorldLocal::RenderScene(",
+        # openPR06: Prey's 4-arg GuiTrace overload (interactiveMask) holds the barrier.
+        "guiPoint_t\tidRenderWorldLocal::GuiTrace( qhandle_t entityHandle, const idVec3 start, const idVec3 end, int interactiveMask ) const {",
+        "void idRenderWorldLocal::RenderScene(",
     }
     expected = "R_RenderThread_SyncFrontEnd(" if signature in producer_entries else SYNC
     if expected not in body:
@@ -128,7 +130,8 @@ def check_world() -> None:
                           ("void idRenderWorldLocal::RemoveDecals(", "PENDING_REMOVE_DECALS")):
         require(function_body(world, signature), f"QueueDefOp( {op}", f"{signature} queues while a frame is in flight")
     for signature in ("bool idRenderWorldLocal::ModelTrace(", "bool idRenderWorldLocal::Trace(",
-                      "guiPoint_t	idRenderWorldLocal::GuiTrace(", "void idRenderWorldLocal::RenderScene("):
+                      "guiPoint_t\tidRenderWorldLocal::GuiTrace( qhandle_t entityHandle, const idVec3 start, const idVec3 end, int interactiveMask ) const {",
+                      "void idRenderWorldLocal::RenderScene("):
         require_sync(world, signature, "traces see what the game last wrote")
     for signature in ("bool idRenderWorldLocal::UpdateEffectDef(", "void idRenderWorldLocal::FreeEffectDef("):
         body = function_body(world, signature)

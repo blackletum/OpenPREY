@@ -127,6 +127,8 @@ struct idSessionLocal {
     // Nor does the multiplayer card, or a loading screen held over a join.
     void UpdateRetainedMultiplayer() {}
     idUserInterface* guiLoadingHold=nullptr;
+    // openPR06: Prey's retained SETTINGS page re-syncs its video preset each frame; never active here.
+    idUserInterface* guiRetainedSettingsPage=nullptr;
     void UpdateRetainedLoadingHold() {}
     void RetainedMultiplayerFrameEvent() {}
     void DispatchCommand(idUserInterface* gui,const char* command) {
@@ -143,6 +145,7 @@ struct UserCommands {
 static bool RetainedUI_IsOpen() { return false; }
 static void RetainedUI_FrameInput() { assert(false); }
 static void ClearMenuControllerRepeatState() {}
+static void Session_SyncPreyOptionsVideoPreset(idUserInterface*) { assert(false); }
 static void PumpControllerMenuNavigation(idSessionLocal*) {}
 static void PumpControllerDetailStick(idSessionLocal*) {}
 static std::vector<idUserInterface*> synchronized;

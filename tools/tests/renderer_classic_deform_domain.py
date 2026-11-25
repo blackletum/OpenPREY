@@ -651,7 +651,7 @@ def validate_controls_diagnostics_and_tooling() -> None:
     modern = read("src/renderer/ModernGLExecutor.cpp")
     benchmark = read("tools/tests/renderer_gameplay_benchmark.py")
     baseline = read("tools/validation/stock_asset_baseline.py")
-    baseline_test = read("tools/tests/stock_asset_baseline.py")
+    # openPR06: tools/tests/stock_asset_baseline.py was deleted (d39359088); its unit contract is not checked.
     matrix = read("tools/tests/renderer_validation_matrix.py")
     registry = read("tools/validation/openq4_validate.py")
 
@@ -693,31 +693,11 @@ def validate_controls_diagnostics_and_tooling() -> None:
             ),
             "stock baseline isolation",
         ),
-        (
-            baseline_test,
-            ('cvar_value(plan.args, "r_rendererSharedDeform") == "0"',),
-            "stock baseline unit contract",
-        ),
     ):
         for token in tokens:
             require(source, token, context)
 
-    require(benchmark, '"sp-mv2-deform":', "controlled deform gameplay scene")
-    deform_profile = braced_body(benchmark, '"deform":', "controlled deform profile")
-    for token in (
-        '"display": ("windowed",)',
-        '("com_fixedTic", "1")',
-        '("g_stopTime", "1")',
-        '("g_stopTime", "0")',
-        '("in_mouse", "0")',
-        '"g_stopTime 1"',
-        '"setviewpos 0 0 256 80 0 0"',
-        '("r_rendererSharedWorldAmbient", "1")',
-        '("r_rendererSharedDeform", "1")',
-        '("r_materialOverride", "shaderDemos/move")',
-        '("r_skipDeforms", "0")',
-    ):
-        require(deform_profile, token, "fixed stock material-deform capture")
+    # openPR06: the sp-mv2-deform scene and "deform" profile are Quake 4 mv2 fixtures; DEFORM_SCENES is empty in Prey.
     require(
         benchmark,
         "parsed.extra_cvars = profile_cvars + parse_extra_cvars(parsed.set_cvar)",
@@ -779,7 +759,7 @@ def validate_controls_diagnostics_and_tooling() -> None:
         raise AssertionError("Foundation and Vulkan safe cases must run the deform self-test")
     if matrix.count("RendererClassicDeformDomain self-test passed") < 2:
         raise AssertionError("Foundation and Vulkan safe cases must check the deform marker")
-    require(matrix, '"id": "sp-mv2-deform"', "manual deform validation case")
+    # openPR06: the sp-mv2-deform manual case is a Quake 4 mv2 map with no Prey counterpart.
     require(matrix, '"profile": "deform"', "deform gameplay harness entry")
     require_count(
         registry,
@@ -788,12 +768,7 @@ def validate_controls_diagnostics_and_tooling() -> None:
         "validation registry",
     )
 
-    for workflow_path in (
-        ".github/workflows/commit-validation.yml",
-        ".github/workflows/push-verification.yml",
-    ):
-        workflow = read(workflow_path)
-        require_count(workflow, TEST_PATH, 2, f"{workflow_path} compile/run registration")
+    # openPR06: commit-validation.yml/push-verification.yml do not exist; the registry check above covers wiring.
 
     require(read("meson.build"), "meson_sources.py", "renderer Meson source discovery")
     require(

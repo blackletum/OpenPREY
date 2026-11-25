@@ -121,7 +121,7 @@ def validate_shadow_effectiveness_image_gate() -> None:
     ) as temp_name:
         temp = Path(temp_name)
         savepath = temp / "save"
-        actual = savepath / "baseoq4" / "screenshots" / "renderer-bench" / "sp_0.tga"
+        actual = savepath / "basepr" / "screenshots" / "renderer-bench" / "sp_0.tga"
         references = temp / "references"
         reference = references / actual.name
         write_rgb_tga(actual, 4, 4, 0)
@@ -160,7 +160,7 @@ def validate_shadow_effectiveness_image_gate() -> None:
         generated_reference = (
             generated_references
             / "shadow-contract"
-            / "baseoq4"
+            / "basepr"
             / "screenshots"
             / "renderer-bench"
             / "sp_0.tga"
@@ -615,170 +615,8 @@ def validate_shared_interaction_shadow_profile_contract() -> None:
         "openq4_renderer_gameplay_shadow_profile_contract",
     )
 
-    interaction_args = gameplay.parse_args(
-        ["--profile", "interaction", "--pacing-only", "--dry-run"]
-    )
-    interaction_specs = gameplay.build_specs(interaction_args)
-    interaction_contract = [
-        (
-            spec.case_id,
-            spec.shadow_preset,
-            spec.interaction_expectation,
-            spec.interaction_shadow_expectation,
-        )
-        for spec in interaction_specs
-    ]
-    expected_interaction_contract = [
-        ("sp-mv2-interaction", "unshadowed", "owned", "none"),
-        ("sp-mv2-interaction", "stencil", "owned", "stencil"),
-        ("sp-mv2-interaction", "mapped", "owned", "mapped"),
-        ("sp-mv2-interaction", "mixed", "owned", "mixed"),
-        (
-            "sp-mv2-interaction",
-            "map-budget-fallback",
-            "fallback",
-            "map-budget-fallback",
-        ),
-    ]
-    if interaction_contract != expected_interaction_contract:
-        raise AssertionError(
-            "Controlled interaction profile must cover unshadowed, stencil, "
-            "mapped, mixed, and atomic map-admission fallback exactly: "
-            f"{interaction_contract!r}"
-        )
-
-    stock_args = gameplay.parse_args(
-        ["--profile", "interaction-shadow-stock", "--pacing-only", "--dry-run"]
-    )
-    if ("g_stopTime", "1") not in stock_args.launch_cvars:
-        raise AssertionError(
-            "Stock interaction-shadow startup must begin from deterministic tic zero"
-        )
-    if ("ui_showGun", "0") not in stock_args.launch_cvars:
-        raise AssertionError(
-            "Stock interaction-shadow captures must exclude unsupported viewmodel interactions"
-        )
-    if ("r_multiSamples", "0") not in stock_args.launch_cvars:
-        raise AssertionError(
-            "Stock interaction-shadow captures must disable multisampled game targets"
-        )
-    direct_target_cvars = {
-        "g_renderFastNoPost": "1",
-        "g_renderFastNoPostDirect": "1",
-        "g_renderCasUpscale": "0",
-        "r_postAA": "0",
-        "r_screenFraction": "100",
-        "r_bloom": "0",
-        "r_motionBlur": "0",
-        "r_ssao": "0",
-        "r_hdrToneMap": "0",
-        "r_hdrDebugView": "0",
-    }
-    stock_extra_cvars = dict(stock_args.extra_cvars)
-    if any(
-        stock_extra_cvars.get(name) != value
-        for name, value in direct_target_cvars.items()
-    ):
-        raise AssertionError(
-            "Stock interaction-shadow captures must make the direct root target deterministic"
-        )
-    if ("g_stopTime", "0") not in stock_args.extra_cvars:
-        raise AssertionError(
-            "Stock interaction-shadow scenes must advance during their settle interval"
-        )
-    if "g_stopTime 1" not in stock_args.exec_commands:
-        raise AssertionError(
-            "Stock interaction-shadow scenes must freeze again before sampling"
-        )
-    stock_specs = gameplay.build_specs(stock_args)
-    stock_contract = [
-        (
-            spec.case_id,
-            spec.shadow_preset,
-            spec.interaction_expectation,
-            spec.interaction_shadow_expectation,
-        )
-        for spec in stock_specs
-    ]
-    expected_stock_contract = [
-        ("shadow-projected-airdefense2", "unshadowed", "owned", "none"),
-        ("shadow-projected-airdefense2", "mapped", "owned", "projected"),
-        ("shadow-point-airdefense2", "unshadowed", "owned", "none"),
-        ("shadow-point-airdefense2", "mapped", "owned", "point"),
-        ("shadow-csm-airdefense1", "unshadowed", "owned", "none"),
-        ("shadow-csm-airdefense1", "csm", "owned", "csm"),
-        ("shadow-character-airdefense2", "unshadowed", "owned", "none"),
-        ("shadow-character-airdefense2", "csm", "owned", "dynamic"),
-        ("shadow-cutout-storage2", "unshadowed", "owned", "none"),
-        ("shadow-cutout-storage2", "csm", "owned", "perforated"),
-        ("shadow-hybrid-storage2", "unshadowed", "owned", "none"),
-        ("shadow-hybrid-storage2", "mapped", "owned", "hybrid"),
-        (
-            "shadow-translucent-medlabs",
-            "translucent",
-            "fallback",
-            "translucent-fallback",
-        ),
-    ]
-    if stock_contract != expected_stock_contract:
-        raise AssertionError(
-            "Stock interaction-shadow profile must cover projected, point, CSM, "
-            "dynamic, perforated, same-light hybrid, and translucent-moment "
-            f"fallback exactly: {stock_contract!r}"
-        )
-
-    for spec in (*interaction_specs, *stock_specs):
-        unshadowed_id = spec.id_for_shadow_preset("unshadowed")
-        if spec.shadow_preset == "unshadowed" and unshadowed_id != spec.id:
-            raise AssertionError(
-                "Unshadowed runs must use their own capture id as the image-difference reference key"
-            )
-        if spec.shadow_preset != "unshadowed" and unshadowed_id == spec.id:
-            raise AssertionError(
-                "Shadowed runs must resolve image-difference evidence through the matching unshadowed capture id"
-            )
-
-    with contextlib.redirect_stderr(io.StringIO()):
-        try:
-            gameplay.parse_args(
-                [
-                    "--profile",
-                    "interaction",
-                    "--pacing-only",
-                    "--require-references",
-                ]
-            )
-        except SystemExit as exc:
-            if exc.code != 2:
-                raise
-        else:
-            raise AssertionError(
-                "--require-references without --reference-dir must fail during argument validation"
-            )
-
-    shadows_off_args = gameplay.parse_args(
-        [
-            "--profile",
-            "interaction",
-            "--pacing-only",
-            "--shadow-presets",
-            "map-budget-fallback",
-            "--set-cvar",
-            "r_shadows=0",
-            "--set-cvar",
-            "r_useShadowMap=0",
-        ]
-    )
-    shadows_off_specs = gameplay.build_specs(shadows_off_args)
-    if any(
-        spec.interaction_expectation != "owned"
-        or spec.interaction_shadow_expectation != "none"
-        for spec in shadows_off_specs
-    ):
-        raise AssertionError(
-            "Shadows-off reference generation must not retain a shadow fallback expectation"
-        )
-
+    # openPR06: the Q4 interaction/interaction-shadow-stock benchmark profiles (mv2, airdefense,
+    # storage2, medlabs) have no Prey scenes; INTERACTION_SCENES and INTERACTION_SHADOW_SCENES are empty.
     matrix = load_test_module(
         "tools/tests/renderer_validation_matrix.py",
         "openq4_renderer_validation_shadow_profile_contract",
@@ -2129,7 +1967,7 @@ def validate_shadow_filtering_contract() -> None:
         ),
         "the rotation is taken from the tile-local texel",
     )
-    gl_projected_source = read("content/baseoq4/pak0/glprogs/shadow_interaction.fs")
+    gl_projected_source = read("content/basepr/pak0/glprogs/shadow_interaction.fs")
     gl_rotation = braced_body(gl_projected_source, "mat2 ShadowOffsetRotation(", "OpenGL projected rotation")
     require(gl_rotation, "floor( tileTexel )", "OpenGL hashes the tile-local texel")
     if "uShadowTexelSize" in gl_rotation:
@@ -2292,7 +2130,7 @@ def validate_shadow_filtering_contract() -> None:
     # not products of the Vulkan SPIR-V header generator. Keep their blocker,
     # filter-tier, and rotation contracts pinned independently so one backend
     # cannot silently drift or compile with a different kernel.
-    gl_projected = read("content/baseoq4/pak0/glprogs/shadow_interaction.fs")
+    gl_projected = read("content/basepr/pak0/glprogs/shadow_interaction.fs")
     gl_blocker_search = braced_body(
         gl_projected,
         "float ProjectedPCSSRadius(",
@@ -2356,7 +2194,7 @@ def validate_shadow_filtering_contract() -> None:
         "OpenGL exact projected filter tiers",
     )
 
-    gl_point = read("content/baseoq4/pak0/glprogs/shadow_point_interaction.fs")
+    gl_point = read("content/basepr/pak0/glprogs/shadow_point_interaction.fs")
     gl_point_samples = braced_body(
         gl_point,
         "float SamplePointShadow()",
@@ -2435,7 +2273,7 @@ def validate_projected_footprint_bias_contract() -> None:
             "Both OpenGL projected receiver uploads must provide the texel depth step"
         )
 
-    gl = read("content/baseoq4/pak0/glprogs/shadow_interaction.fs")
+    gl = read("content/basepr/pak0/glprogs/shadow_interaction.fs")
     require(gl, "uniform float uShadowTexelDepthStep[4];", "OpenGL projected receiver")
     gl_footprint = braced_body(gl, "float ShadowFootprintBias(", "OpenGL footprint bias")
     require_order(
@@ -2892,7 +2730,7 @@ def validate_point_receiver_world_bias_contract() -> None:
     )
 
     gl_point_vertex = read(
-        "content/baseoq4/pak0/glprogs/shadow_point_interaction.vs"
+        "content/basepr/pak0/glprogs/shadow_point_interaction.vs"
     )
     require_order(
         gl_point_vertex,
@@ -3059,7 +2897,7 @@ def validate_shadow_contact_and_gl_robustness_contract() -> None:
         common_init,
         (
             "renderSystem->Init();",
-            '"exec " CONFIG_FILE "\\n"',
+            "openPR06_ExecConfigFromSavePath( CONFIG_FILE )",  # openPR06: exact-name savepath config exec
             "cmdSystem->ExecuteCommandBuffer();",
             "StartupVariable( NULL, false );",
             "InitRenderSystem();",
@@ -7810,7 +7648,8 @@ def validate_map_investigation_repairs() -> None:
     interaction = read("src/renderer/Interaction.cpp")
     material = read("src/renderer/Material.cpp")
     for directive in ('else if ( !token.Icmp( "noShadows" ) )',
-                      'else if ( !token.Icmp( "DECAL_MACRO" ) )'):
+                      # openPR06: Prey groups its decal/scorch/overlay macros in one branch.
+                      'else if ( !token.Icmp( "DECAL_MACRO" ) || !token.Icmp( "DECAL_ALPHATEST_MACRO" ) ||'):
         policy = braced_body(material, directive, "authored shadow opt-out")
         require(policy, "MF_NOSHADOWS | MF_NOSHADOWS_EXPLICIT", "authored shadow opt-out provenance")
     stencil_policy = braced_body(interaction, "static bool R_TranslucentStencilCasterEligible(",
@@ -8321,17 +8160,12 @@ def validate_point_cache_parity_and_receiver_cost_contract() -> None:
         "if ( !material->TestMaterialFlag( MF_NOSELFSHADOW ) ) { return false; }",
         "a material without noSelfShadow never takes its ownership",
     )
-    require_compact(
-        read("src/game/gamesys/SysCvar.cpp"),
-        """return cvarSystem->GetCVarBool( "r_useShadowMap" )
-        && cvarSystem->GetCVarBool( "r_shadowMapPointLights" );""",
-        "corpse shadows need every light class mapped",
-    )
+    # openPR06: the corpse-shadow mapped-light gate is Quake 4 game code (SysCvar.cpp); Prey has none.
 
     # Receivers: no shadow work for unlit fragments, a balanced five-tap ring,
     # and the default nine taps as one pass over a four-by-four texel block.
-    gl_point = read("content/baseoq4/pak0/glprogs/shadow_point_interaction.fs")
-    gl_projected = read("content/baseoq4/pak0/glprogs/shadow_interaction.fs")
+    gl_point = read("content/basepr/pak0/glprogs/shadow_point_interaction.fs")
+    gl_projected = read("content/basepr/pak0/glprogs/shadow_interaction.fs")
     vk_point = read("src/renderer/Vulkan/shaders/interaction_shadow_point.frag")
     vk_projected = read("src/renderer/Vulkan/shaders/interaction_shadow.frag")
     require_order(
@@ -8383,7 +8217,7 @@ def validate_point_cache_parity_and_receiver_cost_contract() -> None:
             f"{context} receiver balanced five-tap ring",
         )
     require(
-        read("content/baseoq4/pak0/glprogs/shadow_point_caster.fs"),
+        read("content/basepr/pak0/glprogs/shadow_point_caster.fs"),
         "clamp( depth, 0.0, 65024.0 / 65025.0 )",
         "packed point depth cannot wrap to the nearest value at the far envelope",
     )
@@ -9237,21 +9071,12 @@ def validate_static_cutout_caster_contract() -> None:
 
 def validate_ci_registration() -> None:
     validator = read("tools/validation/openq4_validate.py")
-    commit = read(".github/workflows/commit-validation.yml")
-    push = read(".github/workflows/push-verification.yml")
 
     if validator.count("renderer_vulkan_shadow_compatibility.py") != 1:
         raise AssertionError(
             "Local validation runner must register the Vulkan shadow compatibility test exactly once"
         )
-
-    for workflow, context in (
-        (commit, "commit validation workflow"),
-        (push, "push verification workflow"),
-    ):
-        if workflow.count(TEST_PATH) != 2:
-            raise AssertionError(f"{context} must compile and directly run {TEST_PATH}")
-        require(workflow, f"python {TEST_PATH}", context)
+    # openPR06: openQ4's commit/push workflows do not exist; the local runner registration covers wiring.
 
 
 def validate_static_signature_view_independence_contract() -> None:
@@ -9412,10 +9237,13 @@ def validate_receiver_stock_lighting_parity_contract() -> None:
     turns, so every such edge was lit harder with shadow maps on than with
     stencil shadows or with none.
     """
-    classic = read("content/baseoq4/pak0/glprogs/material_interaction.fs")
+    # openPR06: every path normalizes the stock normal only under retail's
+    # r_normalizebumpmap (uStockSpecularParams.w / StockSpecularFlags() & 2).
+    classic = read("content/basepr/pak0/glprogs/material_interaction.fs")
     require_order(
         braced_body(classic, "vec3 DecodeStockLocalNormal(", "classic stock normal"),
-        ("return vec3( bumpSample.a, bumpSample.g, bumpSample.b ) * 2.0 - 1.0;",),
+        ("vec3 localNormal = vec3( bumpSample.a, bumpSample.g, bumpSample.b ) * 2.0 - 1.0;",
+         "return ( uStockSpecularParams.w > 0.5 ) ? SafeNormalize( localNormal ) : localNormal;"),
         "the classic interaction uses the stock normal as stored",
     )
     require(
@@ -9424,12 +9252,13 @@ def validate_receiver_stock_lighting_parity_contract() -> None:
         "the classic stock specular term carries its doubling",
     )
     for name in ("shadow_interaction.fs", "shadow_point_interaction.fs"):
-        shader = read(f"content/baseoq4/pak0/glprogs/{name}")
+        shader = read(f"content/basepr/pak0/glprogs/{name}")
         require_order(
             braced_body(shader, "vec3 DecodeLocalNormal(", f"{name} normal decode"),
             (
                 "if ( uMaterialEnhanced < 0.5 ) {",
-                "return vec3( bumpSample.a, bumpSample.g, bumpSample.b ) * 2.0 - 1.0;",
+                "vec3 stockNormal = vec3( bumpSample.a, bumpSample.g, bumpSample.b ) * 2.0 - 1.0;",
+                "return ( uStockSpecularParams.w > 0.5 ) ? SafeNormalize( stockNormal ) : stockNormal;",
                 "localNormalXY *= max( uMaterialNormalScale, 0.0 );",
             ),
             f"{name}: the stock normal as stored, the enhanced one rebuilt",
@@ -9443,15 +9272,20 @@ def validate_receiver_stock_lighting_parity_contract() -> None:
         )
         require(
             shader,
-            "return specularSample * uSpecularColor.rgb * CelSpecularTerm( LegacySpecularTerm( halfAngle, localNormal ) );",
+            "return specularSample * uSpecularColor.rgb * CelSpecularTerm( LegacySpecularTerm( halfAngle, lightDir, viewDir, localNormal ) );",
             f"{name}: cel banding steps the same specular value as the classic interaction",
         )
+    # openPR06: the three Vulkan interactions share stock_specular.glsl's decode.
+    require_order(
+        braced_body(read("src/renderer/Vulkan/shaders/stock_specular.glsl"), "vec3 StockLocalNormal(", "Vulkan stock normal"),
+        ("vec3 localNormal = vec3(bumpSample.a, bumpSample.g, bumpSample.b) * 2.0 - 1.0;",
+         "return (StockSpecularFlags() & 2) != 0 ? SafeNormalize(localNormal) : localNormal;"),
+        "Vulkan: the stock normal as stored",
+    )
     for name in ("interaction.frag", "interaction_shadow.frag", "interaction_shadow_point.frag"):
-        require(
-            read(f"src/renderer/Vulkan/shaders/{name}"),
-            ": vec3(bumpSample.a, bumpSample.g, bumpSample.b) * 2.0 - 1.0;",
-            f"{name}: the stock normal as stored",
-        )
+        source = read(f"src/renderer/Vulkan/shaders/{name}")
+        require(source, '#include "stock_specular.glsl"', f"{name}: shared stock decode")
+        require(source, ": StockLocalNormal(bumpSample);", f"{name}: the stock normal as stored")
 
 
 def validate_shared_static_cube_contract() -> None:
@@ -10315,9 +10149,7 @@ def validate_prelight_caster_contract() -> None:
         "rendererShadowProjectedDiagnosticSelfTest runs the prelight caster self-test",
     )
 
-    scan = read("tools/tests/renderer_shadow_stencil_parity_scan.py")
-    for token in ('"regenerateWorld"', '"--spawn"', '"--view"', '"distant", "nodynamic", "projected", "parallel"'):
-        require(scan, token, "the parity scan rebuilds interactions per picture and reaches every light class")
+    # openPR06: the Q4-map stencil parity scan was not taken in the a3816c872 upstream merge.
     audit = read("docs/dev/shadowmapping-audit-2026-11-09.md")
     for token in ("### What the stock volumes hold", "`r_shadowMapPrelightCasters`",
                   "### A `noSelfShadow` receiver behind `noSelfShadow` world geometry"):

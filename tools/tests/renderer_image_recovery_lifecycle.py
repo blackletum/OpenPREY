@@ -32,6 +32,7 @@ static void R_ShutdownTriSurfData(){ShutdownBoundary("tris");}
 static void RB_ShutdownDebugTools(){ShutdownBoundary("debug");}
 static void ProcessPendingRenderTextureDeletes(){ShutdownBoundary("pending");}
 static void R_ShutdownStereoGuiShare(){} // VR-04: frees the stereo GUI slot models, not a device boundary
+static void R_ShutdownShaderLevelMaterials(){} // openPR06: drops Prey's shaderLevel material pointers, not a device boundary
 struct GuiModel{};
 class idRenderSystemLocal{
 public:

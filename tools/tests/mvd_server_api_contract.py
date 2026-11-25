@@ -88,12 +88,8 @@ def main() -> None:
     clear_end = mvd_cpp.index("idMultiViewDemo::Init", clear_start)
     if "recordingResult" in mvd_cpp[clear_start:clear_end]:
         raise AssertionError("ordinary MVD Clear erased the durable terminal result")
-    require(
-        game_api_h,
-        "// 42: durable server MVD publication results for competitive match evidence",
-        "append-only MVD result ABI history",
-    )
-    require(game_api_h, "GAME_API_VERSION\t\t= 63", "current game-module ABI version")
+    # openPR06: Prey's game API is v7 with no Quake 4 ABI history comments; the 42/63 pins do not apply.
+    require(game_api_h, "GAME_API_VERSION\t\t= 7", "current game-module ABI version")
 
     forwarding = (
         "multiViewDemo.StartNamedRecording( name )",

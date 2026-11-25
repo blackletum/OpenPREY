@@ -40,6 +40,11 @@ def main():
     # Its new provider-string query is deliberately unused by the original
     # suite; sound_recovery.py qualifies the actual capture/enumeration path.
     generated=generated.replace('extern "C" {', 'extern "C" {\nconst ALchar* AL_APIENTRY alGetString(ALenum) noexcept { Fake::Tick(); return "unused-counted-provider"; }',1)
+    # openPR06: Render's subtitle, load-music, capture and volume-compatibility steps and the
+    # hardware loopback flag sit outside the settings transaction; give them inert doubles.
+    for old,new in [('bool devicePauseRequested=false;','bool devicePauseRequested=false,loopbackOpen=false;'),
+                    ('void Render(); void Restart(){++restarts;} };','void Render(); void Restart(){++restarts;}\n\tvoid CollectActiveSubtitles(){} void PruneExpiredSubtitles(){} void PresentSubtitles(){} void ClearSubtitleRuntimeQueue(){}\n\tvoid MixCapture(bool){} int RealSoundTime()const{return soundTime;} float LoadingMusicGain()const{return 1.0f;} };\nidCVar g_subtitles;static void SyncVolumeCompatibilityCVars(){}static bool Sound_CaptureActive(){return false;}\nstatic bool SoundLoadingMusic_IsActive(){return false;}static void SoundLoadingMusic_SetGain(float){}')]:
+        assert generated.count(old)==1,old;generated=generated.replace(old,new)
     recovery_source=ROOT/'src/sound/SoundRecovery.cpp'
     working=scratch/'test.cpp';working.write_text(generated)
     # Mutations that restore a borrowed public POD parameter must also change

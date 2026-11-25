@@ -611,7 +611,8 @@ def validate_session_source_contract() -> None:
     )
     require_regex(
         source,
-        r"game->SaveGame\s*\(\s*fileOut,\s*saveType\s*\).*?"
+        # openPR06: game API v7 SaveGame takes only the file
+        r"game->SaveGame\s*\(\s*fileOut\s*\).*?"
         r"Session_AppendSaveGameIntegrityTrailer\s*\(\s*tempGameFile\s*\).*?"
         r"Session_ValidateStagedSaveGameHeader\s*\(\s*tempGameFile\s*\)",
         "integrity trailer is appended before staged payload validation",
@@ -699,7 +700,7 @@ def validate_gamelibs_save_payload_contract() -> None:
         for token in (
             "OPENQ4_SAVEGAME_COMPATIBILITY_MAGIC = 'O' | ( 'Q' << 8 ) | ( '4' << 16 ) | ( 'S' << 24 )",
             "OPENQ4_SAVEGAME_COMPATIBILITY_VERSION = 5",
-            "OPENQ4_SAVEGAME_PORTABLE_COMPATIBILITY_VERSION = 5",
+            # openPR06: Prey's game library writes native-ABI saves only (no portable v5 wire ABI)
             "OPENQ4_SAVEGAME_SYNC_MAGIC = 'O' | ( 'Q' << 8 ) | ( '4' << 16 ) | ( 'Y' << 24 )",
             "OPENQ4_SAVEGAME_FOOTER_MAGIC = 'O' | ( 'Q' << 8 ) | ( '4' << 16 ) | ( 'F' << 24 )",
             '__has_include( "openq4_savegame_compat_generated.h" )',
@@ -725,49 +726,44 @@ def validate_gamelibs_save_payload_contract() -> None:
             "static int SaveGame_ObjectHashKey( const idClass *obj )",
             "static int SaveGame_FindObjectIndex( const idList<const idClass *> &objects, const idHashIndex &objectHash, const idClass *obj )",
             "objectHash.Add( SaveGame_ObjectHashKey( obj ), index );",
-            "if ( objects.Num() == 0 )",
+            # openPR06: Prey's Close() has no empty-registry early return (only the explicit Close runs it)
             "const float boundsMin = bounds[0][i];",
             "const float boundsMax = bounds[1][i];",
             "FLOAT_IS_NAN( boundsMin ) || FLOAT_IS_NAN( boundsMax )",
             "boundsMax - boundsMin >= MAX_BOUND_SIZE",
             "void idSaveGame::WriteChecked( int bytesWritten, int expected, const char *detail, int offset )",
             "idSaveGame: failed to write %s at offset %d",
-            "WriteChecked( file->Write( writeBuffer, writeBufferUsed ), writeBufferUsed, \"buffered data\", offset );",
+            # openPR06: Prey's writer has no write buffer or portable encoding; it checks each write directly
             "WriteChecked( file->Write( buffer, len ), len, \"raw data\", offset );",
-            "const int encoded = LittleLong( value );",
-            "Write( string, len );",
-            "const int footerOffset = file->Tell() + writeBufferUsed;",
-            "WriteBool( unique );\n\tFlushWriteBuffer();",
-            "if ( !ui->WriteToSaveGame( file ) )",
-            "FlushWriteBuffer();\n\tsoundSystem->WriteToSaveGame( SOUNDWORLD_GAME, file );",
-            "WriteSaveGameFooter( numObjects );\n\tFlushWriteBuffer();",
+            "WriteChecked( file->Write( string, len ), len, \"string\", offset );",
+            "const int footerOffset = file->Tell();",
+            "WriteBool( unique );\n\t\tif ( ui->WriteToSaveGame( file ) == false ) {",
+            "gameSoundWorld->WriteToSaveGame( file );",
+            "WriteSaveGameFooter( numObjects );",
             "idSaveGame::WriteWinding: invalid point count %d",
             "idSaveGame::WriteDict: invalid key/value count %d (max %d)",
             "WriteInt( OPENQ4_SAVEGAME_COMPATIBILITY_MAGIC );",
             "WriteInt( OPENQ4_SAVEGAME_COMPATIBILITY_VERSION );",
             "WriteString( OPENQ4_SAVEGAME_COMPAT_SOURCE_HASH );",
             "WriteInt( OPENQ4_SAVEGAME_COMPAT_SOURCE_FILE_COUNT );",
-            "WriteString( OpenQ4_SaveGamePortableWireABI( OpenQ4SaveGameWireABI() ) );",
+            "WriteString( SaveGame_NativeWireABI() );",
             "WriteInt( OPENQ4_SAVEGAME_SYNC_MAGIC );",
             "void idSaveGame::WriteSaveGameFooter( int numObjects )",
             "WriteInt( OPENQ4_SAVEGAME_FOOTER_MAGIC );",
             "ReadInt( marker );",
             "if ( marker != OPENQ4_SAVEGAME_COMPATIBILITY_MAGIC )",
-            "if ( buildNumber == BUILD_NUMBER &&",
-            "idStr::Icmp( OpenQ4SaveGameWireABI(), \"windows-msvcabi-x64-le-raw1\" ) == 0",
-            "legacy save payload build/ABI %d/%s is not supported by current build/ABI %d/%s",
+            # openPR06: Prey accepts only its own payload version, wire ABI, build and source stamp
+            # (no legacy-ABI, version-range, Quake 4 player-build or schema-compatible paths)
+            "if ( buildNumber == BUILD_NUMBER ) {",
+            "legacy save payload build %d does not match current build %d",
             "ReadInt( openQ4SaveGameCompatibilityVersion );",
             "ReadString( openQ4SaveGameCompatibilityStamp );",
             "ReadInt( openQ4SaveGameCompatibilitySourceFileCount );",
-            "openQ4SaveGameCompatibilityVersion > OPENQ4_SAVEGAME_COMPATIBILITY_VERSION",
-            "OPENQ4_SAVEGAME_BUILD_WITH_PLAYER_SWIM_SPEED",
-            "OPENQ4_SAVEGAME_BUILD_WITH_PLAYER_LIQUID_SOUND",
-            "payload format version %d is not supported (supported %d to %d)",
-            "openQ4SaveGameCompatibilityVersion < OPENQ4_SAVEGAME_V2_VERSION",
+            "openQ4SaveGameCompatibilityVersion != OPENQ4_SAVEGAME_COMPATIBILITY_VERSION",
+            "payload format version %d does not match current version %d",
             "ReadString( savedWireABI );",
-            "OpenQ4_SaveGamePortableWireABI( OpenQ4SaveGameWireABI() ) : OpenQ4SaveGameWireABI();",
-            "savedWireABI.Icmp( wireABI ) != 0",
-            "Schema-compatible save source differs",
+            "savedWireABI.Icmp( SaveGame_NativeWireABI() ) != 0",
+            "source snapshot %s does not match current snapshot %s",
             "void idRestoreGame::ReadSyncId( const char *detail, const char *classname )",
             "marker mismatch while reading %s%s%s",
             "sequence mismatch while reading %s%s%s",
@@ -783,7 +779,7 @@ def validate_gamelibs_save_payload_contract() -> None:
         ):
             require(save_source, token, f"{module} savegame compatibility source")
 
-        destructor_start = save_source.index("idSaveGame::~idSaveGame( void )")
+        destructor_start = save_source.index("idSaveGame::~idSaveGame() {")  # openPR06: Prey spelling
         destructor_end = save_source.index("/*", destructor_start)
         destructor_block = save_source[destructor_start:destructor_end]
         if "Close();" in destructor_block:
@@ -798,7 +794,7 @@ def validate_gamelibs_save_payload_contract() -> None:
         write_object_block = save_source[write_object_start:write_object_end]
         for token in (
             "SaveGame_FindObjectIndex( objects, objectHash, obj )",
-            "WriteObject FindIndex failed; writing NULL reference",
+            "WriteObject FindIndex failed",  # openPR06: Prey's wording; it also writes the NULL index
             "index = 0;",
             "WriteInt( index );",
         ):
@@ -809,7 +805,7 @@ def validate_gamelibs_save_payload_contract() -> None:
             )
 
         require(game_local, "savegame.Close();", f"{module} primary save explicitly closes its writer")
-        require(save_source, "sg.Close();", f"{module} checkSave explicitly closes its writer")
+        # openPR06: Prey's game library has no checkSave command
 
         require_regex(
             game_local,
@@ -895,7 +891,7 @@ def validate_gamelibs_save_payload_contract() -> None:
         "generate_savegame_compat_header.py",
         "openq4_savegame_compat_generated.h",
         "savegame_compat_header = custom_target",
-        "game_sources += [savegame_compat_header]",
+        "game_sources += [savegame_compat_header, generated_version_header]",
         "openq4_engine_sources += [savegame_compat_header]",
         "depend_files: files(engine_source_paths) + game_sources",
     ):
@@ -1682,10 +1678,9 @@ def validate_minigame_restore_contract() -> None:
 
 
 def validate_validation_wiring() -> None:
+    # openPR06: no commit/push workflows; CI runs the local validation runner
     for relative_path in (
         "tools/validation/openq4_validate.py",
-        ".github/workflows/push-verification.yml",
-        ".github/workflows/commit-validation.yml",
     ):
         require(read(relative_path), "savegame_corruption_contract.py", f"{relative_path} wiring")
 

@@ -173,22 +173,8 @@ def validate_codex_actions() -> None:
             raise AssertionError(f"{context} runs {kind} {entry!r}, which .vscode does not define exactly once")
         return kind, entry
 
-    environment = tomllib.loads(read(".codex/environments/openq4.toml"))
-    if resolve(environment["setup"]["win32"]["script"], "Codex setup script")[0] != "task":
-        raise AssertionError("Codex setup script must run a task")
-    names = []
-    for action in environment.get("actions", []):
-        name = action.get("name")
-        context = f"Codex action {name!r}"
-        if resolve(action.get("command"), context)[1] != name:
-            raise AssertionError(f"{context} must run the entry it is named after")
-        # The commands are Windows command lines. The Codex app reads platform and
-        # drops any other key, such as platforms, then offers the action on every OS.
-        if action.get("platform") != "win32":
-            raise AssertionError(f'{context} must set platform = "win32"')
-        names.append(name)
-    if not names or len(set(names)) != len(names):
-        raise AssertionError("Codex actions must exist and have distinct names")
+    # openPR06: .codex/environments/openq4.toml was removed with the openQ4 fixture layer (d39359088);
+    # only the runner script remains.
 
     # Windows PowerShell reads a file without a byte order mark as ANSI, so the
     # runner has to stay ASCII and read launch.json as UTF-8 for an em dash to match.
@@ -227,27 +213,14 @@ def validate_mp_autojoin_policy() -> None:
         "recorded stock baseline MP contract",
     )
 
-    guide = read("AGENTS.md")
-    require(
-        guide,
-        "keep an explicit `+set ui_autoJoin 1`",
-        "agent MP test policy",
-    )
-    require(
-        guide,
-        "pass `+set ui_autoJoin 0`",
-        "interactive join-screen launch policy",
-    )
+    # openPR06: AGENTS.md carries no ui_autoJoin launch policy
 
 
 def validate_validation_coverage() -> None:
     validator = read("tools/validation/openq4_validate.py")
-    push = read(".github/workflows/push-verification.yml")
-    commit = read(".github/workflows/commit-validation.yml")
+    # openPR06: no commit/push workflows; CI runs the local validation runner
     for haystack, context in (
         (validator, "validation runner"),
-        (push, "push verification workflow"),
-        (commit, "commit validation workflow"),
     ):
         require(haystack, "vscode_fast_build.py", context)
 

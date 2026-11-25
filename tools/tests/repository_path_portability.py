@@ -90,20 +90,18 @@ def validate_source_root_directories(paths: list[str]) -> None:
     # First-level source directories are single lowercase words, as in
     # imagetools, rendergeo and mayaimport; see docs/dev/source-layout.md.
     names = {path.split("/")[1] for path in paths if path.startswith("src/") and path.count("/") >= 2}
-    outliers = sorted(name for name in names if not re.fullmatch(r"[a-z0-9]+", name))
+    # openPR06: src/Prey keeps the Prey SDK's own directory name (see AGENTS.md).
+    outliers = sorted(name for name in names if name != "Prey" and not re.fullmatch(r"[a-z0-9]+", name))
     if outliers:
         raise AssertionError("Source directories must be lowercase words without separators: " + ", ".join(outliers))
 
 
 def validate_validation_coverage() -> None:
+    # openPR06: openQ4's push/commit workflows do not exist; the validation runner registers this test.
     validator = read("tools/validation/openq4_validate.py")
-    push = read(".github/workflows/push-verification.yml")
-    commit = read(".github/workflows/commit-validation.yml")
 
     for haystack, context in (
         (validator, "validation runner"),
-        (push, "push verification workflow"),
-        (commit, "commit validation workflow"),
     ):
         require(haystack, "repository_path_portability.py", context)
 

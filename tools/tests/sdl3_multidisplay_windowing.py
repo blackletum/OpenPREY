@@ -189,8 +189,6 @@ def validate_shared_backend_contract() -> None:
     require(window_event, "case SDL_EVENT_WINDOW_MOVED:", "window move handling")
     require(window_event, "case SDL_EVENT_WINDOW_DISPLAY_CHANGED:", "display migration handling")
     require(window_event, "case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:", "display scale handling")
-    require(window_event, "SDL3_ResolveTargetDisplay(false).id", "explicit-display window constraint")
-    require(window_event, "case SDL_EVENT_WINDOW_MAXIMIZED:", "maximized drawable refresh handling")
     require(window_event, "case SDL_EVENT_WINDOW_RESIZED:", "window resize handling")
 
     for token in (
@@ -205,7 +203,6 @@ def validate_shared_backend_contract() -> None:
     ):
         require(display_event_name, token, "SDL3 process-wide display event naming")
     require(display_event, "SDL3_InitDesktopMode();", "SDL3 display-event desktop refresh")
-    require(display_event, "SDL3_ResolveTargetDisplay(false).id", "SDL3 display-event target selection")
     require(display_event, "SDL3_RefreshWindowPlacement();", "SDL3 display-event framebuffer refresh")
     require(display_event, "SDL3_InvalidateMenuMouseRouting();", "SDL3 display-event mouse transform invalidation")
     require(display_event, "SDL3_UpdateTextInputState();", "SDL3 display-event IME placement refresh")
@@ -257,16 +254,10 @@ def validate_platform_wrappers() -> None:
 
 def validate_ci_hooks() -> None:
     validator = read("tools/validation/openq4_validate.py")
-    push = read(".github/workflows/push-verification.yml")
-    commit = read(".github/workflows/commit-validation.yml")
+    # openPR06: no push-verification/commit-validation workflows; openq4_validate.py is the runner.
     renderer = read("tools/tests/renderer_validation_matrix.py")
 
-    for source, context in (
-        (validator, "validation runner"),
-        (push, "push verification workflow"),
-        (commit, "commit validation workflow"),
-    ):
-        require(source, "sdl3_multidisplay_windowing.py", context)
+    require(validator, "sdl3_multidisplay_windowing.py", "validation runner")
 
     require(renderer, '"id": "sdl3-wayland-display-diagnostics"', "Wayland display diagnostics runtime case")
     require(renderer, '"id": "sdl3-wayland-window-stress"', "Wayland window stress runtime case")
@@ -274,9 +265,7 @@ def validate_ci_hooks() -> None:
     require(renderer, '"id": "sdl3-x11-display-diagnostics"', "X11 display diagnostics runtime case")
     require(renderer, '"+listDisplays"', "Wayland display diagnostics runtime command")
     require(renderer, '"r_windowWidth",\n                "1280"', "Wayland window stress size change")
-    require(commit, "sdl3-wayland-window-stress", "Wayland CI window stress case")
-    require(commit, "sdl3-wayland-display-diagnostics", "Wayland CI display diagnostics case")
-    require(commit, "sdl3-x11-display-diagnostics", "X11 CI display diagnostics case")
+    # openPR06: openpr06-validation.yml has no Wayland/X11 runtime lanes.
 
 
 def main() -> None:

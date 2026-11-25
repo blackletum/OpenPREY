@@ -102,6 +102,8 @@ struct idWindow {
  const char* GetName()const{return name.c_str();}Gui* GetGui(){return gui;}void DisableRegister(const char*){++disabled;}void AddUpdateVar(idWinVar*){}void CalcRects(int,int){}
  drawWin_t* FindChildByName(const char* n){auto i=namedWindows.find(n);return i==namedWindows.end()?nullptr:&i->second;}
  idWinVar* GetWinVarByName(const char*,bool=false,drawWin_t**=nullptr);
+ // openPR06: GetWinVarByName falls back to Prey's retail GUI variable defaults
+ idWinVar* CreateRetailGuiVar(const char*);void AddDefinedVar(idWinVar* v){if(std::find(definedVars.begin(),definedVars.end(),v)==definedVars.end())definedVars.Append(v);}
  bool ParseRegEntry(const char*,idParser*);
  int ExpressionConstant(float);int ExpressionTemporary();wexpOp_t* ExpressionOp();int EmitOp(intptr_t,intptr_t,wexpOpType_t,wexpOp_t**=nullptr);
  intptr_t ParseEmitOp(idParser*,intptr_t,wexpOpType_t,int,wexpOp_t**=nullptr);intptr_t ParseTerm(idParser*,idWinVar*=nullptr,intptr_t=0);intptr_t ParseExpressionPriority(idParser*,int,idWinVar*=nullptr,intptr_t=0);intptr_t ParseExpression(idParser*,idWinVar*=nullptr,intptr_t=0);
@@ -143,7 +145,7 @@ static void UI_LegacyObservationOp(idWindow*,unsigned,int,int,int,intptr_t,intpt
 def build_source():
     w=(ROOT/'src/ui/Window.cpp').read_text();h=(ROOT/'src/ui/Window.h').read_text();decl=(ROOT/'src/framework/DeclManager.cpp').read_text();winvar=(ROOT/'src/ui/Winvar.cpp').read_text();wh=(ROOT/'src/ui/Winvar.h').read_text();float_class=wh[wh.index('class idWinFloat :'):wh.index('class idWinRectangle :')]
     float_methods='\n'.join(function(float_class,s) for s in ['virtual void Init(', 'virtual void Set(', 'virtual float x('])
-    signatures=['idWinVar *idWindow::GetWinVarByName(', 'bool idWindow::ParseRegEntry(', 'int idWindow::ExpressionConstant(', 'int idWindow::ExpressionTemporary(', 'wexpOp_t *idWindow::ExpressionOp(', 'int idWindow::EmitOp(', 'intptr_t idWindow::ParseEmitOp(', 'intptr_t idWindow::ParseTerm(', 'intptr_t idWindow::ParseExpressionPriority(', 'intptr_t idWindow::ParseExpression(', 'void idWindow::FixupParms(', 'void idWindow::EvaluateRegisters(']
+    signatures=['idWinVar *idWindow::GetWinVarByName(', 'bool idWindow::ParseRegEntry(', 'int idWindow::ExpressionConstant(', 'int idWindow::ExpressionTemporary(', 'wexpOp_t *idWindow::ExpressionOp(', 'int idWindow::EmitOp(', 'intptr_t idWindow::ParseEmitOp(', 'intptr_t idWindow::ParseTerm(', 'intptr_t idWindow::ParseExpressionPriority(', 'intptr_t idWindow::ParseExpression(', 'void idWindow::FixupParms(', 'void idWindow::EvaluateRegisters(', 'idWinVar *idWindow::CreateRetailGuiVar(']
     bodies=[function(w,s) for s in signatures]
     fields=sorted(set(re.findall(r'retVar = &(\w+);',bodies[0])))
     enums=h[h.index('typedef enum {',h.index('DEFAULT_TEXTSCALE')):h.index('} wexpOp_t;')+len('} wexpOp_t;')]

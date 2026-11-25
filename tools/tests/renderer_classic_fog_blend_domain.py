@@ -263,15 +263,11 @@ def validate_controls_diagnostics_and_build() -> None:
 def validate_tooling_registration() -> None:
     benchmark = read("tools/tests/renderer_gameplay_benchmark.py")
     baseline = read("tools/validation/stock_asset_baseline.py")
-    baseline_test = read("tools/tests/stock_asset_baseline.py")
+    # openPR06: tools/tests/stock_asset_baseline.py was removed with the openQ4 fixtures (d39359088).
     matrix = read("tools/tests/renderer_validation_matrix.py")
     registry = read("tools/validation/openq4_validate.py")
+    # openPR06: the Q4 sp-mv2-fog-blend scene/profile has no Prey counterpart (FOG_BLEND_SCENES is empty).
     for token in (
-        '"fog-blend"',
-        '"sp-mv2-fog-blend"',
-        '"r_rendererSharedWorldFogBlend", "1"',
-        "lights/fog_generic",
-        "lights/fog_ambient",
         "classicFogBlendDomain requested=",
         "classicFogBlendDomain backend=",
         '"owned-skip-blend"',
@@ -282,7 +278,6 @@ def validate_tooling_registration() -> None:
     for source, context in (
         (benchmark, "benchmark default isolation"),
         (baseline, "stock baseline default isolation"),
-        (baseline_test, "stock baseline unit contract"),
     ):
         require(source, "r_rendererSharedWorldFogBlend", context)
     for token in (
@@ -296,16 +291,7 @@ def validate_tooling_registration() -> None:
         '"renderer_classic_fog_blend_domain.py"',
         "validation registry",
     )
-
-    for workflow_path in (
-        ".github/workflows/commit-validation.yml",
-        ".github/workflows/push-verification.yml",
-    ):
-        workflow = read(workflow_path)
-        if workflow.count(TEST_PATH) != 2:
-            raise AssertionError(
-                f"Expected compile and execution registration in {workflow_path}"
-            )
+    # openPR06: openQ4's commit/push workflows do not exist; the validation registry covers wiring.
 
 
 def main() -> int:

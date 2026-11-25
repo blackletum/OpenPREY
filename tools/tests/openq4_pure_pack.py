@@ -466,7 +466,7 @@ def validate_filesystem_pure_pack_contract() -> None:
     require_order(
         get_mod_info,
         "!idGameDirPolicy::IsPortableSegment( modDir )",
-        "const char *search[ 3 ]",
+        "const char *search[ 4 ]",  # openPR06: adds the fs_devpath root
         "mod directory validation before manifest roots",
     )
     require(
@@ -767,7 +767,7 @@ def validate_filesystem_pure_pack_contract() -> None:
     )
     require(
         licensee_header,
-        '#define PROJECT_REPO\t\t\t\t\t"https://github.com/themuffinator/openQ4"',
+        '#define PROJECT_REPO\t\t\t\t\t"https://github.com/themuffinator/openPR06"',
         "HTTPS openQ4 project destination",
     )
     require(
@@ -1797,7 +1797,7 @@ def validate_verified_pack_record() -> None:
     require_order(validator, "FS_SameOpenQ4PakStamp( recorded->stamp, stamp )", "MD5_FileChecksum(", "record consulted before hashing")
     require_order(validator, "checksum mismatch for %s/%s", "FS_RecordVerifiedPak(", "only a passing pack is recorded")
     require_order(validator, "if ( errors.Length() != 0 ) {", "WriteVerifiedOpenQ4Paks( records )", "a failed check writes no record")
-    require_order(startup, "ValidateOpenQ4Paks( openQ4PakErrors, onlyClientPacks )", "openQ4 runtime content packs in '%s' are missing or modified", "pack failure stays fatal")
+    require_order(startup, "ValidateOpenQ4Paks( openQ4PakErrors, onlyClientPacks )", "openPR06 runtime content packs in '%s' are missing or modified", "pack failure stays fatal")
 
     for token, context in (
         ("GetFileInformationByHandleEx( handle, FileBasicInfo, &basic, sizeof( basic ) )", "Windows change time"),

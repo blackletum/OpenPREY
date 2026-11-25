@@ -58,6 +58,9 @@ static FileSystem* fileSystem=&files;
 const char* va(const char*,...){return "observed declaration";}
 static void R_RenderThread_Sync(const char*){} // no render thread in this harness
 void R_NormalizeInternalImageName(idStr&){}
+// openPR06: Prey's legacy image-name remap and the g_lowresFullscreenFX clamp.
+static void openPR06_NormalizeAndRemapImageName(idStr& name){name.Replace(".tga","");name.BackSlashesToSlashes();R_NormalizeInternalImageName(name);}
+template<class T> T Min(T a,T b){return a<b?a:b;}
 textureUsage_t R_ImageUsageForName(const char*,textureUsage_t usage){return usage;}
 bool R_AllowImageDownSizeForName(const char*,bool allow){return allow;}
 void R_BindTextureForDirectAccess(int,unsigned){++metadataNative;}

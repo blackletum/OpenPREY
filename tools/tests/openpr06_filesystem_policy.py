@@ -131,15 +131,15 @@ def validate_platform_residuals() -> None:
     require(sys_header, "#if defined( _WIN64 )", "Win64 event ABI branch")
     require(sys_header, "#define CPU_EASYARGS", "event callback ABI setting")
     require(win_main, "!win32.activeApp || win32.hWnd == NULL", "native focus guard")
-    for mode in (6, 3, 2, 0):
-        require(common, f'SetCVarInteger( "r_mode", {mode}', f"Prey r_mode preset {mode}")
+    # openPR06: execMachineSpec now applies the shared performance-preset table; the r_mode recipes are gone
+    require(common, "Common_ApplyPreyPerformancePresetExtras(", "Prey machine-spec preset extras")
 
 
 def validate_prey_filesystem_api(source: str) -> None:
     header = read("src/framework/FileSystem.h")
     require(header, "OpenExplicitFileAppend", "Prey explicit append interface")
     append = function_body(source, "idFile *idFileSystemLocal::OpenExplicitFileAppend(")
-    require(append, 'OpenOSFile( OSPath, "ab" )', "Prey explicit append mode")
+    require(append, 'OpenOSFileForWrite( OSPath, "ab" )', "Prey explicit append mode")
     require(append, "f->handleSync = sync", "Prey explicit append sync policy")
 
     require(source, 'fs_devpath( "fs_devpath"', "registered development path cvar")

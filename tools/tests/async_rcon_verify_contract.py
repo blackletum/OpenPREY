@@ -120,7 +120,8 @@ struct Game {
 	void ProcessRconReturn( bool success ) { answers.push_back( success ? 1 : 0 ); }
 	void ReceiveRemoteConsoleOutput( const char *text ) { output.push_back( text ); }
 } gameValue, *game = &gameValue;
-struct Gui { std::string status; void SetStateString( const char *, const char *value ) { status = value; } } guiValue;
+struct Gui { std::string status; void SetStateString( const char *, const char *value ) { status = value; } void StateChanged( int ) {} } guiValue;
+int com_frameTime = 0;	// openPR06: Prey's net menu GUI is told of status changes
 @RCON_TYPES@
 @RCON_CONSTANTS@
 @HELPERS@

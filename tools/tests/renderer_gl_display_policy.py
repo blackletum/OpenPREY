@@ -22,6 +22,9 @@ SUPPORT = r'''
 #include <cstring>
 #include <vector>
 template<class T> T Max(T a,T b){return std::max(a,b);}
+template<class T> T Min(T a,T b){return std::min(a,b);}
+// openPR06: CopyFramebuffer reads Prey's g_lowresFullscreenFX
+struct {bool GetCVarBool(const char*)const{return false;}} cvarSystemObject,*cvarSystem=&cvarSystemObject;
 enum {RENDERER_PRESENT_WINDOW_STATE,RENDERER_PRESENT_CONTEXT,RENDERER_PRESENT_SWAP};
 static unsigned long long R_RendererMetrics_CpuClock(){return 0;}
 static void R_RendererMetrics_EndPresentPhase(int,unsigned long long){}

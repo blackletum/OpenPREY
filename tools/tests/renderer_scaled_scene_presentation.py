@@ -245,6 +245,8 @@ int main(){
 }
 '''
 
+# openPR06: the game half below targets Quake 4's src/game/Game_render.cpp, which Prey's game
+# library does not have (Prey never calls PresentScaledScene); main() skips it.
 GAME_SUPPORT = r'''
 struct renderPresentationState_t {int outputWidth=1280,outputHeight=720,sceneWidth=640,sceneHeight=360;};
 struct idRenderTexture {};
@@ -302,20 +304,9 @@ def assemble_game(game: str) -> str:
     return COMMON + GAME_SUPPORT + "".join(function_body(game, s) for s in signatures) + GAME_MAIN
 
 
-def check_sources(game: str, render_h: str, render_system: str, tr_backend: str, gles: str,
+def check_sources(render_h: str, render_system: str, tr_backend: str, gles: str,
                   vk_backend: str, vk_exec: str, draw: str) -> None:
-    scene = function_body(game, "void idGameLocal::RenderScene(const renderView_t *view, idRenderWorld *renderWorld,")
-    fast = scene[scene.index("if ( canUseFastNoPost ) {"):scene.index("// Render the scene to the forward render pass rendertexture.")]
-    require(fast, "if ( !openQ4_PresentScaledScene( presentation, gameRender.forwardRenderPassResolvedRT ) ) {\n"
-            "\t\t\topenQ4_DrawFullScreenMaterial( gameRender.resolvePostProcessMaterial );", "fast no-post presentation")
-    final = scene[scene.rindex("idRenderTexture *scaledSceneSource"):]
-    require(final, "finalMaterial == gameRender.noPostProcessMaterial\n\t\t? gameRender.postProcessRT[0] : gameRender.postProcessRT[1];",
-            "the no-post copy presents _postProcessAlbedo0 directly")
-    require(final, "renderSystem->BindRenderTexture( scaledSceneSource, NULL );", "blur and CAS run at the scene extent first")
-    if not (final.index("openQ4_ScaledScenePresentationRequested( presentation )")
-            < final.index("renderSystem->ClearRenderTarget( false, true, 1.0f, 0.0f, 0.0f, 0.0f );")
-            < final.index("if ( !openQ4_PresentScaledScene( presentation, scaledSceneSource ) ) {\n\t\topenQ4_DrawFullScreenMaterial( finalMaterial );")):
-        raise AssertionError("final presentation: scene-extent pass, back-buffer depth clear, then the scaled present or the material")
+    # openPR06: Quake 4's idGameLocal::RenderScene call sites (Game_render.cpp) do not exist in Prey
     tail = render_h[render_h.index("virtual void\t\t\tGetVRFrameResult("):render_h.index("extern idRenderSystem *")]
     require(tail, "virtual bool\t\t\tPresentScaledScene( idRenderTexture *sceneColorTarget ) = 0;",
             "PresentScaledScene keeps its existing idRenderSystem slot")
@@ -353,7 +344,6 @@ def compile_and_run(compiler: str, output: Path, name: str, source: str, env: di
 
 
 def main() -> None:
-    game = read("src/game/Game_render.cpp")
     render_h = read("src/renderer/RenderSystem.h")
     render_system = read("src/renderer/RenderSystem.cpp")
     tr_local = read("src/renderer/tr_local.h")
@@ -362,11 +352,10 @@ def main() -> None:
     vk_backend = read("src/renderer/Vulkan/vk_Backend.cpp")
     vk_exec = read("src/renderer/Vulkan/vk_GuiExecutor.cpp")
     draw = read("src/renderer/draw_common.cpp")
-    check_sources(game, render_h, render_system, tr_backend, gles, vk_backend, vk_exec, draw)
+    check_sources(render_h, render_system, tr_backend, gles, vk_backend, vk_exec, draw)
 
     front = assemble_front(render_system, tr_local)
     gl = assemble_gl(draw, tr_local)
-    game_code = assemble_game(game)
     variants = {
         "front-production": front,
         "front-mutant-bilinear-modes": replace_once(front, "|| ( mode != 2 && mode != 3 )", "|| false"),
@@ -378,8 +367,6 @@ def main() -> None:
         "gl-mutant-keep-nearest": replace_once(gl, "\tif ( nearest ) {\n\t\tRB_EndNearestUpscale( nearestRestore );\n\t}\n", ""),
         "gl-mutant-live-sharpness": replace_once(gl, "textureWidth, textureHeight, command.sharpness );", "textureWidth, textureHeight, 0.4f );"),
         "gl-mutant-msaa": replace_once(gl, "|| sceneImage->GetOpts().numMSAASamples > 1\n", "\n"),
-        "game-production": game_code,
-        "game-mutant-any-mode": replace_once(game_code, "return mode == 2 || mode == 3;", "return true;"),
     }
     if len(set(variants.values())) != len(variants):
         raise AssertionError("ineffective production mutation")

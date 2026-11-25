@@ -289,21 +289,7 @@ def main() -> int:
     require(backend, "case RC_RESOLVE_TEMPORAL_PRESENTATION:", "OpenGL temporal dispatch")
     require(backend, "executionCommand.captureFrame = true;", "late capture temporal bypass")
 
-    game_render_path = GAME_ROOT / "src" / "game" / "Game_render.cpp"
-    if not game_render_path.is_file():
-        raise AssertionError(f"missing companion game render integration: {game_render_path}")
-    game_render = read(game_render_path)
-    for token in (
-        "_temporalHistoryAlbedo%d",
-        "presentation.outputWidth",
-        "presentation.outputHeight",
-        "!presentation.temporalAARequested",
-        "blurEnabled || presentation.temporalAARequested",
-        "openQ4_ResolveTemporalPresentation(",
-        "gameRender.postProcessRT[1]",
-        "gameRender.forwardRenderPassResolvedRT",
-    ):
-        require(game_render, token, "game temporal presentation integration")
+    # openPR06: no Quake 4 Game_render.cpp; the Prey game library has no gameRender temporal path.
     begin_frame = function_body(render_system, "void idRenderSystemLocal::BeginFrame(")
     capture_depth = function_body(
         render_system, "void idRenderSystemLocal::CaptureDepthRenderToImage("

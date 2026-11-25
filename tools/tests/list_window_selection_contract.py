@@ -194,6 +194,7 @@ def main() -> None:
 #define ID_INLINE inline
 #define id_attribute(x)
 #define BIT(x) (1<<(x))
+#define INTSIGNBITNOTSET(i) ((~(static_cast<unsigned int>(i))) >> 31) // openPR06: Str.h IcmpNoEscape uses the Math.h macro
 using byte=unsigned char;
 class idCmdArgs;
 template<class T> struct idList;

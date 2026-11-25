@@ -79,6 +79,7 @@ struct idSessionLocal {
     void UpdateRetainedJoinGame() {}
     void UpdateRetainedNotices() {}
     void UpdateRetainedSettingsPage() {}
+    idUserInterface* guiRetainedSettingsPage=nullptr;  // openPR06: Prey's retained SETTINGS page
     void PrefetchRetainedNextPages() {}
     void UpdateBrowserTooltip() {}
     // The controller's notices, test panel and on-screen keyboard (PAD-01, PAD-07, PAD-05) have their own tests.
@@ -100,6 +101,7 @@ struct idSessionLocal {
     void HandleGameMenuReturn(const char*) { assert(false); }
 };
 static void PumpControllerMenuNavigation(idSessionLocal*) {}
+static void Session_SyncPreyOptionsVideoPreset(idUserInterface*) {}  // openPR06: Prey Video preset sync
 static void PumpControllerDetailStick(idSessionLocal*) {}
 static void SyncMainMenuSettingsScrollPages(idUserInterface* gui) {
     if(gui)assert(uiManagerLocal.allocations.Find(static_cast<idUserInterfaceManaged*>(gui)));

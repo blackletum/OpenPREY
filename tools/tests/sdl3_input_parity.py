@@ -453,24 +453,21 @@ def validate_controller_contract() -> None:
 
 
 def validate_docs_and_ci() -> None:
-    push = read(".github/workflows/push-verification.yml")
-    commit = read(".github/workflows/commit-validation.yml")
     runner = read("tools/validation/openq4_validate.py")
     input_docs = read("docs/user/input-settings.md")
     platform_docs = read("docs/dev/platform-support.md")
     migration = read("docs/dev/archive/2026-10-18/sdl3-linux-macos-migration.md")
     session = read("src/framework/Session.cpp")
 
+    # openPR06: no commit/push workflows; CI runs the local validation runner
     for haystack, context in (
-        (push, "push verification workflow"),
-        (commit, "commit validation workflow"),
         (runner, "validation Python tests"),
     ):
         require(haystack, "sdl3_input_parity.py", context)
 
     for token in (
-        "Controller support is first-class in SDL3 builds on Windows, Linux, and macOS.",
-        "Linux and macOS SDL3 builds opt into SDL's HIDAPI controller backends",
+        # openPR06: the reworded guide drops the first-class/macOS claims (macOS controllers are untested)
+        "Linux SDL3 builds opt into SDL's HIDAPI controller backends",
         "listControllers",
     ):
         require(input_docs, token, "input settings docs")

@@ -513,8 +513,7 @@ def validate_runtime_commands_matrix_and_docs() -> None:
         "capability matrix": read(ROOT / "docs" / "dev" / "engine-capability-matrix.md"),
         "GPU modernization": read(ROOT / "docs" / "dev" / "gpu-skinning-modernization.md"),
         "validation matrix": read(ROOT / "docs" / "dev" / "renderer-validation-matrix.md"),
-        "release completion": read(ROOT / "docs" / "dev" / "release-completion.md"),
-        "release notes": read(ROOT / "docs" / "dev" / "releases" / "v0.12.0.md"),
+        # openPR06: release-completion.md is openPR06's own release doc and openQ4's v0.12.0 notes do not exist.
     }
     require_all(
         render_init,
@@ -559,8 +558,6 @@ def validate_runtime_commands_matrix_and_docs() -> None:
             "gpu_skinning_evidence.py",
         ),
         "validation matrix": ("GPU animation", "r_gpuSkinning 0", "r_gpuSkinning 1"),
-        "release completion": ("GPU", "skinning", "four-weight"),
-        "release notes": ("GPU animation", "r_gpuSkinning 1", "collision"),
     }
     for name, tokens in doc_tokens.items():
         require_all(docs[name], tokens, name)

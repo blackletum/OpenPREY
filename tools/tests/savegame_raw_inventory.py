@@ -51,50 +51,53 @@ def R(text: str) -> str:
 
 
 # Relative path -> class -> calls. A call listed twice must occur twice.
+# openPR06: Prey's single game library spans src/game, src/Prey and src/preyengine
+# (no Quake 4 src/mpgame), so paths start at src/. Its saves keep the Prey SDK's
+# native layout: the Q4-06 stage 2/3 conversions were Quake 4 game code.
+GAME_TREES = ("game", "Prey", "preyengine")
 GAME: dict[str, dict[str, list[str]]] = {
-    # The flag bitfields and LE-scalar blocks were converted to explicit fields
-    # with unchanged bytes (Q4-06 stage 2); FLAG_LISTS below pins their order.
-    # Version 5 writes trace models, joint modifiers and path targets through
-    # SaveCodec; these reads decode the raw structures of versions 2 to 4.
-    "SecurityCamera.cpp": {"legacy-reader": [R("&trm,sizeof(trm)")]},
-    "anim/Anim_Blend.cpp": {"legacy-reader": [R("&jointMod,sizeof(jointMod)"), R("&saved,sizeof(saved)")]},
-    "physics/Clip.cpp": {"legacy-reader": [R("&entry->trm,sizeof(entry->trm)")]},
-    "vehicle/VehicleDriver.cpp": {"legacy-reader": [R("&pathTargetInfo,sizeof(pathTargetInfo)"),
-                                                    R("&lastPathTargetInfo,sizeof(lastPathTargetInfo)")]},
-    # Script values are little-endian ints and floats, and its pointer-sized
-    # slots are 8 bytes on every portable build (validate_script_slot_widths).
-    # Written from a copy whose address temporaries are zeroed (ZeroPointerLocals).
-    "script/Script_Interpreter.cpp": {"script-storage": [W("savedStack,localstackUsed"), R("localstack,localstackUsed")]},
-    "script/Script_Program.cpp": {
-        "script-storage": [W("data,savedSize"), R("data,savedSize"),
+    # Flag bitfields copied after LittleBitField.
+    "game/BrittleFracture.cpp": {"bitfield": [W("&flags,sizeof(flags)"), R("&fl,sizeof(fl)")]},
+    "game/Entity.cpp": {"bitfield": [W("&flags,sizeof(flags)"), R("&fl,sizeof(fl)")]},
+    "game/projectile.cpp": {"bitfield": [W("&flags,sizeof(flags)"), R("&projectileFlags,sizeof(projectileFlags)")]},
+    "game/gamesys/Event.cpp": {"bytes": [W("str,MAX_STRING_LEN")] * 2 + [R("str,MAX_STRING_LEN")] * 2},
+    # Script values in host byte order; every slot but string and vector is
+    # intptr_t-sized in Prey (validate_script_slot_widths).
+    "game/script/Script_Interpreter.cpp": {"script-storage": [W("&localstack,localstackUsed"), R("localstack,localstackUsed")]},
+    "game/script/Script_Program.cpp": {
+        "script-storage": [W("data,size"), R("data,savedSize"),
                            "savefile->WriteByte(variables[", "savefile->WriteByte(variables[",
                            "savefile->ReadByte(variables[", "savefile->ReadByte(variables["],
     },
-    # Historical decoders only; the current writer saves these through typed fields.
-    "Entity.cpp": {"legacy-reader": [R("&fl,sizeof(fl)")]},
-    "Mover.cpp": {"legacy-reader": [R("&move,sizeof(move)"), R("&rot,sizeof(rot)")]},
-    "Player.cpp": {"legacy-reader": [R("&pfl,sizeof(pfl)")]},
-    "Projectile.cpp": {"legacy-reader": [R("&projectileFlags,sizeof(projectileFlags)")]},
-    "Weapon.cpp": {"legacy-reader": [R("&wfl,sizeof(wfl)"), R("&wsfl,sizeof(wsfl)")]},
-    "ai/AI.cpp": {"legacy-reader": [R("&aifl,sizeof(aifl)"), R("&combat.fl,sizeof(combat.fl)"),
-                                    R("&enemy.fl,sizeof(enemy.fl)"), R("&passive.fl,sizeof(passive.fl)")]},
-    "ai/AI_Actions.cpp": {"legacy-reader": [R("&fl,sizeof(fl)")]},
-    "ai/AI_Move.cpp": {"legacy-reader": [R("&fl,sizeof(fl)")]},
-    "gamesys/Event.cpp": {"legacy-reader": [R("legacyData.get(),argsize")]},
-    "gamesys/State.cpp": {"legacy-reader": ["saveFile->Read(&fl,sizeof(fl))"]},
-    "physics/Physics_RigidBody.cpp": {"legacy-reader": [R("&state.pushVelocity,sizeof(state.pushVelocity)")]},
-    "IK.cpp": {"legacy-reader": [R(f"{name},sizeof({name})") for name in (
-        "&waistJoint", "ankleJoints", "dirJoints", "dirJoints", "elbowForward", "elbowJoints", "footJoints",
-        "handJoints", "hipForward", "hipJoints", "kneeForward", "kneeJoints", "lowerArmLength",
-        "lowerArmToElbowJoint", "lowerLegLength", "lowerLegToKneeJoint", "oldAnkleHeights", "shoulderForward",
-        "shoulderJoints", "upperArmLength", "upperArmToShoulderJoint", "upperLegLength", "upperLegToHipJoint")]},
+    "Prey/game_arcadegame.cpp": {"bytes": [W("startingGrid,ARCADE_GRID_WIDTH*ARCADE_GRID_HEIGHT"),
+                                           R("startingGrid,ARCADE_GRID_WIDTH*ARCADE_GRID_HEIGHT")]},
+    # card_t pads its char members.
+    "Prey/game_blackjack.cpp": {"aggregate": [W("&PlayerHand[i],sizeof(card_t)"), W("&DealerHand[i],sizeof(card_t)"),
+                                              R("&PlayerHand[i],sizeof(card_t)"), R("&DealerHand[i],sizeof(card_t)")]},
+    "Prey/game_cards.cpp": {"le-scalars": [W("&cards[i],sizeof(hhCard)"), R("&card,sizeof(hhCard)")]},
+    "Prey/game_console.cpp": {"aggregate": [W("&transState,sizeof(transState)"), R("&transState,sizeof(transState)")]},
+    # fxInfoFlags_s is a struct of plain bools.
+    "Prey/game_fxinfo.cpp": {"aggregate": [W("&infoFlags,sizeof(infoFlags)"), R("&flags,sizeof(flags)")]},
+    "Prey/game_handcontrol.cpp": {"le-scalars": [W("anims,sizeof(int)*HAND_MATRIX_WIDTH*HAND_MATRIX_HEIGHT"),
+                                                 R("anims,sizeof(int)*HAND_MATRIX_WIDTH*HAND_MATRIX_HEIGHT")]},
+    "Prey/game_inventory.cpp": {
+        "le-scalars": [W("&maxSpirit,sizeof(maxSpirit)"), R("&maxSpirit,sizeof(maxSpirit)")],
+        "bitfield": [W("&requirements,sizeof(requirements)"), R("&requirements,sizeof(requirements)")],
+        "aggregate": [W("&altMode,sizeof(altMode)"), W("&weaponRaised,sizeof(weaponRaised)"),
+                      R("&altMode,sizeof(altMode)"), R("&weaponRaised,sizeof(weaponRaised)")],
+    },
+    "Prey/game_player.cpp": {"le-scalars": [W("weaponInfo,sizeof(weaponInfo_t)*15"), W("altWeaponInfo,sizeof(weaponInfo_t)*15"),
+                                            R("weaponInfo,sizeof(weaponInfo_t)*15"), R("altWeaponInfo,sizeof(weaponInfo_t)*15")]},
+    "Prey/game_poker.cpp": {
+        "le-scalars": [W("values,sizeof(suitHist_t)*NUM_SUITS"), W("suits,sizeof(valueHist_t)*NUM_CARD_VALUES"),
+                       R("values,sizeof(suitHist_t)*NUM_SUITS"), R("suits,sizeof(valueHist_t)*NUM_CARD_VALUES"),
+                       W("&cards[i],sizeof(hhCard)"), R("&card,sizeof(hhCard)")],
+        "aggregate": [W("markedCards,sizeof(bool)*5"), R("markedCards,sizeof(bool)*5")],
+    },
 }
-# `sizeof(&waistJoint)` above is written `sizeof(waistJoint)` in the source.
-GAME["IK.cpp"]["legacy-reader"][0] = R("&waistJoint,sizeof(waistJoint)")
 
-# Direct raw writes per game tree: only script storage, whose bytes are the
-# same on every 64-bit little-endian build. A new aggregate write fails here.
-GAME_DIRECT_WRITES = 2
+# Direct raw writes across the game trees. A new raw write fails here.
+GAME_DIRECT_WRITES = 24
 
 
 def field(op: str, name: str, context: str, label: str) -> str:
@@ -105,19 +108,9 @@ def field(op: str, name: str, context: str, label: str) -> str:
 # in the save and restore code must follow its struct's declaration order, or
 # the bytes would move: (source, save function, restore function, struct
 # source, declaration marker, member).
-FLAG_LISTS = [
-    ("Entity.cpp", "idEntity::WriteFlagBytes(", "idEntity::ReadFlagBytes(", "Entity.h", "struct entityFlags_s", "fl"),
-    ("physics/Physics_AF.cpp", "idAFConstraint::Save(", "idAFConstraint::Restore(", "physics/Physics_AF.h",
-     "struct constraintFlags_s", "fl"),
-    ("physics/Physics_AF.cpp", "idAFBody::Save(", "idAFBody::Restore(", "physics/Physics_AF.h", "struct bodyFlags_s", "fl"),
-    ("vehicle/Vehicle.cpp", "rvVehicle::Save (", "rvVehicle::Restore (", "vehicle/Vehicle.h", "struct vehicleFlags_s", "vfl"),
-    ("vehicle/VehiclePosition.cpp", "rvVehiclePosition::Save (", "rvVehiclePosition::Restore (", "vehicle/Vehicle.h",
-     "struct positionFlags_s", "fl"),
-    ("vehicle/VehicleParts.cpp", "rvVehiclePart::Save (", "rvVehiclePart::Restore\t(", "vehicle/VehicleParts.h",
-     "typedef struct partFlags_s", "fl"),
-    ("ai/Monster_ConvoyHover.cpp", "rvMonsterConvoyHover::Save (", "rvMonsterConvoyHover::Restore (",
-     "ai/Monster_ConvoyHover.cpp", "struct {", "myfl"),
-]
+# openPR06: Prey's flag bitfields are still raw LittleBitField copies (listed
+# above); none is written one bit per flag yet.
+FLAG_LISTS: list[tuple[str, str, str, str, str, str]] = []
 
 
 UI: dict[str, dict[str, list[str]]] = {
@@ -218,11 +211,13 @@ def validate_script_slot_widths() -> None:
     # width follows the target; the Q4-06 contract relies on them staying intptr_t
     # (8 bytes on every supported target) and on no other type changing width.
     source = (ROOT / "src/game/script/Script_Program.cpp").read_text(encoding="latin-1")
-    for name, size in (("scriptevent", "sizeof(intptr_t)"), ("namespace", "sizeof(intptr_t)"),
-                       ("string", "MAX_STRING_LEN"), ("float", "sizeof( float )"), ("vector", "sizeof( idVec3 )"),
-                       ("entity", "sizeof( int )"), ("field", "sizeof( int )"), ("function", "sizeof(intptr_t)"),
-                       ("virtual function", "sizeof( int )"), ("pointer", "sizeof(intptr_t)"),
-                       ("object", "sizeof( int )"), ("boolean", "sizeof( int )")):
+    # openPR06: Prey's script VM gives every slot but string and vector an intptr_t.
+    slot = "sizeof( intptr_t )"
+    for name, size in (("scriptevent", slot), ("namespace", slot),
+                       ("string", "MAX_STRING_LEN"), ("float", slot), ("vector", "E_EVENT_SIZEOF_VEC"),
+                       ("entity", slot), ("field", slot), ("function", slot),
+                       ("virtual function", slot), ("pointer", slot),
+                       ("object", slot), ("boolean", slot)):
         if not re.search(rf'"{re.escape(name)}",\s*{re.escape(size)},', source):
             raise AssertionError(f"script type '{name}' no longer has size {size}; reclassify script storage")
 
@@ -268,9 +263,10 @@ def main() -> None:
     self_test()
     validate_script_slot_widths()
     problems = []
-    for tree in ("game", "mpgame"):
-        problems += compare(f"src/{tree}", scan(ROOT / "src" / tree), GAME)
-        problems += validate_flag_lists(tree)
+    found = {f"{tree}/{relative}": calls for tree in GAME_TREES
+             for relative, calls in scan(ROOT / "src" / tree).items()}
+    problems += compare("src", found, GAME)
+    problems += validate_flag_lists("game")
     problems += compare("src/ui", scan(ROOT / "src" / "ui"), UI)
     writes = sum(1 for classes in GAME.values() for name, calls in classes.items() if name != "legacy-reader"
                  for call in calls if "->Write(" in call)
@@ -278,7 +274,7 @@ def main() -> None:
         problems.append(f"game trees: {writes} direct raw writes listed, expected {GAME_DIRECT_WRITES}")
     if problems:
         raise AssertionError("savegame raw inventory changed:\n  " + "\n  ".join(problems))
-    print(f"savegame_raw_inventory: ok (game per tree {summary(GAME)}, {GAME_DIRECT_WRITES} direct writes; "
+    print(f"savegame_raw_inventory: ok (game {summary(GAME)}, {GAME_DIRECT_WRITES} direct writes; "
           f"ui {summary(UI)})")
 
 

@@ -125,6 +125,7 @@ def validate_every_unload_restores() -> None:
         "if ( !GetGameAPI ) {",
         "if ( gameExportPtr == NULL ) {",
         "if ( gameExport.version != GAME_API_VERSION ) {",
+        "if ( gameExport.game == NULL || gameExport.gameEdit == NULL ) {",  # openPR06: null-export guard
     ):
         require_ordered(braced_block(load, marker), (UNLOAD_CALL, "gameDLL = NULL;"), f"{context} {marker}")
 
@@ -135,8 +136,8 @@ def validate_every_unload_restores() -> None:
     for call in calls:
         if call != UNLOAD_CALL:
             raise AssertionError(f"{COMMON} unloads a game module with a snapshot it did not capture: {call}")
-    if len(calls) != 4:
-        raise AssertionError(f"expected 4 game module unloads (three failed loads and UnloadGameDLL), found {len(calls)}")
+    if len(calls) != 5:  # openPR06: adds the incomplete-export-table failed load
+        raise AssertionError(f"expected 5 game module unloads (four failed loads and UnloadGameDLL), found {len(calls)}")
 
     # the snapshot belongs to the loaded module: one capture, spent only by
     # the unload helper

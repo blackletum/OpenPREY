@@ -363,7 +363,8 @@ def validate_gl_consumer() -> None:
     )
     require(
         draw_view,
-        "RB_STD_DrawShaderPasses( drawSurfs, processed, RB_DrawSurfIsPreFogMaterialPass );",
+        # openPR06: fullscreen 2D views draw both ranges in submission order (70b9d052a).
+        "RB_STD_DrawShaderPasses( drawSurfs, processed, ordered2DView\n\t\t\t? RB_DrawSurfIsOrdered2DMaterialPass : RB_DrawSurfIsPreFogMaterialPass );",
         "untouched OpenGL pre-fog classic fallback",
     )
     require(
@@ -498,43 +499,7 @@ def validate_control_and_evidence() -> None:
         '"r_rendererSharedWorldAmbient 0"',
         "benchmark capture-script isolation",
     )
-    require(benchmark, '"sp-mv2-ambient":', "stock world-ambient gameplay case")
-    world_ambient_profile = braced_body(
-        benchmark,
-        '"world-ambient":',
-        "world-ambient gameplay profile",
-    )
-    for token, context in (
-        ('("ui_showGun", "0")', "view-model isolation"),
-        ('("g_showHud", "0")', "root-HUD isolation"),
-        ('("r_multiSamples", "0")', "direct swapchain ownership isolation"),
-        ('("g_renderFastNoPost", "1")', "fast no-post selection"),
-        ('("g_renderFastNoPostDirect", "1")', "direct no-post selection"),
-        ('("r_postAA", "0")', "post-AA isolation"),
-        ('("r_singleLight", "2147483647")', "interaction-light isolation"),
-        ('("r_skipSubviews", "1")', "subview isolation"),
-        ('("r_useLightGrid", "0")', "light-grid isolation"),
-        ('("r_skipPlayerVisibilityEffects", "1")', "player-overlay isolation"),
-        ('("r_portalsDistanceCull", "0")', "portal-fade isolation"),
-        ('("r_forceAmbient", "0")', "forced-ambient isolation"),
-        ('("r_celShading", "0")', "cel-shading isolation"),
-        ('("r_celShadingWorld", "0")', "world cel-shading isolation"),
-        ('("r_showOverDraw", "0")', "overdraw diagnostic isolation"),
-        ('("r_singleTriangle", "0")', "single-triangle diagnostic isolation"),
-        ('("r_skipAmbient", "0")', "ambient ownership retention"),
-        ('("r_skipNewAmbient", "0")', "new-ambient ownership retention"),
-        ('("r_skipDeforms", "0")', "deform rollback retention"),
-        ('("r_skipRender", "0")', "normal rendering retention"),
-        ('"noclip"', "fixed world-ambient camera lock"),
-        ('"setviewpos 0 0 256 80 0 0"', "fixed world-ambient camera pose"),
-    ):
-        require(world_ambient_profile, token, context)
-    for token in (
-        'g_stopTime',
-        'r_skipGuiShaders',
-        'r_skipPostProcess',
-    ):
-        reject(world_ambient_profile, token, "world-ambient gameplay profile")
+    # openPR06: the Q4 sp-mv2-ambient case and world-ambient profile have no Prey scene (WORLD_AMBIENT_SCENES is empty).
     require(
         baseline,
         'add_set(args, "r_rendererSharedWorldAmbient", 0)',
@@ -579,17 +544,9 @@ def validate_control_and_evidence() -> None:
 
 def validate_ci_registration() -> None:
     validator = read("tools/validation/openq4_validate.py")
-    commit = read(".github/workflows/commit-validation.yml")
-    push = read(".github/workflows/push-verification.yml")
     if validator.count("renderer_classic_world_ambient_domain.py") != 1:
         raise AssertionError("Local validation must register this test exactly once")
-    for workflow, context in (
-        (commit, "commit validation workflow"),
-        (push, "push verification workflow"),
-    ):
-        if workflow.count(TEST_PATH) != 2:
-            raise AssertionError(f"{context} must compile and directly run {TEST_PATH}")
-        require(workflow, f"python {TEST_PATH}", context)
+    # openPR06: openQ4's commit/push workflows do not exist; the local validator registration covers wiring.
 
 
 def main() -> None:

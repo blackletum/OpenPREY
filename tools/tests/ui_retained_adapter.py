@@ -1497,7 +1497,8 @@ static void CheckEventBridge() {
     for (const auto& bad : {setting("ui_handicap",0.0),setting("ui_handicap",50.5),setting("s_voiceVolume",1.5),setting("s_voiceChatEcho",1.0),
                             setting("cl_player_outline_enemy",std::string("0.4")),setting("cl_player_outline_enemy",.35),
                             setting("cl_player_outline_width",std::string("2")),setting("rcon_password",std::string("x")),
-                            setting("r_brightness",1.0),ActionInvocation{"x","settings.player.set",{{"cvar",std::string("ui_handicap")}}}})
+                            // openPR06: r_brightness is a player setting on Prey's Video tab, so it is not listed here
+                            ActionInvocation{"x","settings.player.set",{{"cvar",std::string("ui_handicap")}}}})
         assert(!ValidInvocation(bad,error));
     Action settingAction; settingAction.operation="settings.player.set"; settingAction.inputType=0;
     Expression handicap; handicap.type=2; handicap.literal=std::string("ui_handicap");

@@ -38,6 +38,10 @@ struct idWindow {
     static constexpr int SCRIPT_COUNT=3,SCREEN_ALIGN_X_MIDDLE=0,SCREEN_ALIGN_Y_MIDDLE=0;
     void* scripts[SCRIPT_COUNT];
     std::string backGroundName,name="Desktop";
+    // openPR06: Prey window state that CommonInit also resets.
+    bool noTranslation,tabContainerInitialized,retailCreditArmed;
+    int activeTabIndex,retailTextEffectStartTime;
+    std::string backgroundLeft,backgroundRight,backgroundTop,backgroundBottom,windowDefType;
     GUI* gui=&guiObject;
     void CommonInit();
     void WriteToSaveGame(idFile*);

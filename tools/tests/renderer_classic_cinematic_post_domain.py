@@ -260,13 +260,8 @@ def validate_controls_and_evidence() -> None:
     registry = read("tools/validation/openq4_validate.py")
     roadmap = read("docs/dev/archive/2026-10-18/idtech5-modernization-roadmap.md")
     domain_doc = read("docs/dev/classic-cinematic-post-domain-modernization.md")
-    fixture = read("tools/tests/renderer_milestone_d_fixture.py")
-    acceptance = read("tools/tests/renderer_milestone_d_acceptance.py")
-    hardening = read("tools/tests/validation_hardening.py")
-    workflows = (
-        read(".github/workflows/commit-validation.yml"),
-        read(".github/workflows/push-verification.yml"),
-    )
+    # openPR06: the Milestone D fixture/acceptance drivers, validation_hardening and the
+    # openQ4 push/commit workflows were removed with the openQ4 fixture layer (d39359088).
 
     require(init, 'r_rendererSharedCinematicPost( "r_rendererSharedCinematicPost", "0"', "default-off cvar")
     require(init, 'cmdSystem->AddCommand( "rendererClassicCinematicPostDomainSelfTest"', "native self-test")
@@ -284,107 +279,7 @@ def validate_controls_and_evidence() -> None:
     require(matrix, "+rendererClassicCinematicPostDomainSelfTest", "safe native self-test")
     require(registry, '"renderer_classic_cinematic_post_domain.py"', "validation registry")
     require(roadmap, "Milestone D scoped implementation is complete", "Milestone D completion boundary")
-    for token in (
-        "maps/tools/mv2.map",
-        "video/idlogo.roq",
-        "412fc796e569660c92dca5d55359e5c4eb3d572754bd1cdff8ce994b0b802fe2",
-        "375c9641c96359c2e0d49cdd3905cc2cdc66a7b067c9a8910d80bf36fb06c8f4",
-        "milestone_d_nested_dynamic.map",
-        "milestoneD/nestedCinematicPost",
-        "shaderDemos/transparentMirror",
-        "Temporary Milestone D validation material; never shipped.",
-        '"shippingContent": False',
-        '"r_fullscreen", "0"',
-        '"in_mouse", "0"',
-        '"+dmap"',
-        '"--temporary-runtime"',
-        'ROOT / ".tmp/stock-runtime"',
-        "is_link_or_junction",
-        'for suffix in (".proc", ".cm")',
-        "def stock_dependency_inventory(basepath: Path)",
-        '"stockDependencies": stock_dependencies_before',
-        "stock_dependencies_after = stock_dependency_inventory(basepath)",
-        "if stock_dependencies_after != stock_dependencies_before:",
-        "def validate_runtime_components(runtime_dir: Path)",
-        '"runtimeComponents": runtime_components',
-        "prepare_macos_moltenvk.sh",
-        "libMoltenVK.dylib",
-        "validation_map_payload(retrieved_map)",
-        "timeout=timeout_seconds",
-        "allow_nan=False",
-    ):
-        require(fixture, token, "temporary stock-derived Milestone D fixture")
-    for case_block in (
-        '"classic-normal",\n        "classic subview and cinematic/post paths, normal post processing",\n        0,\n        0,\n        0,',
-        '"subview-only-normal",\n        "shared subview only, with cinematic/post domain disabled",\n        1,\n        0,\n        0,',
-        '"cinematic-only-normal",\n        "shared cinematic/post only; nested authored post remains vacuous",\n        0,\n        1,\n        0,',
-        '"both-normal",\n        "shared subview plus nested cinematic/post ownership",\n        1,\n        1,\n        0,',
-        '"classic-skip",\n        "classic paths with r_skipPostProcess forced",\n        0,\n        0,\n        1,',
-        '"both-skip",\n        "shared domains requested with deterministic nested post fallback",\n        1,\n        1,\n        1,',
-    ):
-        require(acceptance, case_block, "Milestone D six-case CVar matrix")
-    for token in (
-        'return ("gl", "vk") if value == "all"',
-        '"milestone-d-nested-dynamic"',
-        '"-B"',
-        '"--pacing-only"',
-        '"--no-gpu-timers"',
-        '"windowed"',
-        "CINEMATIC_PATTERN",
-        "SUBVIEW_PATTERN",
-        "SUBVIEW_BACKEND_PATTERN",
-        '"classic-normal-vs-subview-only-normal"',
-        '"classic-normal-vs-cinematic-only-normal"',
-        '"classic-normal-vs-both-normal"',
-        '"classic-skip-vs-both-skip"',
-        '"classic-normal-vs-classic-skip"',
-        '"both-normal-vs-both-skip"',
-        "runtime_before = benchmark.collect_runtime_files(runtime_dir)",
-        "runtime_after = benchmark.collect_runtime_files(runtime_dir)",
-        '"--fixture-manifest"',
-        "def validate_fixture_manifest(",
-        "fixture_builder.stock_dependency_inventory(basepath)",
-        'manifest.get("stockDependencies") != stock_dependencies',
-        "fixture_builder.validate_runtime_components(runtime_dir)",
-        'manifest.get("runtimeComponents") != runtime_components',
-        '"manifestArtifact": {',
-        "prefix_count = sum(",
-        "backend_prefix_count = sum(",
-        'inactive_outcome = f"{inactive_label}=0/none/0"',
-        "math.isfinite(args.difference_min_rms)",
-        "benchmark.evaluate_display_evidence(",
-        'failures.extend(f"actual display evidence: {failure}"',
-        'f"{prefix}_mismatch"',
-        'f"{prefix}_duplicate"',
-        "fixture_after = validate_fixture_manifest(",
-        "_reject_link_ancestry",
-        "allow_nan=False",
-        '"screenshotSource": "engine screenshot command"',
-        "REPORT_JSON_NAME",
-        "REPORT_MD_NAME",
-    ):
-        require(acceptance, token, "Milestone D acceptance contract")
-    for runtime_driver in (
-        "tools/tests/renderer_milestone_d_acceptance.py",
-        "tools/tests/renderer_milestone_d_fixture.py",
-    ):
-        require(hardening, Path(runtime_driver).name, "runtime-driver validation allowlist")
-        for workflow in workflows:
-            if workflow.count(runtime_driver) != 1:
-                raise AssertionError(
-                    f"Expected exactly one compile-only {runtime_driver!r} workflow entry"
-                )
-    require(benchmark, '"milestone-d-nested-dynamic"', "nested runtime benchmark profile")
-    require(
-        benchmark,
-        '("r_rendererSharedSubview", "1")',
-        "nested runtime benchmark shared subview default",
-    )
-    require(
-        benchmark,
-        '("r_rendererSharedCinematicPost", "1")',
-        "nested runtime benchmark shared cinematic/post default",
-    )
+    # openPR06: the milestone-d-nested-dynamic benchmark profile ran the deleted Milestone D fixture map.
     for token in (
         "videoMap",
         "soundMap",

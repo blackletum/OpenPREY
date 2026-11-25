@@ -139,7 +139,7 @@ def main() -> int:
     try:
         validate_manager_forwards()
         validate_registration_and_sizing()
-        validate_game_registration()
+        # openPR06: Prey's game library has no "icon " spawn-arg registration or mpgame obituary icons.
     except AssertionError as error:
         print(f"ui_embedded_icons: FAILED - {error}")
         return 1

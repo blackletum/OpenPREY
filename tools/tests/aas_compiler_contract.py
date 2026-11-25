@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 
@@ -198,8 +199,11 @@ def validate_tactical_features() -> None:
     forbid(tactical, "idHashIndex", "AAS tactical generator")
 
     aas = read("src/aas/AASFile.cpp")
+    # openPR06: builds define HUMANHEAD, whose writer keeps Prey's 1.07 area record
+    # (no per-area feature span); keep only that branch so the brace scan sees one record.
+    aas = re.sub(r"#ifdef HUMANHEAD\r?\n(.*?)#else\r?\n.*?#endif\r?\n", r"\1", aas, flags=re.S)
     writer = function_body(aas, "bool idAASFileLocal::Write( const idStr &fileName, unsigned int mapFileCRC )", "AAS writer")
-    require(writer, "areas[i].numFeatures, areas[i].firstFeature, num );", "AAS writer")
+    require(writer, "areas[i].cluster, areas[i].clusterAreaNum, num );", "AAS writer")
     require(writer, r'aasFile->WriteFloatString( "featureIndex %d {\n", featureIndexes.Num() );', "AAS writer")
     require(writer, r'aasFile->WriteFloatString( "features %d {\n", features.Num() );', "AAS writer")
     loader = function_body(aas, "bool idAASFileLocal::Load( const idStr &fileName, unsigned int mapFileCRC )", "AAS loader")
@@ -254,13 +258,13 @@ def validate_collision_contents_names() -> None:
         raise AssertionError(f"Retail .cm contents pairing changed: {pairs}")
 
     files = read("src/cm/CollisionModel_files.cpp")
-    require(files, '#define CM_FILEVERSION\t\t"4"', "collision file version")
+    require(files, '#define CM_FILEVERSION\t\t"1.00"', "collision file version")  # openPR06: Prey's retail .cm version
     loader = function_body(
         files,
         "bool idCollisionModelManagerLocal::LoadCollisionModelFile( const char *name, unsigned int mapFileCRC )",
         "collision file loader",
     )
-    # Quake 4's own versions ("2", "3") use the shifted pairing; openQ4's "4" does not.
+    # Quake 4's own versions ("2", "3") use the shifted pairing; Prey's "1.00" does not.
     require(loader, "const bool retailContentsNames = ( token != CM_FILEVERSION );", "collision file loader")
     require(files, "b->contents = ContentsFromString( token, retailContentsNames );", "collision brush parser")
     # Caches decoded the old way must not be reused.
@@ -272,14 +276,7 @@ def validate_ci_wiring() -> None:
     if validator.count("aas_compiler_contract.py") != 1:
         raise AssertionError("Local validation must register the AAS compiler contract exactly once")
 
-    for workflow_path in (
-        ".github/workflows/commit-validation.yml",
-        ".github/workflows/push-verification.yml",
-    ):
-        workflow = read(workflow_path)
-        if workflow.count(TEST_PATH) != 2:
-            raise AssertionError(f"{workflow_path} must compile and run {TEST_PATH}")
-        require(workflow, f"python {TEST_PATH}", workflow_path)
+    # openPR06: no push-verification/commit-validation workflows; openq4_validate.py is the runner.
 
 
 def main() -> None:

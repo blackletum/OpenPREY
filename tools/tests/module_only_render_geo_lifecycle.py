@@ -48,13 +48,13 @@ def main() -> None:
     common = read("src/framework/Common.cpp")
     init_game = function_body(common, "void idCommonLocal::InitGame( void )")
     shutdown_game = function_body(common, "void idCommonLocal::ShutdownGame( bool reloading )")
-    tri_surf = read("src/render_geo/RenderGeometryTriSurf.cpp")
+    tri_surf = read("src/rendergeo/RenderGeometryTriSurf.cpp")
     dmap = function_body(
         read("src/tools/compilers/dmap/dmap.cpp"),
         "void Dmap_f( const idCmdArgs &args )",
     )
 
-    require(common, '#include "../render_geo/RenderGeometry.h"', "common render-geometry dependency")
+    require(common, '#include "../rendergeo/RenderGeometry.h"', "common render-geometry dependency")
     require(
         common,
         "#ifdef OPENQ4_RENDERER_MODULE_ONLY\n"

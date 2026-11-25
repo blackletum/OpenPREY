@@ -34,7 +34,12 @@ double LoadingPresentation_Now(){return clockMsec;}
 int com_frameRealTime=0;
 int Session_FindPresentationCap(){return 60;}
 void openQ4_BeginPacedPresentationFrame(){++clockMsec;}
-struct {int GetPresentationTime(){return clockMsec;}} commonValue,*common=&commonValue;
+struct {int GetPresentationTime(){return clockMsec;}void Printf(const char*,...){}} commonValue,*common=&commonValue;
+// openPR06: the obscured-window loading path and Prey's load-music service.
+static double sessionObscuredLoadingRecheckMsec=0;
+static bool sessionObscuredLoadingReported=false;
+struct {int GetCVarInteger(const char*){return 0;}} cvarValue,*cvarSystem=&cvarValue;
+void Session_ServiceLoadingSound(){}
 struct {int GetReadCount(){return 40;}} filesystemValue,*fileSystem=&filesystemValue;
 struct GUI {
     float shown=0.0f;
@@ -60,6 +65,7 @@ struct idSessionLocal {
     void UpdateScreen(){++redraws;NestedOffer(0);}
     void PublishRetainedLoadingCount(){}
     void PublishRetainedLoadingTip(bool){}
+    void SetPlayingSoundWorld(){}
     void PacifierUpdate();
 } session;
 void NestedOffer(int stage) {

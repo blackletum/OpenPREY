@@ -194,9 +194,8 @@ def test_postaa_settings_surface_exposes_all_modes():
     repo_root = Path(__file__).resolve().parents[2]
     init_cpp = read_repo_file(Path("src") / "renderer" / "RenderSystem_init.cpp")
     system_gui = read_repo_file(Path("content") / "basepr" / "pak0" / "guis" / "mainmenu" / "mainmenu_options.guifragment")
-    structure_md = read_repo_file(Path("docs/dev") / "settings-menu-structure.md")
     display_settings_md = read_repo_file(Path("docs/user") / "display-settings.md")
-    registry = json.loads((repo_root / "docs/dev" / "settings-menu-registry.json").read_text(encoding="utf-8"))["settings"]
+    # openPR06: settings-menu-structure.md and settings-menu-registry.json were openQ4 menu docs (removed in d39359088).
 
     assert_true(
         '"post AA mode: 0 = off, 1 = SMAA 1x medium, 2 = SMAA 1x high, 3 = SMAA 1x ultra, 4 = SMAA 1x colour-edge prototype", 0, 4' in init_cpp,
@@ -208,12 +207,7 @@ def test_postaa_settings_surface_exposes_all_modes():
         line = next((candidate for candidate in lang_file.splitlines() if '"#str_122024"' in candidate), "")
         assert_true(line.count(";") == 4, f"{language} Post AA choices should list five labels")
 
-    postaa_entry = next((entry for entry in registry if entry.get("id") == "system.post_aa"), None)
-    assert_true(postaa_entry is not None, "settings registry should include the Post AA entry")
-    assert_true(postaa_entry["values"] == ["0", "1", "2", "3", "4"], "settings registry should list all Post AA values")
-    assert_true(postaa_entry["cvar_range"] == {"low": "0", "high": "4"}, "settings registry should track the full r_postAA range")
-    assert_true("`4 Color Edge`" in structure_md, "settings menu structure docs should mention the color-edge Post AA mode")
-    assert_true("`4`: color-edge prototype" in display_settings_md, "display settings guide should document the color-edge Post AA mode")
+    assert_true("`4`: colour-edge prototype" in display_settings_md, "display settings guide should document the color-edge Post AA mode")
 
 
 def test_postaa_smaa_quality_presets_are_explicit_and_logged():

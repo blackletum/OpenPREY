@@ -152,7 +152,8 @@ def validate_teardown_call_site() -> None:
     require_ordered(
         unload_map,
         (
-            "if ( soundSystem ) {",
+            # openPR06: the guard also requires the game sound world
+            "if ( soundSystem && sw ) {",
             "soundSystem->StopAllSounds( SOUNDWORLD_GAME );",
         ),
         "idSessionLocal::UnloadMap sound teardown",
@@ -217,14 +218,14 @@ def validate_posix_fatal_signal_report() -> None:
     require_ordered(
         handler,
         (
-            'Posix_WriteSignalText( "openQ4: fatal signal " );',
+            'Posix_WriteSignalText( "openPR06: fatal signal " );',
             'Posix_WriteSignalText( "), exiting without unsafe engine shutdown\\n" );',
             "if ( fatalError[0] != '\\0' ) {",
-            'Posix_WriteSignalText( "openQ4: fatal error being reported: " );',
+            'Posix_WriteSignalText( "openPR06: fatal error being reported: " );',
             "Posix_WriteSignalText( fatalError );",
-            'Posix_WriteSignalText( "openQ4: last renderer startup phase: " );',
+            'Posix_WriteSignalText( "openPR06: last renderer startup phase: " );',
             "Posix_RendererStartupPhaseName()",
-            'Posix_WriteSignalText( "openQ4: last game module phase: " );',
+            'Posix_WriteSignalText( "openPR06: last game module phase: " );',
             "Com_GameModuleLoadPhaseSignalName()",
             "Posix_AppendFatalBreadcrumbRaw( breadcrumb );",
             'strcpy( fatalBreadcrumb, "fatal error being reported: " );',
@@ -341,16 +342,9 @@ def validate_renderer_failure_entry_points() -> None:
 
 def validate_ci_wiring() -> None:
     local_runner = read("tools/validation/openq4_validate.py")
-    commit = read(".github/workflows/commit-validation.yml")
-    push = read(".github/workflows/push-verification.yml")
 
+    # openPR06: no commit/push workflows; CI runs the local validation runner
     require(local_runner, "fatal_error_startup_safety.py", "local validation runner")
-    for source, context in (
-        (commit, "commit validation workflow"),
-        (push, "push verification workflow"),
-    ):
-        require(source, "tools/tests/fatal_error_startup_safety.py", context)
-        require(source, "python tools/tests/fatal_error_startup_safety.py", context)
 
 
 def main() -> None:

@@ -21,9 +21,9 @@ struct gameReturn_t { const char *sessionCommand=""; };
 std::string events;
 struct Game {
     void ThrottleUserInfo() { events+='T'; }
-    void SetUserInfo(int,int,bool) { events+='U'; }
+    void SetUserInfo(int,int,bool,bool) { events+='U'; }  // openPR06: Prey v7 signature
     void ClientRun() { events+='R'; }
-    gameReturn_t ClientPrediction(int,int,bool) { events+='P'; return {}; }
+    gameReturn_t ClientPrediction(int,int) { events+='P'; return {}; }
     void ClientEndFrame() { events+='E'; }
 } gameValue, *game=&gameValue;
 struct Cvars { int flags=0; int GetModifiedFlags(){return flags;} void ClearModifiedFlags(int){flags=0;} } cv, *cvarSystem=&cv;
@@ -70,6 +70,8 @@ struct idAsyncClient {
 };
 '''
 MAIN = r'''
+// openPR06: production builds define HUMANHEAD, where Prey's v7 idGame has no ClientRun/ClientEndFrame.
+const std::string R = "", E = "";
 int main() {
     for(int state=CS_DISCONNECTED; state<=CS_INGAME; ++state) {
         for(int ticks=0; ticks<=4; ++ticks) {
@@ -83,13 +85,13 @@ int main() {
                         client.RunFrame(false);
                         const bool ingame=state==CS_INGAME && !timedOut && open;
                         const std::string expected=ingame ?
-                            (userinfo ? "TSU" : "") + std::string("R") + std::string(ticks,'P') + "E" : "";
+                            (userinfo ? "TSU" : "") + R + std::string(ticks,'P') + E : "";
                         assert(events==expected);
                         if(ingame) {
                             // Consecutive render-only calls must still service
                             // received challenges and finish icons exactly once.
                             events.clear(); client.RunFrame(false);
-                            assert(events=="RE");
+                            assert(events==R+E);
                         }
                     }
                 }
@@ -111,7 +113,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix="client-frame-", dir=temp) as directory:
         source, executable = Path(directory) / "contract.cpp", Path(directory) / "contract.exe"
         source.write_text(SUPPORT + body + MAIN, encoding="utf-8")
-        subprocess.run([compiler, "-std=c++17", "-Wall", "-Wextra", "-Werror", str(source), "-o", str(executable)], check=True)
+        subprocess.run([compiler, "-std=c++17", "-DHUMANHEAD=1", "-Wall", "-Wextra", "-Werror", str(source), "-o", str(executable)], check=True)
         subprocess.run([str(executable)], check=True)
     print("async client frame callbacks: PASS (200 state/timing cases)")
 

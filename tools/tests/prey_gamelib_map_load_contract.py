@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 GAME_LIBS_ROOT = Path(
     os.environ.get("OPENPR06_GAMELIBS_REPO")
     or os.environ.get("OPENQ4_GAMELIBS_REPO")
-    or ROOT.parent / "OpenPrey-game"
+    or ROOT  # openPR06: the game library is in-tree; OpenPrey-game is retired
 ).resolve()
 
 

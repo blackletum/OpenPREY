@@ -901,18 +901,10 @@ def validate_native_endpoint_coverage() -> None:
 
 
 def validate_network_contract_wiring() -> None:
+    # openPR06: network_ipv4_support.py and openQ4's commit/push workflows were removed; check the local runner.
     test_paths = (
-        "tools/tests/network_ipv4_support.py",
         "tools/tests/network_ipv6_support.py",
     )
-    for relative_path in (
-        ".github/workflows/commit-validation.yml",
-        ".github/workflows/push-verification.yml",
-    ):
-        workflow = read(relative_path)
-        for test_path in test_paths:
-            require(workflow, f"{test_path} \\", f"{relative_path} focused regression syntax-check wiring")
-            require(workflow, f"python {test_path}", f"{relative_path} focused regression execution wiring")
 
     validator = read("tools/validation/openq4_validate.py")
     for test_path in test_paths:
@@ -929,7 +921,7 @@ def validate_ipv6_delivery_docs() -> None:
         "`net_enableIPv6`",
         "`net_mcast6addr`",
         "netIPv6SelfTest",
-        "[2001:db8::1]:27650",
+        "[2001:db8::1]:28004",  # openPR06: Prey's default port
     ):
         require(networking, token, "IPv6 multiplayer networking guide")
 
