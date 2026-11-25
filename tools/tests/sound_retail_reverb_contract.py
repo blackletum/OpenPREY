@@ -137,8 +137,39 @@ def main() -> int:
             "voices must route to their own area's slot", failures)
     require("leadinSample->NumChannels() == 1" in hw, "only mono voices reach the reverb", failures)
     require("IsRadioChatterChannel( this )" in hw and "SSF_IS_VO" in hw, "radio and voice-over room levels", failures)
-    require("soundSystemLocal.hardware.HasEFX() && s_useEAXOcclusion.GetBool() && s_useOcclusion.GetBool()" in hw,
+    require("soundSystemLocal.hardware.HasEFX() && s_useOcclusion.GetBool()" in hw,
             "EAX occlusion exists only with EAX reverb, as in retail", failures)
+
+    # PREY.exe 1.4: per-source room, spirit-walk and portal low-pass, portal flow, area effects
+    require("SOUND_REVERB_ROOM_VOICE_CLASS_MB = -600" in core, "Prey's voice-class room level is -600 mB", failures)
+    require("parms.soundClass == SOUNDCLASS_VOICE || parms.soundClass == SOUNDCLASS_VOICEDUCKER" in hw,
+            "SC_VOICE and SC_VOICEDUCKER take the voice-class room level", failures)
+    require("static const int Q4_SOUND_CHANNEL_RADIO_CHATTER = -1;" in emitter,
+            "Prey's channel 10 is SND_CHANNEL_LANDING, not Quake 4's radio", failures)
+    for token in ('idCVar s_lowPassPortals( "s_lowPassPortals", "-1500", CVAR_SOUND | CVAR_INTEGER,',
+                  'idCVar s_lowPassSpirit( "s_lowPassSpirit", "-3000", CVAR_SOUND | CVAR_INTEGER,'):
+        require(token in emitter, f"retail Prey cvar missing: {token}", failures)
+    spirit = hw[hw.index("int reverbOcclusionMB = 0;"):hw.index("SetReverbSource(")]
+    require("soundWorld->spiritWalkActive && parms.soundClass == SOUNDCLASS_NORMAL" in spirit and
+            spirit.index("s_lowPassSpirit") < spirit.index("SSF_NO_OCCLUSION"),
+            "spirit walk low-passes normal-class voices, no_occlusion ones included", failures)
+    require("s_lowPassPortals.GetInteger() * emitter->occludingPortalCount" in spirit,
+            "portal low-pass follows s_lowPassPortals", failures)
+    require("spiritWalkActive = active;" in body(world, "void idSoundWorldLocal::SetSpiritWalkEffect("),
+            "SetSpiritWalkEffect must drive the spirit-walk low-pass", failures)
+    resolve = body(world, "void idSoundWorldLocal::ResolveOrigin(")
+    require("( re.blockingBits & PS_BLOCK_SOUND ) != 0" in resolve, "portals closed to sound carry none", failures)
+    require("def->FlowsThroughGamePortals()" in resolve and "GetGamePortalDst( re.portalHandle )" in resolve,
+            "sound flows through open game portals unless noportalflow plays", failures)
+    require('!token.Icmp( "omniwhenclose" )' in shader and "SSF_OMNI_WHEN_CLOSE" in hw,
+            "omniwhenclose is unpositioned only inside minDistance", failures)
+    require('!token.Icmp( "noPortalFlow" )' in shader and "SSF_NO_PORTAL_FLOW" in shader,
+            "noportalflow is its own flag", failures)
+    area = body(reverb, "int idSoundReverb::EffectForArea(")
+    require(area.index('va( "%d", area )') < area.index("AreaLocation( area )") < area.index('FindEffect( "default" )'),
+            "Prey's area effect: area number, then location, then default", failures)
+    require("!idStr::Icmp( effects[i].name, name )" in body(reverb, "int idSoundReverb::FindEffect("),
+            "PREY.exe finds effects ignoring case", failures)
     spatialize = body(emitter, "void idSoundEmitterLocal::Update(")
     require(spatialize.index("lastValidPortalArea = soundInArea;") < spatialize.index("if( ( useOcclusion || globalOcclusion ) && s_useOcclusion.GetBool() )"),
             "every emitter in range tracks its area, independent of occlusion", failures)

@@ -935,6 +935,13 @@ void idSoundSystemLocal::Render()
 	SyncVolumeCompatibilityCVars();
 	SoundVoiceChat_Render();
 
+	// Envelope jobs of tracks loaded outside a level load (LoadSampleOutsideLevelLoad):
+	// join each once its worker is done, device or not. A level load joins its own.
+	if( !insideLevelLoad && decodingSamples.Num() > 0 )
+	{
+		FinishSampleDecodes( false );
+	}
+
 	if( s_noSound.GetBool() )
 	{
 		Sound_UpdateControllerRumble( 0.0f );
@@ -1535,7 +1542,7 @@ idSoundSample* idSoundSystemLocal::LoadSample( const char* name )
 				}
 				else
 				{
-					samples[i]->LoadResource();
+					LoadSampleOutsideLevelLoad( samples[i] );
 				}
 			}
 			return samples[i];
@@ -1552,7 +1559,7 @@ idSoundSample* idSoundSystemLocal::LoadSample( const char* name )
 	if( !insideLevelLoad )
 	{
 		sample->SetNeverPurge();
-		sample->LoadResource();
+		LoadSampleOutsideLevelLoad( sample );
 	}
 	else
 	{
@@ -1571,6 +1578,24 @@ idSoundSample* idSoundSystemLocal::LoadSample( const char* name )
 	}
 
 	return sample;
+}
+
+/*
+========================
+idSoundSystemLocal::LoadSampleOutsideLevelLoad
+
+Loads a sample the menus or a running level reference at once, as before, except
+that a streamed track's amplitude envelope builds on a job worker (see
+idSoundSample_OpenAL::LoadResourceDeferringEnvelope). Render joins the job.
+========================
+*/
+void idSoundSystemLocal::LoadSampleOutsideLevelLoad( idSoundSample* sample )
+{
+	sample->LoadResourceDeferringEnvelope();
+	if( sample->IsDecoding() )
+	{
+		decodingSamples.Append( sample );
+	}
 }
 
 /*
@@ -2723,14 +2748,16 @@ bool idSoundReverb::SetReverb( int area, const char* reverbName, const char* fil
 ========================
 idSoundReverb::FindEffect
 
-Retail idEFXFile::FindEffect: the first effect with exactly this name.
+Retail idEFXFile::FindEffect: the first effect with this name. Quake4.exe
+compares exactly; PREY.exe 1.4 ignores case, which its tables rely on: the
+location "Biolabs_CreatureXSighting" plays "biolabs_creaturexsighting".
 ========================
 */
 int idSoundReverb::FindEffect( const char* name ) const
 {
 	for( int i = 0; i < effects.Num(); i++ )
 	{
-		if( !idStr::Cmp( effects[i].name, name ) )
+		if( !idStr::Icmp( effects[i].name, name ) )
 		{
 			return i;
 		}
@@ -2740,17 +2767,53 @@ int idSoundReverb::FindEffect( const char* name ) const
 
 /*
 ========================
+idSoundReverb::AreaLocation
+
+The location the game registered for an area of the game sound world
+(idGameLocal::RegisterLocationsWithSoundWorld), "" when none.
+========================
+*/
+const char* idSoundReverb::AreaLocation( int area )
+{
+	if( session == NULL || session->sw == NULL )
+	{
+		return "";
+	}
+	return static_cast<const idSoundWorldLocal*>( session->sw )->AreaLocation( area );
+}
+
+/*
+========================
 idSoundReverb::EffectForArea
 
-The effect a slot plays for an area: the area's preset looked up by name, as
-retail does, else an effect named "default".
+The effect a slot plays for an area. A maps/<map>.reverb table (Quake 4 data)
+names the area's preset. Without one, PREY.exe 1.4 asks the map's efx for the
+area number, then for the area's location name, then for "default"; Prey ships
+per-map efxs/<map>.efx files of location-named reverbs and no tables. An area
+that none of them names gets no slot.
 ========================
 */
 int idSoundReverb::EffectForArea( void* context, int area )
 {
 	const idSoundReverb* reverb = static_cast<const idSoundReverb*>( context );
-	const char* name = reverb->GetReverbName( reverb->GetReverb( area ) );
-	int effect = reverb->FindEffect( name != NULL ? name : "" );
+	int effect = -1;
+	if( reverb->reverbFileName.Length() > 0 )
+	{
+		const char* name = reverb->GetReverbName( reverb->GetReverb( area ) );
+		effect = reverb->FindEffect( name != NULL ? name : "" );
+	}
+	else
+	{
+		effect = reverb->FindEffect( va( "%d", area ) );
+		if( effect < 0 )
+		{
+			const char* location = AreaLocation( area );
+			if( location[0] != 0 )
+			{
+				effect = reverb->FindEffect( location );
+			}
+		}
+	}
 	if( effect < 0 )
 	{
 		effect = reverb->FindEffect( "default" );
@@ -2929,14 +2992,23 @@ void idSoundReverb::PrintInfo() const
 	}
 	else
 	{
-		common->Printf( "Area reverbs: no table for this map, %d areas use reverb 0\n", areaReverbs.Num() );
+		common->Printf( "Area reverbs: by area number, location, then \"default\", %d areas\n", areaReverbs.Num() );
+	}
+	int unnamed = 0;
+	for( int area = 0; area < areaReverbs.Num(); area++ )
+	{
+		unnamed += EffectForArea( const_cast<idSoundReverb*>( this ), area ) < 0 ? 1 : 0;
+	}
+	if( unnamed > 0 )
+	{
+		common->Printf( "  %-16s %d areas\n", "(no reverb)", unnamed );
 	}
 	for( int i = 0; i < effects.Num(); i++ )
 	{
 		int count = 0;
 		for( int area = 0; area < areaReverbs.Num(); area++ )
 		{
-			count += ( areaReverbs[area] == i ) ? 1 : 0;
+			count += ( EffectForArea( const_cast<idSoundReverb*>( this ), area ) == i ) ? 1 : 0;
 		}
 		if( count > 0 )
 		{

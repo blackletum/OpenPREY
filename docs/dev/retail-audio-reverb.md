@@ -202,6 +202,59 @@ listener alone.
   Doom 3's enviro-suit software effect (`DoEnviroSuit`), which Quake 4 never turns on; they play
   no part in the room reverb.
 
+## Retail Prey (PREY.exe 1.4)
+
+openPR06 keeps the Quake 4 reverb above and applies retail PREY's rules on top of it. They were
+read from retail `PREY.exe` 1.4 (x86, image base `0x400000`) with capstone, on 25 November 2026.
+Addresses below are that build's.
+
+- **Data.** Prey ships one `efxs/<map>.efx` per single-player map (22 files in `pak_data.pk4`)
+  and no `maps/*.reverb` tables or `efxs/default.efx`. Retail `EndLevelLoad` (`0x50c6f0`) loads
+  only the map's file. Most files name their reverbs after the map's locations
+  (`roadhouse womens bathroom`, `biolabs_carouselroom`, `dw_deathwalk`). `feedingtowerb.efx`
+  names them after area numbers (`0`, `2`, `3`...).
+- **Effect per area.** Prey's slot planner gathers the same four slots as Quake 4's (`0x5127d0`).
+  It looks up each area's effect by the area number printed with `%d`, then by the location the
+  game registered for the area (`RegisterLocation`, from `info_location` names), then by
+  `default` (`0x51337a`-`0x513464`). `idEFXFile::FindEffect` (`0x504940`) ignores case, so the
+  location `Biolabs_CreatureXSighting` plays `biolabs_creaturexsighting`. Before this change
+  every Prey area played `default`, because no table existed and the locations were never read.
+  A `.reverb` table, if a mod ships one, still takes precedence. `listReverbs` counts the areas
+  per effect.
+- **Loaded games.** Retail's game registers locations only when a new map spawns, so a loaded
+  game played every room with `default`. openPR06 registers them again after a savegame loads.
+- **Room levels** (`0x5121aa`). `noreverb` (retail flag `0x1000`) sets the source's room level to
+  -10000 mB; openPR06 already gave it no send. `SC_VOICE` and `SC_VOICEDUCKER` lines get
+  -600 mB (`SOUND_REVERB_ROOM_VOICE_CLASS_MB`). Prey has no radio rule. Its channel 10 is
+  `SND_CHANNEL_LANDING`, so the Quake 4 radio channel is switched off. Before this, the player's
+  landing sounds lost their reverb and took the centre speaker.
+- **Occlusion** (`0x5120d4`). Retail adds the following per mono source, only while
+  `s_useOcclusion` is on:
+  - `s_lowPassPortals` (-1500 mB) for each blocking portal, unless the shader has `no_occlusion`.
+  - `s_lowPassSpirit` (-3000 mB) while the spirit-walk flag is set, for normal-class (`SC_NORMAL`)
+    sounds. This applies whatever the shader flags.
+  - -1150 mB while the enviro suit is on, which Prey's game never turns on.
+
+  `SetSpiritWalkEffect` (vtable slot 29, `0x50e990`) sets the spirit-walk flag.
+  `idGameLocal::SpiritWalkSoundMode` pairs it with an -8 dB fade of the normal class. The flag is
+  not saved; the game sets it again after a load. The total is clamped to -10000 mB, the range of
+  `EAXSOURCE_OCCLUSION`.
+- **Game portals** (`ResolveOrigin`, `0x50eac0`). A portal with `PS_BLOCK_SOUND` carries no
+  sound. Sound does travel through a Prey game portal. The game portal counts as a closed door
+  (`s_doorDistanceAdd`, one more occluding portal), and the sound continues from the portal's
+  destination point. The exception is an emitter that plays a `noportalflow` shader
+  (`idSoundEmitterLocal` vtable slot 14, `0x505b50`), such as `objectportal`'s hum.
+  `hhArtificialPortal` opens and closes portals to sound with `openSound`. Unlike retail, openPR06 does not trace a game portal that leads back into its own area, such as `feedingtowerb`'s glow portals. Retail traced such a portal down to the depth limit, which only adds longer paths through the area's own portals. openPR06 had skipped
+  game portals entirely and ignored `PS_BLOCK_SOUND`.
+- **Shader flags.** `omniwhenclose` (`0x800`) plays unpositioned only while the listener is
+  inside the sound's `minDistance` (`0x5119fc`). openPR06 had mapped it to `omnidirectional`, so
+  126 stock shaders lost their direction at any distance. `noportalflow` (`0x2000`) is its own
+  flag, `SSF_NO_PORTAL_FLOW`, no longer an alias of `no_occlusion`.
+- **Distance.** Retail's falloff is `1 - (d - min) / (max - min)`, squared when
+  `s_quadraticFalloff` is on (`0x5119c9`). Retail PREY defaults it to 1 (Quake 4 1.4.2: 0), so
+  openPR06 does too. openQ4's one-time audio migration no longer moves it to 0.
+- `s_showVoices` prints each voice's EAX room and occlusion (`room -600 occl -3000`).
+
 ## Verification
 
 - `tools/tests/native/SoundReverbCoreTest.cpp` (`openq4-sound-reverb-core`): the conversion
@@ -212,6 +265,14 @@ listener alone.
   mutant, and a new mutant proves that disabling EFX releases the area slots.
 - `tools/tests/sound_retail_reverb_contract.py` pins the retail constants, file names, messages
   and cvars in the engine sources.
+- The same contract pins the PREY.exe rules above: the area-number/location/`default` lookup, the
+  case-insensitive effect search, the voice-class room level, the spirit and portal low-pass
+  cvars, `PS_BLOCK_SOUND`, game-portal flow, `noportalflow` and `omniwhenclose`.
+- 25 November 2026, `builddir` client on OpenAL Soft's wave backend: in `game/roadhouse`
+  (`g_casino 1`), the men's and women's bathrooms took their own reverbs as the listener entered
+  them. `spiritwalkmode 1` gave every normal-class mono voice `occl -3000` and -8 dB, left the
+  score untouched, and lifted with `spiritwalkmode 0`. `game/feedingtowerb` resolved 41 of its 58
+  areas to their area-number reverbs.
 - In game, `s_showReverb 1` and `listReverbs` show the tables loading without warnings on every
   stock map and the slots following the listener.
 - Impulse responses rendered by OpenAL Soft's wave writer on `airdefense1`, one blaster shot with

@@ -784,6 +784,7 @@ idSoundSample_OpenAL::idSoundSample_OpenAL
 idSoundSample_OpenAL::idSoundSample_OpenAL()
 {
 	pendingDecode = NULL;
+	deferStreamEnvelope = false;
 	timestamp = FILE_NOT_FOUND_TIMESTAMP;
 	loaded = false;
 	neverPurge = false;
@@ -2268,8 +2269,16 @@ bool idSoundSample_OpenAL::BeginOggLoad( const idStr& filename, idSoundSampleDec
 		if( known && channels >= 1 && channels <= 2 && rate >= 8000 && rate <= 192000 &&
 			decodedBytes > static_cast<uint64>( s_streamThresholdKB.GetInteger() ) * 1024 ) {
 			timestamp = fileIn->Timestamp();
-			const bool streamed = BeginOggStreamEnvelope( filename, fileIn, channels, rate, frames, asyncDecode ) || LoadOggStream( filename );
+			// LoadResourceDeferringEnvelope: the envelope job of a track a menu or
+			// a mid-level script references, joined by the sound system's frame.
+			idSoundSampleDecode* envelopeDecode = NULL;
+			idSoundSampleDecode** envelopeJob = asyncDecode != NULL ? asyncDecode : ( deferStreamEnvelope ? &envelopeDecode : NULL );
+			const bool streamed = BeginOggStreamEnvelope( filename, fileIn, channels, rate, frames, envelopeJob ) || LoadOggStream( filename );
 			if( streamed ) {
+				if( envelopeDecode != NULL ) {
+					pendingDecode = envelopeDecode;
+					pendingDecodeName = filename;
+				}
 				if( fileData != NULL ) FreeBuffer( fileData );
 				return true;
 			}
@@ -2593,6 +2602,28 @@ void idSoundSample_OpenAL::LoadResourceAsync()
 	}
 	pendingDecode = decode;
 	pendingDecodeName = oggName;
+}
+
+/*
+========================
+idSoundSample_OpenAL::LoadResourceDeferringEnvelope
+
+LoadResource for a sample referenced outside a level load (the menus, a sound
+a script reaches for mid-level). Everything loads here as before, except the
+60 Hz envelope of a streamed track: that full pass over the file decoded
+prey_overture.ogg on the main thread at every start, about a third of a second
+of the main-menu precache (issue #61). It builds on a job worker instead, as it
+does for a level load. The track streams from its file meanwhile, so it plays
+and starts exactly as before; only its amplitude (lip sync, shakes, sound-driven
+lights) reads silent until the job is done. The sound system joins the job from
+its frame (idSoundSystemLocal::Render) once the worker has finished.
+========================
+*/
+void idSoundSample_OpenAL::LoadResourceDeferringEnvelope()
+{
+	deferStreamEnvelope = s_asyncSampleDecode.GetBool();
+	LoadResource();
+	deferStreamEnvelope = false;
 }
 
 /*

@@ -797,7 +797,8 @@ into the new bodies.
   `SOUND_MAX_CLASSES=5`); map upstream's `SOUND_CLASS_MUSICAL=3` usage
   (`SoundUsesMusicVolume`) onto the Prey numbering — one definition site, engine+game
   agree (ABI rule 4); symbolic token parsing (SC_NORMAL…SC_MUSIC).
-- Token aliases: noPortalFlow→SSF_NO_OCCLUSION, omniwhenclose→SSF_OMNIDIRECTIONAL,
+- Prey tokens: noPortalFlow→SSF_NO_PORTAL_FLOW, omniwhenclose→SSF_OMNI_WHEN_CLOSE
+  (their own retail flags since 2026-11-25; see `docs/dev/retail-audio-reverb.md`),
   noreverb metadata, legacy `if` skipped, jawflap→SSF_VOICEAMPLITUDE (=upstream
   SSF_VO BIT(22) — set alias accordingly).
 
@@ -813,8 +814,8 @@ OpenAL voice has no VU meter and its `GetAmplitude()` is a constant 1, which hel
 jaw-flapping mouth open and brow lowered for the whole line),
 `CurrentShakeAmplitudeForPosition`, `PlaceListener(..., areaName)` +
 `RegisterLocation/ClearAreaLocations` (sound-area names feed WP4.1's sound-area
-virtuals — engine-side storage), SetSpiritWalkEffect/SetVoiceDucker no-ops for now
-(retail DSP effects are a later parity project — note in TODO).
+virtuals — engine-side storage; since 2026-11-25 they also pick each area's reverb),
+SetSpiritWalkEffect/SetVoiceDucker (both follow retail PREY.exe since November 2026).
 
 ### WP5.6 — focus mute wiring (FW-26 + sound-04)
 
@@ -1188,7 +1189,7 @@ The mirror clip-plane workaround remains active and tracked in
 | ui-02 spline text under TTF | Resolved: the effect draws with TTF glyphs and `r_useTrueTypeFonts=1` is the default (D10); awaiting a runtime capture, since no shipped GUI enables `splineIn` |
 | ModernGL / Vulkan Prey feature parity | D2; renderer-vk stubs from WP4.1 |
 | Nested BSE `SEG_EFFECT` spawning | D3; add a Prey-v7-compatible callback/spawn path and stock-FX runtime capture before enabling |
-| SetSpiritWalkEffect DSP | WP5.5 no-op; TODO (SetVoiceDucker follows retail since 2026-11-22) |
+| SetSpiritWalkEffect DSP | Retail spirit-walk low-pass since 2026-11-25 (SetVoiceDucker follows retail since 2026-11-22) |
 | Classic-layout PK4 checksums | WP6.1; docs TODO |
 | Mirror clip plane retail math | `references/retail_mirror_clip_parity_plan.md` |
 | ARM64/macOS/signing/manual-publish release lanes | Rebuild false-gated inherited lanes around `OpenPrey-game`, `basepr`, the unified module, and openPR06 release identities |

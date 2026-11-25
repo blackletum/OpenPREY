@@ -1679,6 +1679,17 @@ bool idGameLocal::InitFromSaveGame( const char *mapName, idRenderWorld *renderWo
 
 	savegame.RestoreObjects();
 
+	// OPENPR06: the sound world keeps neither its area locations nor the spirit-walk low-pass
+	// in the savegame, and LoadMap cleared both. Retail registered locations only for a new
+	// map, so a loaded game played every room with the efx's "default" reverb.
+	RegisterLocationsWithSoundWorld();
+	if ( gameSoundWorld ) {
+		idPlayer *localPlayer = GetLocalPlayer();
+		const bool ethereal = localPlayer != NULL && localPlayer->IsType( hhPlayer::Type ) &&
+			static_cast<hhPlayer *>( localPlayer )->IsSpiritOrDeathwalking();
+		gameSoundWorld->SetSpiritWalkEffect( ethereal );
+	}
+
 	mpGame.Reset();
 
 	mpGame.Precache();
