@@ -316,7 +316,8 @@ AUDIO = [
         slider("s_dialogueVolume", "#str_122200", 0, 1, 0.05),
         toggle("g_levelloadmusic", "#str_20315"),
         heading("#str_122201"),
-        verb("s_useOpenAL", "#str_20312", choices="#str_20313", values=["0", "1"]),
+        # No Sound System row: openPR06 builds OpenAL only, so the stock row
+        # would always be dimmed (mixeroption 0) with nothing to choose.
         either(("software", verb("s_numberOfSpeakers", "#str_20317", choices="#str_122215", values=["0", "2", "6"])),
                ("openal", verb("s_deviceName", "#str_20321"))),
         either(("software", toggle("s_reverse", "#str_20319")),

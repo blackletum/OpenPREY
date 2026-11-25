@@ -2193,7 +2193,7 @@ page up to 28.
 | | Quality | The Detect box, Quality Preset; Lighting: Use Shader Programs, Shader Detail, Enable Shadows, Shadow Maps, Shadow Map Size and Shadow Filtering (new) | Surfaces: Enable Specular, Enable Bump Maps, High Quality Specular, Sharpen Bumpmaps, Use Glow, Image Anisotropy, Soft Particles (new), High Quality Skinning |
 | | Post FX | Anti-Aliasing: MSAA Samples, MSAA Alpha Coverage, Post Anti-Aliasing, Temporal AA (new); Ambient Occlusion: SSAO, SSAO Radius, SSAO Intensity | Bloom and HDR: Bloom, Bloom Intensity, Bloom Radius, Bloom Threshold (new), HDR Tone Mapping, HDR Exposure, HDR White Point, Color Saturation, Color Contrast |
 | | Advanced FX | Motion Blur: Motion Blur, Motion Blur Strength (new); CRT Monitor: CRT Monitor, CRT Strength, Chromatic Aberration | Glow: Glow Strength (new); Depth of Field (new): Depth of Field, Blur Strength |
-| Audio | — | Volume: Effect Volume, Music Volume, Dialogue Volume (new), Level Load Music; Output: Sound System, Speaker Setup or Sound Device, Reverse Channels or EAX | 3D Audio (new): Occlusion, Air Absorption, Output Limiter, Mute When Unfocused |
+| Audio | — | Volume: Effect Volume, Music Volume, Dialogue Volume (new), Level Load Music; Output: Speaker Setup or Sound Device, Reverse Channels or EAX | 3D Audio (new): Occlusion, Air Absorption, Output Limiter, Mute When Unfocused |
 
 The stock Controls page's Help row is left out: its `togglehelp` command is
 not registered and Prey's in-game help screen is not loaded. Left out on
@@ -2291,8 +2291,8 @@ remastered-HUD settings, which no Prey HUD document reads yet, and HRTF
     stock `volumeslider` does (`6 log2 v`, silence at 0). The effect slider
     plays `guisounds_menu_volumetick`. Dialogue Volume sets
     `s_dialogueVolume` directly.
-  - *Rows the sound system acts on.* Sound System, Speaker Setup, Sound Device
-    and EAX send the session a verb with their value; it sets what the stock
+  - *Rows the sound system acts on.* Speaker Setup, Sound Device and EAX
+    send the session a verb with their value; it sets what the stock
     control sets and runs the stock control's own `sound` command, which
     restarts the sound system where the stock page does and may answer with
     the stock message box. Speaker Setup offers Automatic (the device's own
@@ -2303,8 +2303,9 @@ remastered-HUD settings, which no Prey HUD document reads yet, and HRTF
   - *What shows and what dims.* The software-mixing rows (Speaker Setup,
     Reverse Channels) and the OpenAL rows (Sound Device, EAX) share two
     slots: the first pair shows while OpenAL is off, the second while it is
-    on. Sound System is drawn at 0.40 and takes no input unless a mixer
-    choice is offered, and EAX likewise unless the device supports it. The
+    on. EAX is drawn at 0.40 and takes no input unless the device supports
+    it. The stock Sound System row is left out: openPR06 builds OpenAL only,
+    so the stock page would always show it dimmed with nothing to choose. The
     EAX mark shows at the page's trailing foot while EAX is in use.
 - **Reset Defaults.** Reset to defaults on the bottom bar, or the north face
   button, opens the stock dialog, rebuilt from the stock overlay
@@ -3268,7 +3269,6 @@ carries their summaries.
 
 ## Appendix D. Change record
 
-### Version 1.31, 23 November 2026
 ### Version 1.32, 25 November 2026
 
 - Section 12.1: the weapon wheel, Prey's weapon bar bent round a ring, with
@@ -3276,6 +3276,7 @@ carries their summaries.
 - Section 12.5: the Controls page's Weapon Wheel binding and the HUD page's
   Weapon Wheel rows.
 
+### Version 1.31, 23 November 2026
 
 - Section 10.6: the multiplayer UI at openPR06's 32 players. The scoreboard
   keeps the stock board up to eight a list, then tightens to compact 13 u

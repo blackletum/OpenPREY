@@ -1091,7 +1091,6 @@
   "cv.r_depthOfFieldRadius": {"type": "number", "initial": 0, "cvar": "r_depthOfFieldRadius"},
   "cv.s_dialogueVolume": {"type": "number", "initial": 0, "cvar": "s_dialogueVolume"},
   "cv.g_levelloadmusic": {"type": "boolean", "initial": false, "cvar": "g_levelloadmusic"},
-  "cv.s_useOpenAL": {"type": "boolean", "initial": false, "cvar": "s_useOpenAL"},
   "cv.s_numberOfSpeakers": {"type": "number", "initial": 0, "cvar": "s_numberOfSpeakers"},
   "cv.s_reverse": {"type": "boolean", "initial": false, "cvar": "s_reverse"},
   "cv.s_useEAXReverb": {"type": "boolean", "initial": false, "cvar": "s_useEAXReverb"},
@@ -1764,11 +1763,6 @@
    "input": "boolean",
    "operation": "settings.player.set",
    "arguments": {"cvar": "g_levelloadmusic", "value": {"input": "value"}}
-  },
-  "audioBackend": {
-   "input": "boolean",
-   "operation": "session.menuValue",
-   "arguments": {"command": "audioBackend", "value": {"input": "value"}}
   },
   "audioSpeakers": {
    "input": "number",
@@ -58295,18 +58289,6 @@
    }
   },
   {
-   "id": "opt_s_useopenal.enabled",
-   "node": "opt_s_useopenal",
-   "property": "enabled",
-   "value": {"op": "!=", "args": [{"state": "mixeroption"}, 0]}
-  },
-  {
-   "id": "opt_s_useopenal.opacity",
-   "node": "opt_s_useopenal",
-   "property": "opacity",
-   "value": {"op": "select", "args": [{"op": "!=", "args": [{"state": "mixeroption"}, 0]}, 1, 0.4]}
-  },
-  {
    "id": "opt_s_numberofspeakers.display",
    "node": "opt_s_numberofspeakers",
    "property": "display",
@@ -84091,101 +84073,6 @@
     },
     {
      "node": "opt_g_levelloadmusic-rim",
-     "property": "opacity",
-     "keys": [{"atMs": 0, "value": {"type": "number", "value": 0}}, {"atMs": 1, "value": {"type": "number", "value": 0}}]
-    }
-   ]
-  },
-  {
-   "id": "opt_s_useopenal.default",
-   "durationMs": 1,
-   "tracks": [
-    {
-     "node": "opt_s_useopenal-value",
-     "property": "color",
-     "keys": [
-      {"atMs": 0, "value": {"type": "color", "value": [0.7216, 0.7882, 0.902, 0.9]}},
-      {"atMs": 1, "value": {"type": "color", "value": [0.7216, 0.7882, 0.902, 0.9]}}
-     ]
-    },
-    {
-     "node": "opt_s_useopenal-rim",
-     "property": "opacity",
-     "keys": [{"atMs": 0, "value": {"type": "number", "value": 0}}, {"atMs": 1, "value": {"type": "number", "value": 0}}]
-    }
-   ]
-  },
-  {
-   "id": "opt_s_useopenal.hover",
-   "durationMs": 1,
-   "tracks": [
-    {
-     "node": "opt_s_useopenal-value",
-     "property": "color",
-     "keys": [
-      {"atMs": 0, "value": {"type": "color", "value": [1.0, 1.0, 1.0, 1.0]}},
-      {"atMs": 1, "value": {"type": "color", "value": [1.0, 1.0, 1.0, 1.0]}}
-     ]
-    },
-    {
-     "node": "opt_s_useopenal-rim",
-     "property": "opacity",
-     "keys": [{"atMs": 0, "value": {"type": "number", "value": 0}}, {"atMs": 1, "value": {"type": "number", "value": 0}}]
-    }
-   ]
-  },
-  {
-   "id": "opt_s_useopenal.focus",
-   "durationMs": 1,
-   "tracks": [
-    {
-     "node": "opt_s_useopenal-value",
-     "property": "color",
-     "keys": [
-      {"atMs": 0, "value": {"type": "color", "value": [1.0, 1.0, 1.0, 1.0]}},
-      {"atMs": 1, "value": {"type": "color", "value": [1.0, 1.0, 1.0, 1.0]}}
-     ]
-    },
-    {
-     "node": "opt_s_useopenal-rim",
-     "property": "opacity",
-     "keys": [{"atMs": 0, "value": {"type": "number", "value": 1}}, {"atMs": 1, "value": {"type": "number", "value": 1}}]
-    }
-   ]
-  },
-  {
-   "id": "opt_s_useopenal.pressed",
-   "durationMs": 60,
-   "tracks": [
-    {
-     "node": "opt_s_useopenal-value",
-     "property": "color",
-     "keys": [
-      {"atMs": 0, "value": {"type": "color", "value": [1.0, 1.0, 1.0, 1.0]}},
-      {"atMs": 60, "value": {"type": "color", "value": [1.0, 1.0, 1.0, 1.0]}}
-     ]
-    },
-    {
-     "node": "opt_s_useopenal-rim",
-     "property": "opacity",
-     "keys": [{"atMs": 0, "value": {"type": "number", "value": 1}}, {"atMs": 60, "value": {"type": "number", "value": 1}}]
-    }
-   ]
-  },
-  {
-   "id": "opt_s_useopenal.disabled",
-   "durationMs": 1,
-   "tracks": [
-    {
-     "node": "opt_s_useopenal-value",
-     "property": "color",
-     "keys": [
-      {"atMs": 0, "value": {"type": "color", "value": [0.7216, 0.7882, 0.902, 0.4]}},
-      {"atMs": 1, "value": {"type": "color", "value": [0.7216, 0.7882, 0.902, 0.4]}}
-     ]
-    },
-    {
-     "node": "opt_s_useopenal-rim",
      "property": "opacity",
      "keys": [{"atMs": 0, "value": {"type": "number", "value": 0}}, {"atMs": 1, "value": {"type": "number", "value": 0}}]
     }
@@ -194834,12 +194721,7 @@
                 "lineStep": 27.0,
                 "minimumThumb": 24
                },
-               "navigation": {
-                "up": "opt_s_dialoguevolume",
-                "down": "opt_s_useopenal",
-                "left": "opt_g_levelloadmusic",
-                "right": "opt_s_muteunfocused"
-               }
+               "navigation": {"up": "opt_s_dialoguevolume", "left": "opt_g_levelloadmusic", "right": "opt_s_muteunfocused"}
               }
              },
              {
@@ -194908,410 +194790,12 @@
               ]
              },
              {
-              "id": "opt_s_useopenal",
-              "type": "group",
-              "properties": {
-               "position": {"type": "keyword", "value": "absolute"},
-               "left": {"type": "length", "value": 49.5, "unit": "dp"},
-               "top": {"type": "length", "value": 312.0, "unit": "dp"},
-               "width": {"type": "length", "value": 408.0, "unit": "dp"},
-               "height": {"type": "length", "value": 31.5, "unit": "dp"},
-               "opacity": {"type": "number", "value": 1}
-              },
-              "children": [
-               {
-                "id": "opt_s_useopenal-plate",
-                "type": "vector",
-                "properties": {
-                 "position": {"type": "keyword", "value": "absolute"},
-                 "left": {"type": "length", "value": 0.0, "unit": "dp"},
-                 "top": {"type": "length", "value": 0.0, "unit": "dp"},
-                 "width": {"type": "length", "value": 408.0, "unit": "dp"},
-                 "height": {"type": "length", "value": 31.5, "unit": "dp"},
-                 "pointer-events": {"type": "keyword", "value": "none"}
-                },
-                "paths": [
-                 {
-                  "id": "plate",
-                  "commands": [
-                   {"id": "p0", "op": "move", "points": [[0.945, 0.75]]},
-                   {"id": "p1", "op": "line", "points": [[395.4, 0.75]]},
-                   {"id": "p2", "op": "cubic", "points": [[402.015, 0.75], [404.22, 14.175], [404.062, 30.75]]},
-                   {"id": "p3", "op": "line", "points": [[10.238, 30.75]]},
-                   {"id": "p4", "op": "close"}
-                  ],
-                  "fill": {
-                   "type": "linear",
-                   "from": [0, 0],
-                   "to": [408.0, 0],
-                   "stops": [
-                    {"at": 0, "color": {"type": "color", "value": [0.3294, 0.3961, 0.4745, 0.77]}},
-                    {"at": 1, "color": {"type": "color", "value": [0.3294, 0.3961, 0.4745, 0.06]}}
-                   ]
-                  },
-                  "stroke": {
-                   "paint": {"type": "solid", "color": {"type": "color", "value": [0.3294, 0.3961, 0.4745, 1.0]}},
-                   "widthDp": 1.5,
-                   "minimumPixels": 1,
-                   "join": "round",
-                   "cap": "butt"
-                  }
-                 }
-                ]
-               },
-               {
-                "id": "opt_s_useopenal-rim",
-                "type": "vector",
-                "properties": {
-                 "position": {"type": "keyword", "value": "absolute"},
-                 "left": {"type": "length", "value": 0.0, "unit": "dp"},
-                 "top": {"type": "length", "value": 0.0, "unit": "dp"},
-                 "width": {"type": "length", "value": 408.0, "unit": "dp"},
-                 "height": {"type": "length", "value": 31.5, "unit": "dp"},
-                 "pointer-events": {"type": "keyword", "value": "none"},
-                 "opacity": {"type": "number", "value": 0}
-                },
-                "paths": [
-                 {
-                  "id": "rim",
-                  "commands": [
-                   {"id": "p0", "op": "move", "points": [[0.945, 0.75]]},
-                   {"id": "p1", "op": "line", "points": [[395.4, 0.75]]},
-                   {"id": "p2", "op": "cubic", "points": [[402.015, 0.75], [404.22, 14.175], [404.062, 30.75]]},
-                   {"id": "p3", "op": "line", "points": [[10.238, 30.75]]},
-                   {"id": "p4", "op": "close"}
-                  ],
-                  "stroke": {
-                   "paint": {"type": "solid", "color": {"type": "color", "value": [0.702, 0.7765, 0.8863, 1.0]}},
-                   "widthDp": 2.25,
-                   "minimumPixels": 1,
-                   "join": "round",
-                   "cap": "butt"
-                  }
-                 }
-                ]
-               },
-               {
-                "id": "opt_s_useopenal-label-shadow",
-                "type": "text",
-                "properties": {
-                 "text": {"type": "text", "value": "#str_20312"},
-                 "position": {"type": "keyword", "value": "absolute"},
-                 "left": {"type": "length", "value": 16.5, "unit": "dp"},
-                 "top": {"type": "length", "value": 0.492, "unit": "dp"},
-                 "width": {"type": "length", "value": 214.5, "unit": "dp"},
-                 "height": {"type": "length", "value": 31.5, "unit": "dp"},
-                 "font-family": {"type": "font", "value": "chain"},
-                 "font-size": {"type": "length", "value": 21.37, "unit": "dp"},
-                 "line-height": {"type": "length", "value": 31.5, "unit": "dp"},
-                 "text-align": {"type": "keyword", "value": "left"},
-                 "white-space": {"type": "keyword", "value": "nowrap"},
-                 "pointer-events": {"type": "keyword", "value": "none"},
-                 "overflow": {"type": "keyword", "value": "hidden"},
-                 "text-overflow": {"type": "keyword", "value": "ellipsis"},
-                 "color": {"type": "color", "value": [0, 0, 0, 0.95]}
-                }
-               },
-               {
-                "id": "opt_s_useopenal-label",
-                "type": "text",
-                "properties": {
-                 "text": {"type": "text", "value": "#str_20312"},
-                 "position": {"type": "keyword", "value": "absolute"},
-                 "left": {"type": "length", "value": 15.0, "unit": "dp"},
-                 "top": {"type": "length", "value": -1.008, "unit": "dp"},
-                 "width": {"type": "length", "value": 214.5, "unit": "dp"},
-                 "height": {"type": "length", "value": 31.5, "unit": "dp"},
-                 "font-family": {"type": "font", "value": "chain"},
-                 "font-size": {"type": "length", "value": 21.37, "unit": "dp"},
-                 "line-height": {"type": "length", "value": 31.5, "unit": "dp"},
-                 "text-align": {"type": "keyword", "value": "left"},
-                 "white-space": {"type": "keyword", "value": "nowrap"},
-                 "pointer-events": {"type": "keyword", "value": "none"},
-                 "overflow": {"type": "keyword", "value": "hidden"},
-                 "text-overflow": {"type": "keyword", "value": "ellipsis"},
-                 "color": {"type": "color", "value": [1.0, 1.0, 1.0, 0.9]}
-                }
-               },
-               {
-                "id": "opt_s_useopenal-value",
-                "type": "text",
-                "properties": {
-                 "text": {"type": "text", "value": "#str_20128"},
-                 "position": {"type": "keyword", "value": "absolute"},
-                 "left": {"type": "length", "value": 232.5, "unit": "dp"},
-                 "top": {"type": "length", "value": 1.992, "unit": "dp"},
-                 "width": {"type": "length", "value": 157.5, "unit": "dp"},
-                 "height": {"type": "length", "value": 25.5, "unit": "dp"},
-                 "font-family": {"type": "font", "value": "chain"},
-                 "font-size": {"type": "length", "value": 21.37, "unit": "dp"},
-                 "line-height": {"type": "length", "value": 25.5, "unit": "dp"},
-                 "text-align": {"type": "keyword", "value": "center"},
-                 "white-space": {"type": "keyword", "value": "nowrap"},
-                 "pointer-events": {"type": "keyword", "value": "none"},
-                 "overflow": {"type": "keyword", "value": "hidden"},
-                 "text-overflow": {"type": "keyword", "value": "ellipsis"},
-                 "color": {"type": "color", "value": [0.7216, 0.7882, 0.902, 0.9]}
-                }
-               },
-               {
-                "id": "opt_s_useopenal-popup",
-                "type": "group",
-                "properties": {
-                 "position": {"type": "keyword", "value": "absolute"},
-                 "left": {"type": "length", "value": 0.0, "unit": "dp"},
-                 "top": {"type": "length", "value": 31.5, "unit": "dp"},
-                 "width": {"type": "length", "value": 408.0, "unit": "dp"},
-                 "height": {"type": "length", "value": 57.0, "unit": "dp"},
-                 "display": {"type": "keyword", "value": "none"},
-                 "background-color": {"type": "color", "value": [0, 0, 0, 0.96]},
-                 "border-width": {"type": "length", "value": 1.5, "unit": "dp"},
-                 "border-color": {"type": "color", "value": [0.7412, 0.8118, 0.8784, 1.0]},
-                 "box-sizing": {"type": "keyword", "value": "border-box"}
-                },
-                "children": [
-                 {
-                  "id": "opt_s_useopenal-viewport",
-                  "type": "group",
-                  "properties": {
-                   "position": {"type": "keyword", "value": "relative"},
-                   "display": {"type": "keyword", "value": "block"},
-                   "width": {"type": "length", "value": 405.0, "unit": "dp"},
-                   "height": {"type": "length", "value": 54.0, "unit": "dp"},
-                   "margin-left": {"type": "length", "value": 1.5, "unit": "dp"},
-                   "margin-top": {"type": "length", "value": 1.5, "unit": "dp"}
-                  },
-                  "children": [
-                   {
-                    "id": "opt_s_useopenal-content",
-                    "type": "group",
-                    "properties": {
-                     "position": {"type": "keyword", "value": "absolute"},
-                     "left": {"type": "length", "value": 0, "unit": "dp"},
-                     "top": {"type": "length", "value": 0, "unit": "dp"},
-                     "width": {"type": "length", "value": 100, "unit": "%"}
-                    },
-                    "children": [
-                     {
-                      "id": "opt_s_useopenal-option-0",
-                      "type": "group",
-                      "properties": {
-                       "position": {"type": "keyword", "value": "relative"},
-                       "display": {"type": "keyword", "value": "block"},
-                       "width": {"type": "length", "value": 100, "unit": "%"},
-                       "height": {"type": "length", "value": 27.0, "unit": "dp"}
-                      },
-                      "children": [
-                       {
-                        "id": "opt_s_useopenal-option-0-selected",
-                        "type": "group",
-                        "properties": {
-                         "position": {"type": "keyword", "value": "absolute"},
-                         "left": {"type": "length", "value": 0, "unit": "dp"},
-                         "top": {"type": "length", "value": 0, "unit": "dp"},
-                         "width": {"type": "length", "value": 100, "unit": "%"},
-                         "height": {"type": "length", "value": 100, "unit": "%"},
-                         "display": {"type": "keyword", "value": "none"},
-                         "pointer-events": {"type": "keyword", "value": "none"},
-                         "border-width": {"type": "length", "value": 1.5, "unit": "dp"},
-                         "border-color": {"type": "color", "value": [0.7098, 0.7882, 0.8902, 0.7]},
-                         "box-sizing": {"type": "keyword", "value": "border-box"}
-                        }
-                       },
-                       {
-                        "id": "opt_s_useopenal-option-0-highlight",
-                        "type": "group",
-                        "properties": {
-                         "position": {"type": "keyword", "value": "absolute"},
-                         "left": {"type": "length", "value": 0, "unit": "dp"},
-                         "top": {"type": "length", "value": 0, "unit": "dp"},
-                         "width": {"type": "length", "value": 100, "unit": "%"},
-                         "height": {"type": "length", "value": 100, "unit": "%"},
-                         "display": {"type": "keyword", "value": "none"},
-                         "pointer-events": {"type": "keyword", "value": "none"},
-                         "background-color": {"type": "color", "value": [0.651, 0.7294, 0.8314, 0.3]}
-                        }
-                       },
-                       {
-                        "id": "opt_s_useopenal-option-0-label",
-                        "type": "text",
-                        "properties": {
-                         "text": {"type": "text", "value": "#str_20313"},
-                         "position": {"type": "keyword", "value": "absolute"},
-                         "left": {"type": "length", "value": 232.5, "unit": "dp"},
-                         "top": {"type": "length", "value": -1.08, "unit": "dp"},
-                         "width": {"type": "length", "value": 157.5, "unit": "dp"},
-                         "height": {"type": "length", "value": 27.0, "unit": "dp"},
-                         "font-family": {"type": "font", "value": "chain"},
-                         "font-size": {"type": "length", "value": 22.896, "unit": "dp"},
-                         "line-height": {"type": "length", "value": 27.0, "unit": "dp"},
-                         "text-align": {"type": "keyword", "value": "center"},
-                         "white-space": {"type": "keyword", "value": "nowrap"},
-                         "pointer-events": {"type": "keyword", "value": "none"},
-                         "overflow": {"type": "keyword", "value": "hidden"},
-                         "text-overflow": {"type": "keyword", "value": "ellipsis"},
-                         "color": {"type": "color", "value": [0.7216, 0.7882, 0.902, 0.9]}
-                        }
-                       }
-                      ]
-                     },
-                     {
-                      "id": "opt_s_useopenal-option-1",
-                      "type": "group",
-                      "properties": {
-                       "position": {"type": "keyword", "value": "relative"},
-                       "display": {"type": "keyword", "value": "block"},
-                       "width": {"type": "length", "value": 100, "unit": "%"},
-                       "height": {"type": "length", "value": 27.0, "unit": "dp"}
-                      },
-                      "children": [
-                       {
-                        "id": "opt_s_useopenal-option-1-selected",
-                        "type": "group",
-                        "properties": {
-                         "position": {"type": "keyword", "value": "absolute"},
-                         "left": {"type": "length", "value": 0, "unit": "dp"},
-                         "top": {"type": "length", "value": 0, "unit": "dp"},
-                         "width": {"type": "length", "value": 100, "unit": "%"},
-                         "height": {"type": "length", "value": 100, "unit": "%"},
-                         "display": {"type": "keyword", "value": "none"},
-                         "pointer-events": {"type": "keyword", "value": "none"},
-                         "border-width": {"type": "length", "value": 1.5, "unit": "dp"},
-                         "border-color": {"type": "color", "value": [0.7098, 0.7882, 0.8902, 0.7]},
-                         "box-sizing": {"type": "keyword", "value": "border-box"}
-                        }
-                       },
-                       {
-                        "id": "opt_s_useopenal-option-1-highlight",
-                        "type": "group",
-                        "properties": {
-                         "position": {"type": "keyword", "value": "absolute"},
-                         "left": {"type": "length", "value": 0, "unit": "dp"},
-                         "top": {"type": "length", "value": 0, "unit": "dp"},
-                         "width": {"type": "length", "value": 100, "unit": "%"},
-                         "height": {"type": "length", "value": 100, "unit": "%"},
-                         "display": {"type": "keyword", "value": "none"},
-                         "pointer-events": {"type": "keyword", "value": "none"},
-                         "background-color": {"type": "color", "value": [0.651, 0.7294, 0.8314, 0.3]}
-                        }
-                       },
-                       {
-                        "id": "opt_s_useopenal-option-1-label",
-                        "type": "text",
-                        "properties": {
-                         "text": {"type": "text", "value": "#str_20313"},
-                         "position": {"type": "keyword", "value": "absolute"},
-                         "left": {"type": "length", "value": 232.5, "unit": "dp"},
-                         "top": {"type": "length", "value": -1.08, "unit": "dp"},
-                         "width": {"type": "length", "value": 157.5, "unit": "dp"},
-                         "height": {"type": "length", "value": 27.0, "unit": "dp"},
-                         "font-family": {"type": "font", "value": "chain"},
-                         "font-size": {"type": "length", "value": 22.896, "unit": "dp"},
-                         "line-height": {"type": "length", "value": 27.0, "unit": "dp"},
-                         "text-align": {"type": "keyword", "value": "center"},
-                         "white-space": {"type": "keyword", "value": "nowrap"},
-                         "pointer-events": {"type": "keyword", "value": "none"},
-                         "overflow": {"type": "keyword", "value": "hidden"},
-                         "text-overflow": {"type": "keyword", "value": "ellipsis"},
-                         "color": {"type": "color", "value": [0.7216, 0.7882, 0.902, 0.9]}
-                        }
-                       }
-                      ]
-                     }
-                    ]
-                   }
-                  ]
-                 },
-                 {
-                  "id": "opt_s_useopenal-scroll-track",
-                  "type": "group",
-                  "properties": {
-                   "position": {"type": "keyword", "value": "absolute"},
-                   "left": {"type": "length", "value": 403.5, "unit": "dp"},
-                   "top": {"type": "length", "value": 1.5, "unit": "dp"},
-                   "width": {"type": "length", "value": 3.0, "unit": "dp"},
-                   "height": {"type": "length", "value": 54.0, "unit": "dp"}
-                  },
-                  "children": [
-                   {
-                    "id": "opt_s_useopenal-scroll-thumb",
-                    "type": "group",
-                    "properties": {
-                     "position": {"type": "keyword", "value": "absolute"},
-                     "left": {"type": "length", "value": 0, "unit": "dp"},
-                     "top": {"type": "length", "value": 0, "unit": "dp"},
-                     "width": {"type": "length", "value": 3.0, "unit": "dp"},
-                     "height": {"type": "length", "value": 24, "unit": "dp"},
-                     "background-color": {"type": "color", "value": [0.7412, 0.8275, 0.9412, 0.85]}
-                    }
-                   }
-                  ]
-                 }
-                ]
-               }
-              ],
-              "control": {
-               "label": "#str_20312",
-               "action": "audioBackend",
-               "value": {"state": "cv.s_useOpenAL"},
-               "role": "choice",
-               "states": {
-                "default": "opt_s_useopenal.default",
-                "hover": "opt_s_useopenal.hover",
-                "focus": "opt_s_useopenal.focus",
-                "pressed": "opt_s_useopenal.pressed",
-                "disabled": "opt_s_useopenal.disabled"
-               },
-               "options": [
-                {
-                 "id": "opt_s_useopenal-option-0",
-                 "node": "opt_s_useopenal-option-0",
-                 "label": "#str_20313",
-                 "value": false,
-                 "parts": {
-                  "label": "opt_s_useopenal-option-0-label",
-                  "selected": "opt_s_useopenal-option-0-selected",
-                  "highlight": "opt_s_useopenal-option-0-highlight"
-                 },
-                 "labelIndex": 0
-                },
-                {
-                 "id": "opt_s_useopenal-option-1",
-                 "node": "opt_s_useopenal-option-1",
-                 "label": "#str_20313",
-                 "value": true,
-                 "parts": {
-                  "label": "opt_s_useopenal-option-1-label",
-                  "selected": "opt_s_useopenal-option-1-selected",
-                  "highlight": "opt_s_useopenal-option-1-highlight"
-                 },
-                 "labelIndex": 1
-                }
-               ],
-               "visibleRows": 2,
-               "placementBounds": "page-contents",
-               "parts": {
-                "popup": "opt_s_useopenal-popup",
-                "viewport": "opt_s_useopenal-viewport",
-                "content": "opt_s_useopenal-content",
-                "value": "opt_s_useopenal-value"
-               },
-               "scrollbar": {
-                "track": "opt_s_useopenal-scroll-track",
-                "thumb": "opt_s_useopenal-scroll-thumb",
-                "lineStep": 27.0,
-                "minimumThumb": 24
-               },
-               "navigation": {"up": "opt_g_levelloadmusic", "left": "opt_s_useopenal", "right": "opt_s_muteunfocused"}
-              }
-             },
-             {
               "id": "opt_s_numberofspeakers",
               "type": "group",
               "properties": {
                "position": {"type": "keyword", "value": "absolute"},
                "left": {"type": "length", "value": 49.5, "unit": "dp"},
-               "top": {"type": "length", "value": 348.0, "unit": "dp"},
+               "top": {"type": "length", "value": 312.0, "unit": "dp"},
                "width": {"type": "length", "value": 408.0, "unit": "dp"},
                "height": {"type": "length", "value": 31.5, "unit": "dp"},
                "opacity": {"type": "number", "value": 1},
@@ -195776,7 +195260,7 @@
                 "lineStep": 27.0,
                 "minimumThumb": 24
                },
-               "navigation": {"up": "opt_s_useopenal", "left": "opt_s_numberofspeakers", "right": "opt_s_muteunfocused"}
+               "navigation": {"up": "opt_g_levelloadmusic", "left": "opt_s_numberofspeakers", "right": "opt_s_muteunfocused"}
               }
              },
              {
@@ -195785,7 +195269,7 @@
               "properties": {
                "position": {"type": "keyword", "value": "absolute"},
                "left": {"type": "length", "value": 49.5, "unit": "dp"},
-               "top": {"type": "length", "value": 348.0, "unit": "dp"},
+               "top": {"type": "length", "value": 312.0, "unit": "dp"},
                "width": {"type": "length", "value": 408.0, "unit": "dp"},
                "height": {"type": "length", "value": 31.5, "unit": "dp"},
                "opacity": {"type": "number", "value": 1},
@@ -197210,7 +196694,7 @@
                 "minimumThumb": 24
                },
                "optionCount": {"state": "audio.device.count"},
-               "navigation": {"up": "opt_s_useopenal", "left": "opt_s_numberofspeakers", "right": "opt_s_muteunfocused"}
+               "navigation": {"up": "opt_g_levelloadmusic", "left": "opt_s_numberofspeakers", "right": "opt_s_muteunfocused"}
               }
              },
              {
@@ -197219,7 +196703,7 @@
               "properties": {
                "position": {"type": "keyword", "value": "absolute"},
                "left": {"type": "length", "value": 49.5, "unit": "dp"},
-               "top": {"type": "length", "value": 384.0, "unit": "dp"},
+               "top": {"type": "length", "value": 348.0, "unit": "dp"},
                "width": {"type": "length", "value": 408.0, "unit": "dp"},
                "height": {"type": "length", "value": 31.5, "unit": "dp"},
                "opacity": {"type": "number", "value": 1},
@@ -197618,7 +197102,7 @@
               "properties": {
                "position": {"type": "keyword", "value": "absolute"},
                "left": {"type": "length", "value": 49.5, "unit": "dp"},
-               "top": {"type": "length", "value": 384.0, "unit": "dp"},
+               "top": {"type": "length", "value": 348.0, "unit": "dp"},
                "width": {"type": "length", "value": 408.0, "unit": "dp"},
                "height": {"type": "length", "value": 31.5, "unit": "dp"},
                "opacity": {"type": "number", "value": 1},
