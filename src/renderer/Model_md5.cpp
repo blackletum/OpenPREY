@@ -1197,6 +1197,35 @@ bool idMD5Mesh::UpdateLod( const struct renderEntity_s *ent, const struct viewEn
 
 /*
 ====================
+R_PreyDeformScale
+
+Prey's game asks for a uniformly scaled model through the any-deform shader
+parms (idEntity::SetDeformation, the "scale" spawnarg): DEFORMTYPE_SCALE in
+SHADERPARM_ANY_DEFORM with the factor in SHADERPARM_ANY_DEFORM_PARM1. Retail
+scales the skinned positions about the model origin after the joint
+transform (PREY.exe 1.4 0x6b19e0, called from the MD5 surface update at
+0x4b3992) and skips factors <= 0 or exactly 1. The game already scales the
+entity bounds it hands the renderer (idAnimator::GetBounds), so a mesh drawn
+unscaled outgrows them: indoor droids (scale 0.7) lost their bodies to the
+entity scissor and outdoor ones (scale 2) drew at half size.
+====================
+*/
+static float R_PreyDeformScale( const struct renderEntity_s *ent ) {
+	if ( ent == NULL || r_skipDeformations.GetBool() ) {
+		return 1.0f;
+	}
+	if ( static_cast<int>( ent->shaderParms[ SHADERPARM_ANY_DEFORM ] ) != DEFORMTYPE_SCALE ) {
+		return 1.0f;
+	}
+	const float scale = ent->shaderParms[ SHADERPARM_ANY_DEFORM_PARM1 ];
+	if ( !( scale > 0.0f ) || scale == 1.0f ) {
+		return 1.0f;
+	}
+	return scale;
+}
+
+/*
+====================
 idMD5Mesh::UpdateSurface
 ====================
 */
@@ -1260,8 +1289,10 @@ void idMD5Mesh::UpdateSurface( const struct renderEntity_s *ent, const idJointMa
 	}
 
 	const bool useLegacySkinScale = ( ent != NULL && ent->shaderParms[ SHADERPARM_MD5_SKINSCALE ] != 0.0f );
+	const float preyDeformScale = R_PreyDeformScale( ent );
 	bool gpuSkinningContractAttached = false;
-	if ( useLegacySkinScale ) {
+	if ( useLegacySkinScale || preyDeformScale != 1.0f ) {
+		// both scales are applied to the CPU-skinned positions only
 		R_GpuSkinning_ClearSurfaceContract( tri, GPU_SKINNING_FALLBACK_SKIN_SCALE );
 	} else if ( !allowGpuSkinning ) {
 		R_GpuSkinning_ClearSurfaceContract( tri, GPU_SKINNING_FALLBACK_UNSUPPORTED_PASS );
@@ -1318,6 +1349,15 @@ void idMD5Mesh::UpdateSurface( const struct renderEntity_s *ent, const idJointMa
 		}
 
 		R_BoundTriSurf( tri );
+	}
+
+	if ( preyDeformScale != 1.0f ) {
+		// a uniform scale about the origin leaves normals and tangents alone
+		for ( i = 0; i < tri->numVerts; i++ ) {
+			tri->verts[i].xyz *= preyDeformScale;
+		}
+		tri->bounds[0] *= preyDeformScale;
+		tri->bounds[1] *= preyDeformScale;
 	}
 
 	if ( r_deriveBiTangents.GetBool() && tri->tangentsCalculated ) {

@@ -696,8 +696,11 @@ idBounds hhUtils::ScaleBounds( const idBounds& bounds, float scale ) {
 		return bounds;
 	}
 
-	//Put bounds at origin so our scale is done correctly
-	localBounds = bounds.Translate( -bounds.GetCenter() );
+	// openPR06: scale about the model origin, as the renderer scales a
+	// DEFORMTYPE_SCALE model. The shipped code moved the box's centre to the
+	// origin and never moved it back, so a scaled monster's bounds sat around
+	// its feet and the upper half of the model was outside them.
+	localBounds = bounds;
 
 	for( int ix = 0; ix < 2; ++ix ) {
 		localBounds[ix] *= scale;

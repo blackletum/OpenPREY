@@ -1858,6 +1858,7 @@ extern idCVar r_skipParticles;			// 1 = don't render any particles
 extern idCVar r_skipUpdates;			// 1 = don't accept any entity or light updates, making everything static
 extern idCVar r_skipEntities;			// 1 = skip non-world render entities
 extern idCVar r_skipDeforms;			// leave all deform materials in their original state
+extern idCVar r_skipDeformations;		// Prey: skip the game's per-entity model deformations (SHADERPARM_ANY_DEFORM)
 extern idCVar r_skipDynamicTextures;	// don't dynamically create textures
 extern idCVar r_skipLightScale;			// don't do any post-interaction light scaling, makes things dim on low-dynamic range cards
 extern idCVar r_skipBump;				// uses a flat surface instead of the bump map

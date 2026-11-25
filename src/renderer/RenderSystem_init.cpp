@@ -857,6 +857,7 @@ idCVar r_skipPlayerVisibilityEffects( "r_skipPlayerVisibilityEffects", "0", CVAR
 idCVar r_playerRimlightPower( "r_playerRimlightPower", "2.0", CVAR_RENDERER | CVAR_ARCHIVE | CVAR_FLOAT, "multiplayer player rimlight falloff exponent; higher tightens the band to the silhouette, lower spreads it across the body", RB_PLAYER_RIMLIGHT_MIN_POWER, RB_PLAYER_RIMLIGHT_MAX_POWER );
 idCVar r_playerRimlightFloor( "r_playerRimlightFloor", "0", CVAR_RENDERER | CVAR_ARCHIVE | CVAR_FLOAT, "multiplayer player rimlight floor; lifts the whole body by this much of the rim strength so a player facing the camera is still tinted", RB_PLAYER_RIMLIGHT_MIN_FLOOR, RB_PLAYER_RIMLIGHT_MAX_FLOOR );
 idCVar r_skipDeforms( "r_skipDeforms", "0", CVAR_RENDERER | CVAR_BOOL, "leave all deform materials in their original state" );
+idCVar r_skipDeformations( "r_skipDeformations", "0", CVAR_RENDERER | CVAR_BOOL, "skips dynamic model deformations" );
 idCVar r_skipFrontEnd( "r_skipFrontEnd", "0", CVAR_RENDERER | CVAR_BOOL, "bypasses all front end work, but 2D gui rendering still draws" );
 idCVar r_skipUpdates( "r_skipUpdates", "0", CVAR_RENDERER | CVAR_BOOL, "1 = don't accept any entity or light updates, making everything static" );
 idCVar r_skipEntities( "r_skipEntities", "0", CVAR_RENDERER | CVAR_BOOL, "skip non-world render entities for renderer diagnostics" );
@@ -875,7 +876,10 @@ idCVar r_useLightCulling( "r_useLightCulling", "3", CVAR_RENDERER | CVAR_INTEGER
 idCVar r_useLightScissors( "r_useLightScissors", "1", CVAR_RENDERER | CVAR_BOOL, "1 = use custom scissor rectangle for each light" );
 idCVar r_useClippedLightScissors( "r_useClippedLightScissors", "1", CVAR_RENDERER | CVAR_INTEGER, "0 = full screen when near clipped, 1 = exact when near clipped, 2 = exact always", 0, 2, idCmdSystem::ArgCompletion_Integer<0,2> );
 idCVar r_useEntityCulling( "r_useEntityCulling", "1", CVAR_RENDERER | CVAR_BOOL, "0 = none, 1 = box" );
-idCVar r_useEntityScissors( "r_useEntityScissors", "1", CVAR_RENDERER | CVAR_BOOL, "1 = use custom scissor rectangle for each entity" );
+// Prey ships this off (PREY.exe 1.4 default "0", as in Doom 3); Quake 4 turned
+// it on. On, every entity is scissored to the screen box of the bounds the game
+// reports, and any model the game under-bounds loses the part outside them.
+idCVar r_useEntityScissors( "r_useEntityScissors", "0", CVAR_RENDERER | CVAR_BOOL, "1 = use custom scissor rectangle for each entity" );
 idCVar r_useInteractionCulling( "r_useInteractionCulling", "1", CVAR_RENDERER | CVAR_BOOL, "1 = cull interactions" );
 idCVar r_useInteractionScissors( "r_useInteractionScissors", "2", CVAR_RENDERER | CVAR_INTEGER, "1 = use a custom scissor rectangle for each shadow interaction, 2 = also crop using portal scissors", -2, 2, idCmdSystem::ArgCompletion_Integer<-2,2> );
 idCVar r_limitBatchSize( "r_limitBatchSize", "0", CVAR_RENDERER | CVAR_INTEGER, "retail light-path batch-size cutoff in indexes (0 = disabled)" );

@@ -3951,15 +3951,17 @@ bool idAnimator::GetBounds( int currentTime, idBounds &bounds ) {
 		}
 	}
 
+	bounds.TranslateSelf( modelDef->GetVisualOffset() );
+
 	//HUMANHEAD: aob - apply model scale to bounds
+	// openPR06: after the visual offset, which sits in joint 0 and so is
+	// scaled with the vertices by the renderer's DEFORMTYPE_SCALE
 	if( entity ) {
 		if (entity->IsScaled()) {
 			bounds = hhUtils::ScaleBounds( bounds, entity->GetScale() );
 		}
 	}
 	//HUMANHEAD END
-
-	bounds.TranslateSelf( modelDef->GetVisualOffset() );
 
 	if ( g_debugBounds.GetBool() ) {
 		if ( bounds[1][0] - bounds[0][0] > 2048 || bounds[1][1] - bounds[0][1] > 2048 ) {
