@@ -26,12 +26,21 @@ draft. Set `draft` to false to publish. openQ4's Android APK, Discord step,
 standalone content packs, signed update manifest and assetless runtime smokes are left
 out; the file's header says why.
 
-The inherited OpenQ4 commit, push, ARM64, macOS and Universal2
-workflows are retained only as static-test/reference fixtures. They are manual-only,
-clearly named `DISABLED`, and every job has an unconditional false gate because they
-still assume openQ4's split `game-sp`/`game-mp` modules and Quake 4 content. Remove those
-gates only after rebuilding source pinning, package assertions, signing, and runtime
-smoke tests around the in-tree game library, `game_<arch>`, and `basepr/`.
+The inherited openQ4 Linux ARM64 cross-build (`linux-arm64-cross.yml`), macOS
+debug, macOS sanitizer and macOS Universal2 candidate workflows are retained only as
+reference fixtures for the release-lane rebuild. They are manual-only, clearly named
+`DISABLED`, and every job has an unconditional false gate because they still assume
+openQ4's split `game-sp`/`game-mp` modules, package names and Quake 4 content. Their
+contract steps call only checks that pass on openPR06 (macOS renderer startup guards,
+filesystem case segments, the sanitizer source contract); the openQ4 macOS policy,
+packaging and evidence tests they used to call are listed as `deferred-release-lane`
+in `tools/tests/suite_status.json`, and the ones that only checked openQ4 game code or
+these files' openQ4 shape were removed (issue #62). The Universal2 candidate's
+`macos_dedicated_server_smoke.py` still expects openQ4's server and module names.
+Remove the gates only after rebuilding source pinning, package assertions, signing, and
+runtime smoke tests around the in-tree game library, `game_<arch>`, and `basepr/`.
+openQ4's commit and push verification workflows are not carried; their openPR06
+equivalent is `openpr06-validation.yml`.
 `android-build.yml` came with the upstream engine merge and now builds and
 verifies an openPR06 arm64 APK for PREY. It is not in `manual-release.yml` yet:
 release signing (`signing: release`, the default) needs secrets and a

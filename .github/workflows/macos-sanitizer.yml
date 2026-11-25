@@ -121,12 +121,15 @@ jobs:
             clang --version
           } | tee macos-sanitizer-host-${{ matrix.artifact_suffix }}.txt
 
-      - name: Validate sanitizer workflow contract
+      - name: Validate sanitizer source contract
         if: steps.select.outputs.selected == 'true'
         shell: bash
         run: |
           set -euo pipefail
-          python tools/tests/macos_sanitizer_ci.py
+          # openPR06: openQ4's macos_sanitizer_ci.py pinned this file's
+          # openQ4 shape and was removed (issue #62); the platform-independent
+          # sanitizer source invariants are the check that applies here.
+          python tools/tests/linux_sanitizer_source_contract.py
 
       - name: Configure ASan and UBSan
         if: steps.select.outputs.selected == 'true'

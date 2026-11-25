@@ -34,10 +34,12 @@ are local and untracked.
 | `cm` | Collision model |
 | `external` | Vendored code (see below) |
 | `framework` | Common services, file system, cvars, declarations; `async` holds networking |
-| `game`, `mpgame` | SDK-derived single-player and multiplayer game libraries; `game/awakening` holds the expansion |
+| `game` | Prey SDK game library (Doom 3 lineage), built with `Prey` and `preyengine` into the one `game_<arch>` module for single-player and multiplayer; Prey SDK EULA, see [game source provenance](game-source-provenance.md) |
 | `idlib` | Core library |
 | `imagetools` | CPU image codecs and colour handling shared by the engine and renderer modules |
 | `mayaimport` | Interface to the optional Maya import DLL |
+| `Prey` | HUMANHEAD's Prey game classes (`hh*`), part of the game module |
+| `preyengine` | HUMANHEAD's profiler header, which the Prey SDK game code includes |
 | `renderer` | Renderer front end and the `OpenGL`, `Vulkan`, `GLES` and `GLES_D3` backends |
 | `rendergeo` | CPU render geometry shared by dmap and the renderer |
 | `sound` | Sound system and its `OpenAL` backend |

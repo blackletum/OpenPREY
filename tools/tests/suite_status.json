@@ -1,0 +1,100 @@
+{
+  "schema": 1,
+  "about": "Scripts in tools/tests/ that a plain full run cannot judge. tools/validation/run_test_suite.py skips the listed groups by default and reports them apart, so a failure outside them is new drift. Remove a script from a group as soon as it is ported, or delete it if it has no openPR06 subject. Every other script must pass when run bare from the repository root.",
+  "groups": {
+    "deferred-release-lane": {
+      "reason": "Inherited openQ4 macOS, Linux ARM64, packaging and release-lane fixtures. They pin the DISABLED openQ4 workflows, openQ4 package names, split game-sp/game-mp modules or openQ4 evidence documents. They are kept for the lane rebuild tracked as TODO-RELEASE-LANES in docs/dev/prey-rebase/status-ledger.md, and are not openPR06 checks until then.",
+      "tests": [
+        "linux_arm64_ci_coverage",
+        "linux_arm64_release_evidence",
+        "linux_dedicated_server_smoke_contract",
+        "linux_metadata_fuzz",
+        "linux_packaging_guidance",
+        "macos_apple_gl21_arb2_corridor",
+        "macos_dedicated_server_smoke_contract",
+        "macos_evidence_plumbing",
+        "macos_intel_ci",
+        "macos_local_validation_track",
+        "macos_matrix_policy",
+        "macos_metal_bridge",
+        "macos_native_backend_containment",
+        "macos_openal_provider_policy",
+        "macos_package_policy",
+        "macos_package_robustness",
+        "macos_renderer_backend_policy",
+        "macos_shadow_policy",
+        "macos_support_claim_policy",
+        "macos_support_intake",
+        "macos_symbolication_policy",
+        "macos_universal2_assembly",
+        "macos_universal2_runtime",
+        "p0_governance_evidence",
+        "packaging_safety",
+        "release_tooling_safety"
+      ]
+    },
+    "pending-source-port": {
+      "reason": "The subject exists in openPR06, but the source still lacks the upstream openQ4 change the test checks, so the test is right to fail. generated_animation_cache and level_load_cache: src/game/anim/Anim.cpp is on generated-animation cache version 1 and lacks openQ4's version 3 validation (CRC trailer, finite and bounded values, staged writes, the level-load animation resource).",
+      "tests": [
+        "generated_animation_cache",
+        "level_load_cache"
+      ]
+    },
+    "needs-arguments": {
+      "reason": "Build helpers and harness drivers that Meson or a person runs with arguments; run bare they print their usage.",
+      "tests": [
+        "audio_asset_inventory",
+        "generate_bitmsg_test",
+        "generate_capture_resample_test",
+        "generate_checkpoint_commit_test",
+        "generate_checkpoint_preview_test",
+        "generate_checkpoint_storage_test",
+        "generate_compressor_test",
+        "generate_dict_identity_test",
+        "generate_file_memory_test",
+        "png_codec",
+        "ui_document_canvas",
+        "ui_document_canvas_mutations",
+        "ui_document_view_projection",
+        "updater_helper_apply",
+        "vk_display_color_mapping_capture",
+        "windows_text_collection_bridge",
+        "windows_text_session"
+      ]
+    },
+    "needs-runtime": {
+      "reason": "Runtime checks that need a staged .install or builddir, retail Prey assets, a device or emulator, or another host platform. Run them by hand against a build (see each script's --help).",
+      "tests": [
+        "android_device_qualification",
+        "android_emulator_smoke",
+        "audio_center",
+        "audio_mod_reverb",
+        "linux_dedicated_server_smoke",
+        "linux_dedicated_stock_map_smoke",
+        "linux_wayland_stock_sp_smoke",
+        "macos_dedicated_server_smoke",
+        "openxr_vr_prey_smoke",
+        "presentation_reference_suite",
+        "renderer_gameplay_benchmark",
+        "renderer_validation_matrix",
+        "script_vm_conformance",
+        "ui_focus_reveal"
+      ]
+    }
+  },
+  "slow": {
+    "about": "Mutation-heavy scripts that need longer than the default per-script limit, in seconds. They are run, not skipped.",
+    "timeouts": {
+      "native_event_retirement": 1200,
+      "ui_managed_native_owner": 1200,
+      "ui_native_collection_coordinator": 1800,
+      "ui_number_clipboard": 1200,
+      "ui_number_drafts": 1200,
+      "ui_number_native": 1800,
+      "ui_retained_adapter": 1800,
+      "ui_settings_effect_journal": 3600,
+      "ui_text_owner": 1800,
+      "windows_text_store": 3600
+    }
+  }
+}

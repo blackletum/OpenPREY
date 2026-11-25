@@ -157,7 +157,28 @@ openPR06 includes local validation profiles under `tools/validation/`. They shar
 
 The Python checks are independent and run concurrently, as many at once as the machine has CPUs, with each check's output printed in list order. Pass `--python-jobs N` to change that, and `--python-jobs 1` to run them one at a time. Inherited checks that still encode openQ4-only contracts (split game modules, openQ4 release lanes, macOS policy) are excluded from the list.
 
-GitHub Actions runs `.github/workflows/openpr06-validation.yml` on every push, pull request and manual dispatch. Its **Scaffold and Content Contracts** job compiles the build scripts, checks the icon set, the game source inventory and the content pack table, runs the rebase, video-menu and sanitizer source contracts, and builds `pak0.pk4` and `pak1.pk4` from `content/basepr/`. Its **Unified GameLib** jobs build a debug engine, dedicated server, both renderer modules and the `game_<arch>` module on Windows x64 and Linux x64, stage `.install/`, and check the staged payload. CI does not run the `tools/validation/` profiles, and no job starts the client or the dedicated server. The workflows inherited from openQ4 are named `DISABLED`, can only be dispatched manually, and every job in them is gated off; see `.github/workflows/README.md`.
+GitHub Actions runs `.github/workflows/openpr06-validation.yml` on every push, pull request and manual dispatch. Its **Scaffold and Content Contracts** job compiles the build scripts, checks the icon set, the game source inventory and the content pack table, runs the rebase, video-menu, sanitizer and source-charset contracts, checks the full-suite skip list, and builds `pak0.pk4` and `pak1.pk4` from `content/basepr/`. Its **Unified GameLib** jobs build a debug engine, dedicated server, both renderer modules and the `game_<arch>` module on Windows x64 and Linux x64, stage `.install/`, and check the staged payload. CI does not run the `tools/validation/` profiles, and no job starts the client or the dedicated server. The workflows inherited from openQ4 are named `DISABLED`, can only be dispatched manually, and every job in them is gated off; see `.github/workflows/README.md`.
+
+### Full Test-Suite Run
+
+To run every script in `tools/tests/` and see only new breakage, use `tools/validation/run_test_suite.py`. It runs the scripts concurrently (half the CPUs by default; `--jobs N`), writes each one's output to `.tmp/test-suite/<name>.log`, and exits non-zero only when a script outside `tools/tests/suite_status.json` fails:
+
+```powershell
+cmd /c "call tools\build\openpr06_devcmd.cmd >nul && python tools\validation\run_test_suite.py"
+```
+
+```bash
+python tools/validation/run_test_suite.py
+```
+
+Run it from a Visual Studio developer environment on Windows so the C++ harness tests find a compiler; a full run takes about half an hour. Pass script names to run only those. `suite_status.json` lists the scripts a bare run cannot judge, in groups that are skipped unless named with `--include`:
+
+- `deferred-release-lane`: inherited openQ4 macOS, Linux ARM64, packaging and release-lane fixtures kept for the lane rebuild (`TODO-RELEASE-LANES` in `docs/dev/prey-rebase/status-ledger.md`).
+- `pending-source-port`: tests that are right to fail because openPR06's source still lacks the upstream change they check; the group's reason names the gap.
+- `needs-arguments`: Meson build helpers and harness drivers that take arguments.
+- `needs-runtime`: checks that need a staged build, retail assets, a device or another platform.
+
+It also gives a handful of slow mutation tests a longer limit than the default 600 seconds. When you port a listed script, take it off the list (the runner names listed scripts that pass); `tools/tests/suite_status_contract.py` checks that every entry still exists. Run scripts without `python -I`: many import their siblings. Tests that read Quake 4 game code, Quake 4 content or openQ4-only workflows are deleted rather than listed (issue #62).
 
 ### IPv4 Networking Self-Test
 

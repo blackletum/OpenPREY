@@ -67,12 +67,6 @@ jobs:
           sudo apt-get update
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${packages[@]}"
 
-      - name: Check cross-build contract
-        shell: bash
-        run: |
-          set -euo pipefail
-          python tools/tests/linux_arm64_cross_compile.py
-
       - name: Configure Linux ARM64 Wayland build
         shell: bash
         run: |
