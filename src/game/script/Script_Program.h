@@ -512,6 +512,15 @@ private:
 	void										AddImmediateToIndex( idVarDef *def );
 	void										RemoveImmediateFromIndex( idVarDef *def );
 
+	// "<RESULT>" temporaries by scope; see FindFreeResultDef
+	idList<idVarDef *>							resultDefs;
+	idHashIndex									resultHash;
+	bool										resultIndexValid;
+
+	void										InvalidateResultIndex( void );
+	void										AddResultToIndex( idVarDef *def );
+	void										RemoveResultFromIndex( idVarDef *def );
+
 public:
 	idVarDef									*returnDef;
 	idVarDef									*returnStringDef;
