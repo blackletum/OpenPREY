@@ -354,7 +354,7 @@ blocks it freed decoded again, so each frame refills every buffer that played
 out, as the inline decode did. One block per job had refilled one buffer per
 frame: frames longer than a buffer, about a third of a second, ran the queue
 dry, and a stream restarted after an output change underran at once
-([evidence](audio-voice-evidence.md#streams-across-long-frames-and-output-changes-23-november-2026)).
+([evidence](https://github.com/themuffinator/openQ4/blob/main/docs/dev/audio-voice-evidence.md#streams-across-long-frames-and-output-changes-23-november-2026)).
 OpenAL calls stay on the main thread. A voice stopped while its block is decoding
 cancels the block and parks the stream until the worker lets go, without
 waiting. `s_restart` and shutdown join what is still parked. The first buffers

@@ -333,7 +333,7 @@ requires:
   `idGame::ValidateDemoProtocol` when playback starts and commits the game
   module's protocol state (2.42 accepts recordings made with 2.41 and reads
   their older player, projectile and entity-tag layout; see the
-  [protocol record](mp-network-qualification.md#network-protocol-242-15-november-2026));
+  [protocol record](https://github.com/themuffinator/openQ4/blob/main/docs/dev/mp-network-qualification.md#network-protocol-242-15-november-2026));
 - the legacy game API match for format 1.0/1.1, or acceptance of the packed
   game schema by `idGame::IsMVDSchemaCompatible` for format 1.2+;
 - the same simulation/user-command rate;
@@ -688,7 +688,7 @@ clearing the flag. Normal spawns keep their raise animation. (13 November:
 live respawns and joins also requested catch-up, through a false state hitch
 and new weapon entities, so they were caught up as well. Those now raise with
 the server's weapon; a seek's catch-up still wins. See the
-[network record](mp-network-qualification.md#the-weapon-for-a-new-life-raises-with-the-servers-13-november-2026).) The executable
+[network record](https://github.com/themuffinator/openQ4/blob/main/docs/dev/mp-network-qualification.md#the-weapon-for-a-new-life-raises-with-the-servers-13-november-2026).) The executable
 `mvd_seek_weapon_state.py` runs the production initialization block, verifies
 once-only catch-up and absent/dead-player admission, and rejects the old code.
 

@@ -181,7 +181,7 @@ Let:
 (5)		s = |Vm|
 
 	  Substituting and simplifying yields a quadratic function in terms of t, Ve, d, & s:
-	  At� + Bt + C = 0
+	  At^2 + Bt + C = 0
 */
 	const idDict *projectileDef = gameLocal.FindEntityDefDict( spawnArgs.GetString("def_projectile") );
 	if ( !projectileDef ) {

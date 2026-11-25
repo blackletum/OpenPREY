@@ -165,8 +165,7 @@ def validate_str_tables_keep_high_bytes() -> None:
 
 def validate_ci_smoke() -> None:
     for relative_path, context in (
-        (".github/workflows/push-verification.yml", "push verification workflow"),
-        (".github/workflows/commit-validation.yml", "commit validation workflow"),
+        (".github/workflows/openpr06-validation.yml", "openPR06 validation workflow"),
         ("tools/validation/openq4_validate.py", "validation runner"),
     ):
         source = (ROOT / relative_path).read_text(encoding="utf-8")

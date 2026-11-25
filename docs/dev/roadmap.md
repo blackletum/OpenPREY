@@ -31,7 +31,7 @@ UI toolkit/editor/corpus remain major completion gates.
 | UI corpus and final gates | **0 / 358 migration variants accepted; 0 / 7 final gates accepted** | Working screens and passing checkpoint validators do not grant product acceptance. |
 | Quality frame-time reference | **Gate still failing** | Recorded Vulkan reference: 8.76 ms mean, 13.80 ms p99, 24.08 ms maximum against **every frame <=6.67 ms**. Later prototype runs do not close it. |
 | Ultra frame rate at 2560x1440 | **91-188 fps on GL, 96-188 fps on Vulkan, on the reference laptop; every tier meets its refresh class** | FPS-02 re-tiered the presets to refresh classes (Enhanced 144/90, Quality 100/60, Ultra 75/45 average/1% low) and all three meet them in every scene on both backends; the previous everything-on Ultra (19-58 fps on GL) is now the Maximum preset with no frame-rate target. Budgets are in [`performance-budgets.json`](performance-budgets.json). See the FPS category and the [performance report](performance-report.md). |
-| Release acceptance | **0 / 4 REL tasks closed** | 0.15.0 (November 2026) is the available release. It shipped ahead of these gates, which stay open for final-package acceptance; later source progress is unreleased. Since 23 November one frozen package per candidate runs a [release qualification](release-qualification.md) matrix: the Windows x64 0.16.0 candidate C3 passes it, after C1 and C2 exposed lost player settings, missing renderer symbols and starving audio streams, all fixed; other platforms, the human reviews and promotion remain. |
+| Release acceptance | **0 / 4 REL tasks closed** | 0.15.0 (November 2026) is the available release. It shipped ahead of these gates, which stay open for final-package acceptance; later source progress is unreleased. Since 23 November one frozen package per candidate runs a [release qualification](https://github.com/themuffinator/openQ4/blob/main/docs/dev/release-qualification.md) matrix: the Windows x64 0.16.0 candidate C3 passes it, after C1 and C2 exposed lost player settings, missing renderer symbols and starving audio streams, all fixed; other platforms, the human reviews and promotion remain. |
 
 ### Category completion estimates
 
@@ -2230,7 +2230,7 @@ diagnostics establish whole-frame ownership or production performance.
   (PLAT/AND); a preset decision waits for authored content.
 - [ ] **REN-12 — P2, implementation: depth of field.** Partial, 23 November
   2026. A camera-quality depth of field for promotional captures and the
-  weapon wheel ([player guide](../user/depth-of-field.md)).
+  weapon wheel ([player guide](https://github.com/themuffinator/openQ4/blob/main/docs/user/depth-of-field.md)).
   `src/renderer/DepthOfFieldCore.h` holds the lens model and the pass plan
   both backends draw from: the signed circle of confusion of a thin lens,
   K * (1 - S / d), with the focal length following the view's field of view on
@@ -2780,8 +2780,8 @@ are not yet measured.
   the first fall of a match read its damage definition the same way. A
   six-bot match logged 53 such loads; it now logs none, with every player
   model loaded with the map (`g_precachePlayerModels`) at no measurable cost
-  in load time ([measured](mp-audit-2026-11-17.md#measured)).
-  Second round, 17 November ([second round](mp-audit-2026-11-17.md#second-round)): multiplayer
+  in load time ([measured](https://github.com/themuffinator/openQ4/blob/main/docs/dev/mp-audit-2026-11-17.md#measured)).
+  Second round, 17 November ([second round](https://github.com/themuffinator/openQ4/blob/main/docs/dev/mp-audit-2026-11-17.md#second-round)): multiplayer
   `FindEntityDef` answers from a per-map cache; item timers collect their
   items once a send instead of three passes over every entity slot a
   recipient; an item whose model does not move keeps its PVS areas instead of
@@ -3112,7 +3112,7 @@ and AND-05.
   monitors, side-by-side glasses, passive interlaced panels and anaglyph
   glasses, on both desktop renderers, with the HUD and menus readable in every
   layout. Implemented 24 November 2026
-  ([player guide](../user/stereoscopic-3d.md)): `r_stereo3D` opens each frame
+  ([player guide](https://github.com/themuffinator/openQ4/blob/main/docs/user/stereoscopic-3d.md)): `r_stereo3D` opens each frame
   as a stereo frame of the VR target machinery with no swapchains; the game
   renders its scene chain once per eye (`idPlayerView::StereoView`, eyes from
   `Stereo_BuildEyeView`: parallel axes and frusta shifted to meet at
@@ -3535,7 +3535,7 @@ seven final gates remain pending.
 
 | Task / state | Completed points and evidence | Remaining completion subpoints |
 | --- | --- | --- |
-| UI-01 — Partial | Settings hub, GAME/CONTROLS/AUDIO, Load Defaults, DISPLAY (with presets applied there) and Player Setup exist; current scaling/tall layouts and effect/readback increments recorded. Settings tree audit (20 November 2026): tabs and sections grouped by what each row changes, GAME OPTIONS' VIEW WEAPON and ACCESSIBILITY tabs, DISPLAY's EFFECTS tab, and Frame Rate Cap, Anisotropic Filtering, Shadow Maps and Motion Blur rows ([retained screens](ui/retained-screens.md#the-settings-tree-audit-20-november-2026)). Dependent rows (23 November 2026): a row another setting turns off is dimmed and skipped on every retained settings page, each dependency checked against the code ([settings structure](settings-menu-structure.md#dependent-rows)). | Complete settings transactions/failure/restart/capability matrix; real-font/state coverage; production SYSTEM editor round trip and device/platform acceptance. |
+| UI-01 — Partial | Settings hub, GAME/CONTROLS/AUDIO, Load Defaults, DISPLAY (with presets applied there) and Player Setup exist; current scaling/tall layouts and effect/readback increments recorded. Settings tree audit (20 November 2026): tabs and sections grouped by what each row changes, GAME OPTIONS' VIEW WEAPON and ACCESSIBILITY tabs, DISPLAY's EFFECTS tab, and Frame Rate Cap, Anisotropic Filtering, Shadow Maps and Motion Blur rows ([retained screens](https://github.com/themuffinator/openQ4/blob/main/docs/dev/ui/retained-screens.md#the-settings-tree-audit-20-november-2026)). Dependent rows (23 November 2026): a row another setting turns off is dimmed and skipped on every retained settings page, each dependency checked against the code ([settings structure](https://github.com/themuffinator/openQ4/blob/main/docs/dev/settings-menu-structure.md#dependent-rows)). | Complete settings transactions/failure/restart/capability matrix; real-font/state coverage; production SYSTEM editor round trip and device/platform acceptance. |
 | UI-02 — Partial | Binding capture, contextual prompts, controller navigation, touch scrolling and right-stick detail/preview handling exist. | Production native IME wiring, shaping/fallback/graphemes, accessibility exposure; physical controller families, composition/focus/hotplug and locale/layout matrix. |
 | UI-03 — Partial | Roster scrolling/identity guards, save-browser/details, Strogg confirmations, server focus/empty states and objective markers have scoped evidence. | Tourney/watch and Match Control flows, catalogs beyond 128, remaining target-identity/role operations, handoffs and actual task/failure completion. |
 | UI-04 — Partial | Retained menus/HUDs and specific implant/vehicle/cinematic surfaces have implementation or captures. | Accept every required source/include variant's behavior and artwork; world terminals, script/timeline provenance, per-instance state and exactly-once commands. |
@@ -3928,7 +3928,7 @@ Completion must advance through the existing dependencies:
   Load Game, Save Game and Restart Level pages take the expansion's own family
   (visual specification 1.40 to 1.45): horned, frosted bands that close in as
   the menu opens and glide between levels, blade-ended plates with the lens,
-  snow and haze ([The Awakening's pause](ui/retained-screens.md#17-november-2026-the-awakenings-pause),
+  snow and haze ([The Awakening's pause](https://github.com/themuffinator/openQ4/blob/main/docs/dev/ui/retained-screens.md#17-november-2026-the-awakenings-pause),
   `FLOW-071`), and so do its SETTINGS page and the CONTROLS, GAME OPTIONS,
   DISPLAY and AUDIO categories. Remaining: the objectives display's frames,
   tab and list scrolling, a page scrolling out on Back, the high-contrast and
@@ -4233,7 +4233,7 @@ Completion substeps must keep three forms of evidence distinct:
   it does not repair already-stuck saves or qualify the full map/campaign.
   Progress, 23 November: the REL-01 sweep's `tram1b` report, AI that "cannot
   path" although `tram1b.aas32` was being loaded, is retail content, not an AI
-  defect. The shipped [`tram1b.aas32` and `mcc_1.aas48`](retail-baseline-ledger.md#stock-aas-refusals-on-tram1b-and-mcc_1-23-november-2026)
+  defect. The shipped [`tram1b.aas32` and `mcc_1.aas48`](https://github.com/themuffinator/openQ4/blob/main/docs/dev/retail-baseline-ledger.md#stock-aas-refusals-on-tram1b-and-mcc_1-23-november-2026)
   are compiles that kept no navigation areas, and retail 1.4.2 refuses both
   with the same check. The AI that request them are tram occupants or hidden,
   passive stand-ins that never path. The loader and AI warnings now name the
@@ -4469,7 +4469,7 @@ Completion substeps must keep three forms of evidence distinct:
   the Retch see from their heads, where they saw from their feet; the Tank's
   rockets flash and the opening dropships light both thrusters. The tables,
   evidence and limits are in the
-  [mission audit](awakening-missions.md#silent-names--14-november-2026). Hidden
+  [mission audit](https://github.com/themuffinator/openQ4/blob/main/docs/dev/awakening-missions.md#silent-names--14-november-2026). Hidden
   input-free probes measure each correction against `g_awakeningContentRepairs 0`.
   Scene timing with the restored lines and the look of the two effects have not
   been reviewed by ear or eye, and the playthroughs remain.
@@ -4480,7 +4480,7 @@ Completion substeps must keep three forms of evidence distinct:
   declarations name a folder that does not exist, the radio marine's reply in
   M06's Renner scene, three more replies from M04's Fox marines, and three
   replies in Cryofac through script revision 4. The races' unused chatter has
-  no recoverable placement and stays out. See [the second pass](awakening-missions.md#replies-the-scenes-stop-short-of--14-november-2026).
+  no recoverable placement and stays out. See [the second pass](https://github.com/themuffinator/openQ4/blob/main/docs/dev/awakening-missions.md#replies-the-scenes-stop-short-of--14-november-2026).
   Missing voice lines, 16 November: the Pain Lord's three tube marines play
   stand-in screams from installed recordings, and Darnell's undeclared m08 radio
   line no longer beeps (both m08 lines are recorded and still to be restored, as
@@ -4488,14 +4488,14 @@ Completion substeps must keep three forms of evidence distinct:
   draft script runs nowhere) are placed at the shipped battle's scenes through
   `m01_radio.script`, gated on their content. Open: voicing them (25 anonymous
   squad lines, 3 Markswell), and the 100 draft lines whose scenes the shipped
-  maps lack. See the [register](awakening-missing-voice-lines.md) and the
-  [voice generation breakdown](voice-generation-breakdown.md).
+  maps lack. See the [register](https://github.com/themuffinator/openQ4/blob/main/docs/dev/awakening-missing-voice-lines.md) and the
+  [voice generation breakdown](https://github.com/themuffinator/openQ4/blob/main/docs/dev/voice-generation-breakdown.md).
   M09 frost, 21 November (hidden, input-free, Normal, OpenGL): all three
   freezing-fog slabs move on the map's schedule, hurt once they reach head height,
   ignore armour, and respond to their second-stage triggers; crouching clears the
   finale's resting slab. A descent made against it with player movement, the
   other skills and the other platforms remain. See
-  [M09 frost hazard](awakening-missions.md#m09-frost-hazard--21-november-2026).
+  [M09 frost hazard](https://github.com/themuffinator/openQ4/blob/main/docs/dev/awakening-missions.md#m09-frost-hazard--21-november-2026).
 - [ ] **Q4-05 — P1, decision and implementation: save failure recovery.** Preserve
   approved v2/v3/v4 compatibility readers, the v5 portable reader and corruption
   checks. Explicit recovery after semantic object-restore failure is implemented
@@ -4977,17 +4977,17 @@ single-player workloads on each platform: 3 % and 24 % on Windows, 65 % and
 34 % on Linux (2 to 54 ms over a workload), and less or the same on the
 others (75 % less on the sloped stacks). Bounds that would cover the third
 round's figures are written into the [physics reference's
-budgets](physics-reference.md#budgets-and-tolerances) as proposed exceptions
+budgets](https://github.com/themuffinator/openQ4/blob/main/docs/dev/physics-reference.md#budgets-and-tolerances) as proposed exceptions
 for the project owner; they are not accepted, and the Linux ragdoll figure has
 since grown past its proposed bound. **The default stays `0`.** The user asked
 for the round to be wrapped up before the full Linux pass had been repeated on
 the corrected build, so that repeat is open too. Each open point is in the
-[physics reference](physics-reference.md#known-defects-and-what-was-tried);
-the evidence is in [its Evidence section](physics-reference.md#evidence).
+[physics reference](https://github.com/themuffinator/openQ4/blob/main/docs/dev/physics-reference.md#known-defects-and-what-was-tried);
+the evidence is in [its Evidence section](https://github.com/themuffinator/openQ4/blob/main/docs/dev/physics-reference.md#evidence).
 
 | Task / state | Completed points and evidence | Remaining completion subpoints |
 | --- | --- | --- |
-| PHYS-01 — Closed (16 November 2026) | Contract recorded: one archived option with a localized Settings row on both interfaces (12 languages), committed at map load, servers publish `si_enhancedPhysics`. Legacy CPU distributions on the reference workloads with a per-frame noise floor, the legacy impulse envelope per damage path, and the budgets and tolerances (pooled stagings, the joint-stretch rule) in the [physics reference](physics-reference.md). `physics_defects.py` stages all seven defect classes in stock maps in both modes: legacy shows resting jitter (1,767 sleeps and 1,757 wakes on the sloped stacks) and joint stretch (85 units, visible for 42 frames); twitching, sliding corpses, limbs stuck in walls and tunnelling up to 9,000 units/s did not reproduce as legacy defects and are recorded as such. | None. New repros belong to the item whose gate they test. |
+| PHYS-01 — Closed (16 November 2026) | Contract recorded: one archived option with a localized Settings row on both interfaces (12 languages), committed at map load, servers publish `si_enhancedPhysics`. Legacy CPU distributions on the reference workloads with a per-frame noise floor, the legacy impulse envelope per damage path, and the budgets and tolerances (pooled stagings, the joint-stretch rule) in the [physics reference](https://github.com/themuffinator/openQ4/blob/main/docs/dev/physics-reference.md). `physics_defects.py` stages all seven defect classes in stock maps in both modes: legacy shows resting jitter (1,767 sleeps and 1,757 wakes on the sloped stacks) and joint stretch (85 units, visible for 42 frames); twitching, sliding corpses, limbs stuck in walls and tunnelling up to 9,000 units/s did not reproduce as legacy defects and are recorded as such. | None. New repros belong to the item whose gate they test. |
 | PHYS-02 — Partial | Semi-implicit rigid bodies with persistent warm-started contacts, sleeping after a ten-step quiet window and selective sweeps. Contact gaps come exactly from the collision model's contact features. Friction is calibrated against legacy on flat-floor shoves (three times the authored contact friction); impacts are frictionless and rebound by the body's bouncyness, on a contact the body already had only against fixed geometry. A body that has not moved since it was created rests by the legacy test, so placed pickups stay put (Network 1, Core 2 and Storage 2). Legacy replay identical. Native test: no energy gain, settled stacks, no tunnelling through a 2-unit wall, impacts slide and rebound; no tunnelling in 18 map launches. Blasted and shoved crates and barrels pass every class on the crater and on a flat floor (on Linux too, on the third round's build); shoves of 4,000 to 40,000 on a flat floor end 0.7x to 1.2x as far as legacy's. From 17 November the stack workloads give the same state digests and step counts on Linux and Windows in both modes. CPU with the map's own ragdolls at rest: 75 to 78 % below legacy on the sloped stacks on both platforms (1,667 wakes against 11). Stills of the stacks reviewed side by side. | CPU budget: `sp-flatstacks` costs 24 % (2.8 ms) more than legacy on Windows and 34 % (4.1 ms) on Linux, because legacy rests a placed stack on its first step (164 moving steps against 425 on both platforms); `sp-explosion` costs 3 % (2.2 ms) more on Windows with a first-step frame 0.9 ms worse, and the same as legacy on Linux. Either fix these or have the proposed exceptions accepted. Visible inside the gates: a body knocked loose on the crater's slope travels about half as far as legacy's, and which sloped stack survives a knock differs. A windowed review in motion. |
 | PHYS-03 — Partial | Warm-started PGS on the legacy constraint matrix with an exact-LCP fallback (0.6 ms of a 58 ms workload), bounded recovery, quiet-figure sleeping, death-pose velocity inheritance, an energy guard that keeps the figure's momentum, frictionless impacts and no figure bounce (as legacy). Round two: joints pulled apart close by position only through the tree solve, the surface that stops a body joins its contacts, and position-only motion is solved against every contact and swept on its own. Round three: exact contact gaps, so an edge-on-edge contact acts at the ledge and not at the limb's end; bodies a map places inside static geometry are not pushed out of it; a slow body is swept along a two-unit chord every eight steps. All seven defect repros pass on Windows: joints 37 units apart for 22 frames after a Dark Matter splash against legacy's 85 for 42; no joint pierced in 18 corpses killed against a wall; the placed marine lying across a ledge edge sinks 1.0 unit with no joint pierced (7.9 units and two joints before). On Linux, on the build with exact math, the three repros that were repeated pass with Windows's numbers: the placed marine sinks 1.0 unit and stays on its ledge, joints are 33 units apart for 12 frames against legacy's 58 for 28, and the sloped stacks sleep 22 times and wake 11 against 1,768 and 1,757. Windows ragdoll CPU 15 % below legacy on the noise floor. Stills of ragdolls at play distance reviewed side by side. | CPU budget on Linux x64: `sp-ragdolls` costs 65 % (54 ms) more than legacy on the build with exact math. The three staged corpses take 534 moving steps to settle against legacy's 336 there, and 340 against 332 on Windows; why enhanced settles so differently on the two platforms when legacy no longer does is not found. The `mp-frags` bot round cost 24 % more than legacy on Linux before the math fix and was not repeated after it. The other four defect repros were not repeated on Linux after the fix. A windowed review in motion. |
 | PHYS-04 — Closed (17 November 2026) | Impulse guard and telemetry. `physics_envelope.py`, both modes hit from one saved scene, passes momentum and all ten hit classes on Strogg marine corpses (rocket and grenade splash median 141 / 110 units, Dark Matter splash 211 / 183, largest 526 / 525) and, each mode from its own start and judged on the bodies the blast reached, on The Awakening's `m01_stranarus_trench2`; crates and barrels pass all nine classes on Air Defense 1's crater and on Hangar Perimeter's flat floor, and six flat-floor shoves; multiplayer player corpses pass ten of eleven classes at three repeats and the eleventh at six (a still-falling class decided by which mode draws a spawn point where the corpse tumbles down the map). `physics_coverage.py` passes all nine cases: Air Defense 1's six hanging lights, Putra's 21 and client debris. `physics_campaign.py`: the 31-stage stock campaign chain completes in both modes on the retail packs (62 of 62 loads, a save and a load on every map, no errors, 1,675 bodies, 11 pierced joints after settling in each mode) and six scripted set pieces match legacy. The three checks that failed on Linux on 16 November pass there on the build with exact math: the placed marine stays on its ledge (sinks 1.0 unit; legacy 0), the rocket splash on resting corpses reads 150 / 125 units at the median and the Dark Matter splash 222 / 293, and Putra's lights stretch 1.3 units against 0.8, as on Windows. | None open. Recorded limits: the debris sample is one piece; vehicles keep the legacy step by design and were exercised only by the chain; the multiplayer scene has to run on an otherwise idle machine and was last run on the third round's build; on Linux only the three failed checks have run since the math fix (PHYS-06). |
@@ -5086,7 +5086,7 @@ result is recorded.
 
 Reference comparison, 15 November: the multiplayer offering was compared with
 Quake II Rerelease and Muff Mode, CPMA and Q4MAX
-([record](competitive-match-reference-audit.md#reference-comparison-against-quake-ii-rerelease-muff-mode-cpma-and-q4max-15-november-2026)). MP-12 through MP-20 take the
+([record](https://github.com/themuffinator/openQ4/blob/main/docs/dev/competitive-match-reference-audit.md#reference-comparison-against-quake-ii-rerelease-muff-mode-cpma-and-q4max-15-november-2026)). MP-12 through MP-20 take the
 gaps in features and play experience; MP-21 through MP-24 take the demo
 format's standardization, backward compatibility, robustness and storage
 efficiency. They add scope. They close nothing and reopen nothing that MP-01
@@ -5889,7 +5889,7 @@ Completion substeps:
 - [ ] **MP-10 — P2, implementation and qualification: buying rules and the
   buy card.** A buying server sells by Quake 4's rules or The Awakening's as
   one option (Create Server, vote, admin), and the buy menu presents in the new
-  interface's in-match card construction ([reference](mp-buying.md)). Gates:
+  interface's in-match card construction ([reference](https://github.com/themuffinator/openQ4/blob/main/docs/dev/mp-buying.md)). Gates:
   `mp_buying_rules_contract.py`, `openq4-ui-retained-buy`, the retained gate's
   buy-card case and `capture_buy_menu.py` on OpenGL and Vulkan, with a remote
   client building the modded weapon from the snapshot; then real keyboard and
@@ -5903,7 +5903,7 @@ Completion substeps:
   rules' buying mask now covers the four CTF modes, which had kept a buying
   CTF match in warmup. Remaining: hands-on play and the UI register's FLOW-010
   acceptance with a visual-spec record of the card's detail-column reasons.
-  Progress, 17 November ([audit](mp-audit-2026-11-17.md#gameplay)): a buy
+  Progress, 17 November ([audit](https://github.com/themuffinator/openQ4/blob/main/docs/dev/mp-audit-2026-11-17.md#gameplay)): a buy
   from a bind or the buy card is no longer lost on a remote client (it went
   through the event path that drops outside a new frame); the Chain Lightning
   Mod chains in multiplayer, to opponents in play and never to its owner or
@@ -5913,7 +5913,7 @@ Completion substeps:
   projectiles are single-player definitions with no physics sync, so a remote
   client draws them flying straight; and Classic armour bought at 100 points
   costs credits for nothing.
-  Second round, 17 November ([second round](mp-audit-2026-11-17.md#second-round)): both closed.
+  Second round, 17 November ([second round](https://github.com/themuffinator/openQ4/blob/main/docs/dev/mp-audit-2026-11-17.md#second-round)): both closed.
   `projectile_hyperblaster_bounce1_mp` and `projectile_rocket_homing_mp` send
   their physics with the weapons' multiplayer tuning, and a Classic armour
   purchase that would add nothing is refused before it is charged (bots value
@@ -5921,7 +5921,7 @@ Completion substeps:
   is still owed.
 - [ ] **MP-11 — P2, implementation and qualification: Classic multiplayer ruleset.**
   A Quake 2 inspired ruleset over the stock maps and weapons
-  ([player guide](../user/classic-ruleset.md)), selected by `si_ruleset` and
+  ([player guide](https://github.com/themuffinator/openQ4/blob/main/docs/user/classic-ruleset.md)), selected by `si_ruleset` and
   latched at map load on server and clients. Weapon, ammo and item numbers are
   an overlay on the shipped entity definitions (`src/mpgame/mp/ClassicRules.cpp`),
   applied before anything spawns and reverted when the map unloads, so no
@@ -5984,7 +5984,7 @@ Completion substeps:
 - [ ] **MP-12 — P1, implementation: casual match flow and voting parity.** Bring
   to every server what exists today only inside a managed match, or not at all,
   measured against Muff Mode, CPMA and Q4MAX
-  ([comparison](competitive-match-reference-audit.md#reference-comparison-against-quake-ii-rerelease-muff-mode-cpma-and-q4max-15-november-2026)).
+  ([comparison](https://github.com/themuffinator/openQ4/blob/main/docs/dev/competitive-match-reference-audit.md#reference-comparison-against-quake-ii-rerelease-muff-mode-cpma-and-q4max-15-november-2026)).
   Team timeouts and a technical pause on casual Duel, Team DM, CTF and round
   servers through the managed `MatchTime()` primitive, with a per-side budget
   and a resume countdown; captain and operator team locks; a spectator lock
@@ -6003,7 +6003,7 @@ Completion substeps:
   every new operation and vote, a live smoke with three humans on OpenGL and
   Vulkan (timeout, pause on disconnect, inactivity, intermission, each vote),
   the Create Server and Match Control rows localized in every language, and the
-  [competitive matches guide](../user/competitive-matches.md) and
+  [competitive matches guide](https://github.com/themuffinator/openQ4/blob/main/docs/user/competitive-matches.md) and
   [server setup guide](../user/server-setup.md) updated.
   Progress, 15 November: the first implementation round. Votes: `callvote`,
   `cv` and `vote yes|no` reach the inherited packed vote, which gains
@@ -6050,7 +6050,7 @@ Completion substeps:
   bots and a hidden client: quiet until turned on, the next map named once
   during the scoreboard and loaded, each award read out reaching the client.
   The scoreboard itself stays Quake 4's; a reel on the scoreboard GUI is open.
-  Progress, 17 November ([audit](mp-audit-2026-11-17.md#match-flow-votes-and-pauses)):
+  Progress, 17 November ([audit](https://github.com/themuffinator/openQ4/blob/main/docs/dev/mp-audit-2026-11-17.md#match-flow-votes-and-pauses)):
   nine defects fixed. The idle drop no longer deletes a player inside its own
   think; a casual server keeps a limit changed by a vote, at the console or
   by hosting again (the rules import laid the first values back at every map
@@ -6060,7 +6060,7 @@ Completion substeps:
   a match, ends when the player is back, lets them back in under the lock and
   ignores kicks and idle drops; the stock vote menu obeys `g_voteLimit` and
   the next-map switch. The idle drop, the kept limit and the client's
-  settings were [run](mp-audit-2026-11-17.md#checked); the electorate, the
+  settings were [run](https://github.com/themuffinator/openQ4/blob/main/docs/dev/mp-audit-2026-11-17.md#checked); the electorate, the
   lock and the disconnect pause are covered by their contracts only.
   Progress, 23 November: the votes MP-14 and MP-16 waited for. `callvote modifier <name> 0|1` (or the modifier's own name: `quadhog 1`), `arena <weapon|none>`, `preset <name>` and `spectatorchat 0|1` are bits 21 to 24 (`VOTEFLAG_MODIFIER`, `_SPECTATORCHAT`, `_PRESET`, `_ARENA`, `NUM_VOTES` 25), each with its payload after the MP-12 fields only when its flag is set, so a vote without them is laid out as before. The server checks each through the layer's own rules (Quad Hog only where the ballot leaves Deathmatch; a preset the server has whose game type a map plays, alone in its ballot) and refuses one that changes nothing; a passed modifier or arena restarts the match through `CheckModifierChange`, a preset as the `preset` command does. `g_spectatorChat` is in the server info so every Vote page knows its value. The retained Vote page offers Quad Hog (in Deathmatch), Vampiric Damage, Weapons Frenzy, a weapon arena, a built-in preset, spectator chat and **Mute Instead of Kicking** for the player chosen (the mute vote's row). `mp_vote_extensions_smoke.py` passes on a hidden OpenGL listen server: three refused calls start no vote, then Quad Hog, a rocket arena, spectator chat and the standard preset each pass and apply.
 - [ ] **MP-13 — P2, implementation: map pools, rotation and the player queue.**
@@ -6121,7 +6121,7 @@ Completion substeps:
   has no map filter to convert; shuffle and the legacy script mode are
   covered by the core harness and by reading, not by a live run; nobody has
   played it, and only Windows x64 has run the smoke.
-  Progress, 17 November ([audit](mp-audit-2026-11-17.md#rulesets-the-map-database-presets-and-buying)):
+  Progress, 17 November ([audit](https://github.com/themuffinator/openQ4/blob/main/docs/dev/mp-audit-2026-11-17.md#rulesets-the-map-database-presets-and-buying)):
   the rotation, the prediction and the pick use the game type set for the
   next map; a player who was a client and then hosts gets their `mapdb.txt`
   on the first map; map votes ask the database, so a `modes` override counts;
@@ -6131,7 +6131,7 @@ Completion substeps:
   file. Covered by the map database contract, not by a run. Open: the
   database's publish still does a full `rescanSI`, and `ServerAdvance` is not
   gated for managed matches.
-  Second round, 17 November ([second round](mp-audit-2026-11-17.md#second-round)): both closed. The
+  Second round, 17 November ([second round](https://github.com/themuffinator/openQ4/blob/main/docs/dev/mp-audit-2026-11-17.md#second-round)): both closed. The
   database publishes its two keys with the new engine command `publishSI`,
   and a managed match stays on its map at the end of its review instead of
   having the rotation rewrite `si_map`. `mp_map_rotation_smoke.py` passes on
@@ -6157,7 +6157,7 @@ Completion substeps:
   browser and join card show the active modifiers; a person plays each
   modifier once with real input.
   Progress, 15 November: the layer, the scales and the presets are built
-  ([reference](mp-modifiers.md), [player guide](../user/server-setup.md#modifiers-and-presets)).
+  ([reference](https://github.com/themuffinator/openQ4/blob/main/docs/dev/mp-modifiers.md), [player guide](../user/server-setup.md#modifiers-and-presets)).
   Decision recorded there: modifiers are rows of one table latched in
   `idMultiplayerGame::SetGameType` on every peer, never game types, and a
   preset is allow-listed typed data that is parsed and never executed.
@@ -6205,7 +6205,7 @@ Completion substeps:
   marker for the hog; the Modifiers tab's caption size and its UI register
   record; Vulkan and dedicated-server runs, the percentages in play, and a
   person playing each modifier with real input.
-  Progress, 17 November ([audit](mp-audit-2026-11-17.md#rulesets-the-map-database-presets-and-buying)):
+  Progress, 17 November ([audit](https://github.com/themuffinator/openQ4/blob/main/docs/dev/mp-audit-2026-11-17.md#rulesets-the-map-database-presets-and-buying)):
   changing `si_ruleset` on a running map (a passed ruleset vote, `preset
   classic`) hung the server in a restart loop; it now loads the map again
   once, which was run. A preset whose game type the map cannot play moves to
@@ -6239,7 +6239,7 @@ Completion substeps:
   *State, 15 November 2026:* the game side of every item above is in, with
   the timer list, crosshair ammunition and time of day drawn in all four
   layouts and team locations in the Competitive list
-  ([player guide](../user/multiplayer-client-options.md),
+  ([player guide](https://github.com/themuffinator/openQ4/blob/main/docs/user/multiplayer-client-options.md),
   [record](release-completion.md#chat-tokens-hit-tones-a-weapon-order-item-timers-and-team-locations-mp-15-15-november-2026)).
   Cosmetic limits are applied by each client's game module on the server's
   instruction: a snapshot carries nothing cosmetic to withhold, so the
@@ -6247,13 +6247,13 @@ Completion substeps:
   written. The frag line and the match clock were already stock. Still open:
   the human judgement, menu rows, register rows and spec text, 4:3 captures,
   a team list outside Competitive, and editor placement under UI-06.
-  Progress, 17 November ([audit](mp-audit-2026-11-17.md#client-options-chat-and-spectating)):
+  Progress, 17 November ([audit](https://github.com/themuffinator/openQ4/blob/main/docs/dev/mp-audit-2026-11-17.md#client-options-chat-and-spectating)):
   item timers clear with the restart in place at a match's start and at each
   round; `say_team` tokens are not expanded when the line will go to
   everyone; a long `say` is cut instead of ending the client; a player cannot
   be named `server`; the team list gives an eliminated player their own team
   only. Contracts only; not run.
-  Second round, 17 November ([second round](mp-audit-2026-11-17.md#second-round)): item timers build
+  Second round, 17 November ([second round](https://github.com/themuffinator/openQ4/blob/main/docs/dev/mp-audit-2026-11-17.md#second-round)): item timers build
   their list once a send.
 - [ ] **MP-16 — P2, implementation: live spectating and casting.** Give live
   spectators what MVD playback already has: follow by name from a named list,
@@ -6267,7 +6267,7 @@ Completion substeps:
   broadcast and relay transport remain OPT-04 decisions. Gates: recipient
   filtering holds for every new camera (byte-level checks as in MP-01), a live
   smoke on OpenGL and Vulkan, the event stream consumed by a sample overlay in
-  `tools/`, and the [competitive matches guide](../user/competitive-matches.md)
+  `tools/`, and the [competitive matches guide](https://github.com/themuffinator/openQ4/blob/main/docs/user/competitive-matches.md)
   updated.
   Progress, 15 November: everything but the vote. *Follow:* `follow <name>`
   resolves a name to a slot on the client (the wire still carries slot and
@@ -6292,7 +6292,7 @@ Completion substeps:
   item timers from MP-15's `si_itemTimers`). The client shows the disclosed
   team-vital rows in the match
   panel. *Stream:* `g_matchEventStream 1` writes one JSON object a line to
-  `match-events/live.ndjson` ([reference](mp-live-event-stream.md)); the match
+  `match-events/live.ndjson` ([reference](https://github.com/themuffinator/openQ4/blob/main/docs/dev/mp-live-event-stream.md)); the match
   journal is managed-only and has no kill, flag or score events, so the
   stream is built from scoreboard state on whichever end writes it, and
   `tools/overlay/match_overlay.py` consumes it. *Chat:* a spectator whose
@@ -6318,14 +6318,14 @@ Completion substeps:
   and a menu page for the named list under UI-11 (the vitals reuse the
   managed context panel's rows); the three new modes in MVD playback's
   `demo_autoTrack`; real-input play; other platforms.
-  Progress, 17 November ([audit](mp-audit-2026-11-17.md#client-options-chat-and-spectating)):
+  Progress, 17 November ([audit](https://github.com/themuffinator/openQ4/blob/main/docs/dev/mp-audit-2026-11-17.md#client-options-chat-and-spectating)):
   an eliminated team member is no longer sent every opponent's position and
   vitals, and can follow their own team mates (they could follow nobody); a
   free camera with nobody to follow stays where it is instead of jumping to a
   spawn point; team chat reaches the whole team and spectator-only chat only
   those who chose to watch. Contracts only; the spectator smoke was not
   re-run. Open: the chase and death cameras' clip trace.
-  Second round, 17 November ([second round](mp-audit-2026-11-17.md#second-round)): the chase and death
+  Second round, 17 November ([second round](https://github.com/themuffinator/openQ4/blob/main/docs/dev/mp-audit-2026-11-17.md#second-round)): the chase and death
   cameras clip their raised focus before pulling back, so a low ceiling no
   longer holds the camera inside it. Not yet looked at by eye.
   Progress, 23 November: the `spectatorchat` vote, on bit 22 as reserved, with a
@@ -6402,7 +6402,7 @@ Completion substeps:
   `network_security.py` pins the caps, `mp_moderation.py` is the asset-free
   contract for each command, `mp_moderation_smoke.py` covers ban, mute, flood
   and the limit on a pure dedicated server (Windows, loopback), and the
-  guide is updated ([record](mp-moderation.md)). The same day: the mute vote
+  guide is updated ([record](https://github.com/themuffinator/openQ4/blob/main/docs/dev/mp-moderation.md)). The same day: the mute vote
   (the kick vote's target plus one flag, so the packed vote's layout is
   unchanged), graceful shutdown (`serverShutdown`: announce, finish the
   match or wait out a time, say goodbye, stop) with its smoke, and the
@@ -6422,7 +6422,7 @@ Completion substeps:
   `g_refPassword` are private cvars declared in the engine, so none of them
   reaches the console history or the log whichever game module is loaded.
   An audit the same day (two independent reviews and a pass of the author's;
-  [record](mp-moderation.md#audit-22-november-2026)) fixed what it found:
+  [record](https://github.com/themuffinator/openQ4/blob/main/docs/dev/mp-moderation.md#audit-22-november-2026)) fixed what it found:
   the commands read their line as typed, because the console's lexer could
   ban a different IPv6 range than the one typed; a ban list the server
   cannot read is never written over; IPv6 players are banned, muted and
@@ -6482,7 +6482,7 @@ Completion substeps:
   flights, stairs and the known trick jumps), frame-exact at `si_fps 30` and
   bounded at 60 and 90 with HF-01's clocks, through `in_movementProbe` scripts
   and the retail binary on the same inputs
-  (the [retail baseline ledger](retail-baseline-ledger.md) records the retail runs). Then an optional
+  (the [retail baseline ledger](https://github.com/themuffinator/openQ4/blob/main/docs/dev/retail-baseline-ledger.md) records the retail runs). Then an optional
   movement ruleset in the MP-14 layer: air control, double jumps everywhere,
   ramp-jump boost, faster weapon switches and an armour-system choice (CPMA's
   CPM lineage), as `pm_` server cvars the bots read (MP-09). Gates: a recorded
@@ -6632,10 +6632,10 @@ Completion substeps:
   Noted 17 November: MVD snapshots are paced in milliseconds against the
   16 ms game clock, which gives 15 a second where the default asks for 20.
   Matching the request makes recordings about a third larger, so it is a
-  decision for this item ([audit](mp-audit-2026-11-17.md#engine-network-layer)).
+  decision for this item ([audit](https://github.com/themuffinator/openQ4/blob/main/docs/dev/mp-audit-2026-11-17.md#engine-network-layer)).
   Decided 17 November: record the 20 a second asked for. Snapshots are paced
   on the frames' real times; recordings grow by about a third
-  ([second round](mp-audit-2026-11-17.md#second-round)).
+  ([second round](https://github.com/themuffinator/openQ4/blob/main/docs/dev/mp-audit-2026-11-17.md#second-round)).
 - [ ] **MP-24 — P1, qualification: demo robustness and platform breadth.** The
   render container has native coverage of 416 header flips, 2,264 truncations
   and hostile payloads; MVD has 2,032 cut points through `mvdRecover` and a
@@ -6782,7 +6782,7 @@ Completion substeps:
      effect presets so four seats hold the refresh class FPS-02 sets for the
      active tier, measured, not assumed. Run on Windows, Linux and Steam
      Deck. People play each layout with real controllers through a
-     [human qualification checklist](mp-human-qualification.md) entry.
+     [human qualification checklist](https://github.com/themuffinator/openQ4/blob/main/docs/dev/mp-human-qualification.md) entry.
      Publish a splitscreen player guide in `docs/user/` and release notes.
   Close MP-25 when every stage exit holds on one build. That build must pass
   two-, three- and four-seat smokes against bots on a listen server and
@@ -6854,7 +6854,7 @@ Completion substeps:
   maps, with a remote client seeing every monster, on OpenGL and Vulkan; a
   measured frame-time and bandwidth record at the alive cap; MVD playback of
   a boss wave; Windows and Linux runs; people playing a run together with
-  real input through a [human qualification checklist](mp-human-qualification.md)
+  real input through a [human qualification checklist](https://github.com/themuffinator/openQ4/blob/main/docs/dev/mp-human-qualification.md)
   entry; and a Horde section in a player guide and the server setup guide.
 
 ## Audio and voice
@@ -7059,7 +7059,7 @@ the non-verbal remainder is marked for players rather than counted as covered.
   and fails runs whose frames lag (`frames_kept_pace`). 0.15.0 and this change
   pass every check on a quiet machine; at 2 fps only this change keeps streams
   playing.
-  [Evidence](audio-voice-evidence.md#streams-across-long-frames-and-output-changes-23-november-2026).
+  [Evidence](https://github.com/themuffinator/openQ4/blob/main/docs/dev/audio-voice-evidence.md#streams-across-long-frames-and-output-changes-23-november-2026).
 - [ ] **AUD-04 — P2, implementation and qualification: surround and mod reverb.**
   Resolve `SSF_CENTER`/VO placement on 5.1 with stereo/HRTF fallback and nonzero mod
   room-rolloff unit handling. Keep stock zero-rolloff behavior intact.
@@ -7097,7 +7097,7 @@ the non-verbal remainder is marked for players rather than counted as covered.
   centre-capable device was available, so it ran only on synthetic data. The
   remaining gate is one run of that harness on a 5.1/7.1 endpoint, plus
   listening on speakers; real endpoint loss and hotplug stay with AUD-02.
-  [Real-endpoint evidence](audio-voice-evidence.md#real-playback-endpoints-13-november-2026).
+  [Real-endpoint evidence](https://github.com/themuffinator/openQ4/blob/main/docs/dev/audio-voice-evidence.md#real-playback-endpoints-13-november-2026).
 - [ ] **AUD-05 — P1, implementation: functional multiplayer voice.** Capture,
   codec, transport and playback are implemented with explicit microphone consent,
   push-to-talk, local-only testing, connection-scoped mute, server moderation and
@@ -7295,7 +7295,7 @@ the non-verbal remainder is marked for players rather than counted as covered.
 ## Controller experience
 
 Sources: [input settings](../user/input-settings.md), [Steam Deck guide](../user/steam-deck.md),
-[Deck QA](steam-deck-qa.md), [input key matrix](input-key-matrix.md),
+[Deck QA](steam-deck-qa.md), [input key matrix](https://github.com/themuffinator/openQ4/blob/main/docs/dev/input-key-matrix.md),
 [input routing](ui/input-routing.md), `src/sys/sdl3/sdl3_backend.cpp`,
 `src/framework/UsercmdGen.cpp`, `src/sys/sys_local.cpp` (rumble mixing) and
 `content/baseoq4/pak0/default.cfg`.
@@ -7335,7 +7335,7 @@ controllers. Every item honors five rules:
 **Estimate: 75%; 0/10 tasks closed.** The 22 November 2026 increment built
 PAD-01 through PAD-08 and qualified each with a native test and a
 virtual-controller run in the client
-([technical contract](controller-experience.md),
+([technical contract](https://github.com/themuffinator/openQ4/blob/main/docs/dev/controller-experience.md),
 [release record](release-completion.md#controllers-the-one-in-your-hands-aim-in-degrees-gyro-layouts-and-haptics-22-november-2026)).
 No task is closed: each still owes evidence only a person or a multiplayer
 session can give, and PAD-10 is a decision.
@@ -7344,14 +7344,14 @@ session can give, and PAD-10 is a decision.
 | --- | --- | --- |
 | PAD-01 — Partial | Every controller open with the active one chosen by use, release on handover, a saved device choice, pause on loss in single-player, the multiplayer HUD notice and the two battery notices; `ControllerRoster` policy test and the `handover`, `pause` and `battery` virtual-controller runs pass. | A multiplayer capture of the HUD notice; a symbol for the battery notices; the stock-menu device row; physical runs under PAD-09. |
 | PAD-02 — Partial | Per-stick inner and outer dead zones with an axial option, speeds in degrees per second, turn boost, walk-independent turning, three presets with Custom, and one transform for the usercmd and the late look; existing profiles carried over; measured 157, 90 and 357 degrees per second in the `turnrate` run. | The feel review on two controller families, which decides the fresh-profile preset; stock-menu rows. |
-| PAD-03 — Partial | [Decision recorded](controller-experience.md#pad-03-aim-assistance); slowdown and follow for sticks only in the campaign and Arena, world-screen steadying, the server cap `si_aimAssist` and no assistance under competitive rulesets; policy test and the `assist` run pass (allies ignored, 0.45 and 0.75 on a live enemy, nothing when Off). | Campaign and Arena feel runs, which decide the default (Off for now); the cap shown in the server details and browser; a multiplayer run of the cap; follow measured against a moving target. |
+| PAD-03 — Partial | [Decision recorded](https://github.com/themuffinator/openQ4/blob/main/docs/dev/controller-experience.md#pad-03-aim-assistance); slowdown and follow for sticks only in the campaign and Arena, world-screen steadying, the server cap `si_aimAssist` and no assistance under competitive rulesets; policy test and the `assist` run pass (allies ignored, 0.45 and 0.75 on a live enemy, nothing when Off). | Campaign and Arena feel runs, which decide the default (Off for now); the cap shown in the server details and browser; a multiplayer run of the cap; follow measured against a moving target. |
 | PAD-04 — Partial | Gyro in its own units with no mouse setting touching it, Yaw, Roll and Player Space, hold-still and at-rest calibration stored per controller, activation with the ratchet, tightening and smoothing, the menu pointer and rows; math test and the `gyro` run pass (90 degrees for a quarter turn whatever the mouse settings). | The direction check and review on DualSense, Switch Pro and Deck; stock-menu rows. |
 | PAD-05 — Partial | Retained text and number fields show openQ4's own on-screen keyboard (`guis/menu/keyboard.rui`) when their edit opens by controller or touch and SDL reports no system keyboard (`ui_onScreenKeyboard`): five layers covering every shipped language's letters, shift, caret arrows, DELETE, SPACE and DONE, each also on a controller button drawn on its key, operable by controller, pointer and touch; the panel stands clear of the field. Evidence: `openq4-on-screen-keyboard` (layouts), `openq4-ui-on-screen-keyboard` (document), `controller_runtime.py --scenario keyboard` (a save named with a capital, an accented and a Cyrillic letter, and saved by DONE). | The harness's other two cases (a player name, a password-protected local server); device buttons and touch on the keys; captures in each language; Deck game mode still showing Steam's keyboard; field defaults that save typing (recent server addresses); the stock chat line and console, which stay keyboard-only; UI register acceptance (WID-022 and INP-012 are partial). |
 | PAD-06 — Partial | Context buttons for votes, Ready, Spectate, chat, team chat, the buy menu, voice chat and quick save and load, with prompts; four layouts with Custom; Reset Controller and Reset Keyboard and Mouse; rows for Toggle Crouch, Always Run and Move Curve; the View button follows its binding in play; the `layout` run passes. | Hints on the held scoreboard for its buttons; multiplayer harness runs of the vote and match buttons; the D-pad weapon direction decision (shared with VR); Toggle Run and hold-or-toggle zoom rows; stock-menu rows. |
 | PAD-07 — Partial | Settings > Controls > Controller > Test Controller opens CONTROLLER TEST: both sticks with their dead zones and outer limits drawn, trigger travel against Trigger Press, the buttons lit in the active family's glyphs, the gyro's trace and calibration state, name, power and battery, a rumble test that runs each motor present in turn, and a Steam Input line. A family's first connection raises two notices naming Prompt Style and Swap Confirm and Back. Evidence: `openq4-ui-retained-controls`; `controller_runtime.py --scenario testpanel` (a virtual DualSense's stick, trigger and button reaching the panel, the four motors in order). | Captures of each family's glyph set and of each language; the Steam Input line with Steam running; UI register rows beyond the interface record; a physical controller. Back closes the panel, so it cannot be shown held. |
 | PAD-08 — Partial | Trigger motors on the firing trigger, DualSense trigger feel by weapon, the light for team or health, player lights, side-biased hits, a switch for each and capability gating; the `feedback` run passes on virtual DualSense and Xbox pads. | The #244 reporter's retest; physical DualSense and Xbox review under PAD-09; stock-menu rows. |
-| PAD-09 — Partial | The [controller qualification checklist](controller-qualification.md) is written; no physical controller run is recorded. | One checklist run per family and platform through menus, SP and MP play. |
-| PAD-10 — Not started (optional) | A [recommendation](controller-experience.md#pad-10-recommendation-not-yet-decided) is recorded; nothing is decided or built. | Decide flick stick, co-pilot and HD haptics before any implementation. |
+| PAD-09 — Partial | The [controller qualification checklist](https://github.com/themuffinator/openQ4/blob/main/docs/dev/controller-qualification.md) is written; no physical controller run is recorded. | One checklist run per family and platform through menus, SP and MP play. |
+| PAD-10 — Not started (optional) | A [recommendation](https://github.com/themuffinator/openQ4/blob/main/docs/dev/controller-experience.md#pad-10-recommendation-not-yet-decided) is recorded; nothing is decided or built. | Decide flick stick, co-pilot and HD haptics before any implementation. |
 
 ### PAD task evidence and acceptance
 
@@ -8122,7 +8122,7 @@ do not establish an accepted delivery scope for these ambitions. To advance one:
 ### REL completion checkpoints
 
 **Estimate: 55%; 0/4 tasks closed.** Since 23 November 2026 one frozen package per
-candidate runs the matrix in [release qualification](release-qualification.md):
+candidate runs the matrix in [release qualification](https://github.com/themuffinator/openQ4/blob/main/docs/dev/release-qualification.md):
 `release_qualification.py` hashes every file, proves the runtime is exactly the
 release archive's, binds it to its commit and re-checks it around every case,
 keeping every attempt. Candidate C1 (`174cb31a4`) was rejected for losing
@@ -8162,7 +8162,7 @@ Completion order for the selected release:
   Test both clean installs and upgrades with existing archived CVars/configs,
   bindings, saves and mod selections. Qualify any default/config migration without
   erasing player choices merely to make upgraded installs match fresh defaults.
-  Progress, 23 November: the [release qualification](release-qualification.md)
+  Progress, 23 November: the [release qualification](https://github.com/themuffinator/openQ4/blob/main/docs/dev/release-qualification.md)
   runner and `release_profile_runtime.py` run this matrix on one frozen package.
   Windows x64 candidate C1 lost players' settings (multiplayer-only settings
   dropped by `seta`'s missing archive flag, the multiplayer menu's 21 settings

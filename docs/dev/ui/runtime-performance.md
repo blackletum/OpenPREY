@@ -1897,7 +1897,7 @@ on its first draw, and the prefetch above never covered it. A diagnostic
 build timed the parse at 145-155 ms and the view at 45-50 ms. The first damage
 number of a match therefore held a frame for about 200 ms mid-fight. Online
 that froze the server's copy of the player's aim
-([MP-07 record](../mp-network-qualification.md#the-servers-aim-after-a-client-stall-13-november-2026)).
+([MP-07 record](https://github.com/themuffinator/openQ4/blob/main/docs/dev/mp-network-qualification.md#the-servers-aim-after-a-client-stall-13-november-2026)).
 
 - `idRetainedHud::Precache`, at each level load, drops the last level's
   catalog and queues the artwork's parse on a worker. The first HUD to load

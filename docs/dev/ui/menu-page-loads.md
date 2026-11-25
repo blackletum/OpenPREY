@@ -3,7 +3,7 @@
 A third round on 11 November 2026 measured every retained menu, removed the
 wait when a page is first opened, and refined what a walk of the remaining
 pages turned up. It follows the
-[stock interface menus](legacy-menu-layout.md) and
+[stock interface menus](https://github.com/themuffinator/openQ4/blob/main/docs/dev/ui/legacy-menu-layout.md) and
 [key glyphs and focus](key-bind-glyphs.md) records of 10 November. The
 [navigation hitches](menu-navigation-hitches.md) round of 12 November removed
 the stalls that remained: the view build, the first frame's vector

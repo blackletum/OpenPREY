@@ -1190,7 +1190,7 @@ icicles are not part of the family.
   and keeps the rime line at 1.00 as a rail. The Phone profile's power saving
   removes the snow.
 
-The editable [Awakening menu atlas sheet](ui/atlas/awakening-menu.html) draws
+The editable [Awakening menu atlas sheet](https://github.com/themuffinator/openQ4/blob/main/docs/dev/ui/atlas/awakening-menu.html) draws
 the pause menu, a page (Save Game, Settings), a sub-page (Controls), a
 detail page and the confirmation at 4:3, 16:9, 21:9 and 32:9 beside the
 Marine family, with every level reached and left through its transitions,

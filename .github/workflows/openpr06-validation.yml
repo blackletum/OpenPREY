@@ -38,7 +38,8 @@ jobs:
             tools/build/write_pak_manifest.py \
             tools/tests/openpr06_rebase_contract.py \
             tools/tests/prey_video_menu_contract.py \
-            tools/tests/linux_sanitizer_source_contract.py
+            tools/tests/linux_sanitizer_source_contract.py \
+            tools/tests/source_charset_integrity.py
           bash -n tools/build/meson_setup.sh
           python tools/build/sync_icons.py --check
           python tools/build/game_source_inventory.py . > /dev/null
@@ -46,6 +47,7 @@ jobs:
           python tools/tests/openpr06_rebase_contract.py
           python tools/tests/prey_video_menu_contract.py
           python tools/tests/linux_sanitizer_source_contract.py
+          python tools/tests/source_charset_integrity.py
 
       - name: Validate pak0 and pak1 inputs
         shell: bash
