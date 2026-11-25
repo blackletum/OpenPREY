@@ -138,6 +138,11 @@ struct ValueControlView::Impl {
 		std::optional<ControlReadback> painted;
 		std::uint64_t paintedPass = 0;
 		bool paintedOpen = false;
+		// openPR06: what a slider's last paint wrote (its value, fill extent
+		// and thumb position). The same three in the same pass need no
+		// reassertion: only the slider writes those parts, and a complete pass
+		// starts a new one.
+		std::optional<std::array<double,3>> sliderPainted;
 	};
 	// What a write requested and what the element then held: a later write of
 	// the same request is skipped while the element still holds that value.
@@ -173,9 +178,11 @@ struct ValueControlView::Impl {
 	std::unordered_map<std::string_view,Rml::Element*> elements;
 	std::unordered_map<std::string_view,const std::map<std::string,Value>*> authored;
 	std::map<std::pair<std::string,std::string>,Applied,AppliedLess> applied;
-	// openPR06: the nodes a choice's paint writes (its value text and its
-	// popup's subtree) and those whose opacity its popup's filter reads.
-	std::unordered_set<std::string> paintedNodes, opacityNodes;
+	// openPR06: the nodes a choice's paint writes (its popup's subtree), its
+	// value text, whose text alone it writes, and the nodes whose opacity its
+	// popup's filter reads.
+	std::unordered_set<std::string> paintedNodes, valueTexts, opacityNodes;
+	std::uint64_t choiceRepaints = 0;
 	Rml::Element* Element(const std::string& id) const { const auto found = elements.find(id); return found == elements.end() ? nullptr : found->second; }
 	const std::map<std::string,Value>& Authored(const std::string& id) const { return *authored.at(id); }
 	bool Property(const std::string& id, const std::string& property, const std::string& value) {
@@ -638,7 +645,9 @@ bool ValueControlView::Initialize(std::shared_ptr<const DocumentModel> model, Rm
 		for (auto* ancestor = popup; ancestor && ancestor != &document; ancestor = ancestor->GetParentNode())
 			if (candidate->authored.contains(ancestor->GetId())) entry.opacityAncestry.push_back(ancestor->GetId());
 		candidate->opacityNodes.insert(entry.opacityAncestry.begin(),entry.opacityAncestry.end());
-		if (!choice->valueText.empty()) candidate->paintedNodes.insert(choice->valueText);
+		// The value text's only painted property is its text: the focus
+		// colour a page animates on it leaves every list's paint standing.
+		if (!choice->valueText.empty()) candidate->valueTexts.insert(choice->valueText);
 		if (const auto found = nodes.find(choice->popup); found != nodes.end()) {
 			std::vector<const Node*> subtree{found->second};
 			while (!subtree.empty()) {
@@ -663,8 +672,10 @@ bool ValueControlView::Initialize(std::shared_ptr<const DocumentModel> model, Rm
 	}
 	impl = std::move(candidate); return true;
 }
+std::uint64_t ValueControlView::TakeChoiceRepaints() { return impl ? std::exchange(impl->choiceRepaints,0) : 0; }
 bool ValueControlView::PaintsNode(const std::string& id, const std::string& property) const {
-	return impl->paintedNodes.contains(id) || (property == "opacity" && impl->opacityNodes.contains(id));
+	return impl->paintedNodes.contains(id) || (property == "text" && impl->valueTexts.contains(id)) ||
+		(property == "opacity" && impl->opacityNodes.contains(id));
 }
 void ValueControlView::SetSafeArea(float left, float top, float right, float bottom) {
 	const auto inset = [](float value) { return std::isfinite(value) ? std::max(value,0.f) : 0.f; };
@@ -694,14 +705,23 @@ bool ValueControlView::Paint(Interaction& interaction, const std::map<std::strin
 			const auto parent = thumb->GetOffsetParent(); const auto parentOffset = parent ? parent->GetAbsoluteOffset(Rml::BoxArea::Padding) : Rml::Vector2f{};
 			const float margin = thumb->GetBox().GetEdge(Rml::BoxArea::Margin,slider->vertical ? Rml::BoxEdge::Top : Rml::BoxEdge::Left);
 			const float start = (slider->vertical ? offset.y-parentOffset.y : offset.x-parentOffset.x)-margin;
-			changed |= impl->Property(slider->fill,slider->vertical ? "height" : "width",Pixels(CssExtent(impl->Element(slider->fill),static_cast<float>(extent*fraction),slider->vertical)));
-			changed |= impl->Property(slider->thumb,slider->vertical ? "top" : "left",Pixels(start+static_cast<float>(travel*(slider->vertical ? 1-fraction : fraction))));
+			const float fill = CssExtent(impl->Element(slider->fill),static_cast<float>(extent*fraction),slider->vertical);
+			const float position = start+static_cast<float>(travel*(slider->vertical ? 1-fraction : fraction));
+			// A page sliding or fading moves the track's absolute offset and its
+			// parent's alike: the paint stands, and formatting it again would not
+			// change a property (a slider page's every moving frame did).
+			const std::array<double,3> painted{value,fill,position};
+			if (pass != 0 && entry.paintedPass == pass && entry.sliderPainted == painted) continue;
+			entry.sliderPainted = painted; entry.paintedPass = pass;
+			changed |= impl->Property(slider->fill,slider->vertical ? "height" : "width",Pixels(fill));
+			changed |= impl->Property(slider->thumb,slider->vertical ? "top" : "left",Pixels(position));
 			changed |= impl->Text(slider->valueText,Number(value,static_cast<int>(slider->decimals)));
 		} else if (const auto* choice = std::get_if<ChoiceSpec>(&entry.control.widget)) {
 			// A settled closed list: its value, labels, availability and rows
 			// stand as its last paint left them.
 			if (pass != 0 && !view->popupOpen && !entry.paintedOpen && entry.paintedPass == pass && entry.painted == accepted) continue;
 			entry.painted = accepted; entry.paintedPass = pass; entry.paintedOpen = view->popupOpen;
+			++impl->choiceRepaints;
 			std::string value = impl->ValueText(accepted.value);
 			entry.optionCount = accepted.optionCount ? std::min(*accepted.optionCount,choice->options.size()) : choice->options.size();
 			bool rows = false;

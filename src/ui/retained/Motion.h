@@ -10,8 +10,6 @@
 
 namespace openq4::ui {
 
-using PropertyKey = std::pair<std::string, std::string>;
-using PropertyValues = std::map<PropertyKey, Value>;
 enum class CancelPolicy { Hold, RestoreBase };
 
 // openQ4: a motion's live values, read as one map: the authored values with
@@ -120,6 +118,10 @@ public:
 	// restore or a reset. Stamps are unique across copies, so an unchanged
 	// stamp means the values are the ones read when it was taken.
 	std::uint64_t Revision() const { return revision; }
+	// A stamp that changes with every write that can change a `display` or
+	// `pointer-events` value, which decide what takes input: a page that
+	// slides or fades keeps the stamp, so its input need not be re-read.
+	std::uint64_t EligibilityRevision() const { return eligibility; }
 	// The keys whose values a write may have changed since the last call, or
 	// false when every value may have (a reset, a restore, or more changes
 	// than are tracked): the caller then re-reads all of them.
@@ -134,6 +136,8 @@ public:
 private:
 	void Touch();
 	std::uint64_t revision = 0;
+	void TouchEligibility();
+	std::uint64_t eligibility = 0;
 	void Changed(const PropertyKey& key);
 	std::vector<PropertyKey> changedKeys;
 	bool changedAll = true;

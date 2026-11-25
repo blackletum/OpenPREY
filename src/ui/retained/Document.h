@@ -132,6 +132,12 @@ struct Binding {
 };
 bool ValidProperty(const std::string& name, const Value& value);
 bool ValidStateValue(const StateValue& value);
+using PropertyKey = std::pair<std::string, std::string>;
+using PropertyValues = std::map<PropertyKey, Value>;
+struct Node;
+// Every node's authored values by (node, property). Among nodes sharing an ID
+// the last in document order wins.
+PropertyValues AuthoredValues(const Node& root);
 // Image sources are engine VFS image names: empty (no picture) or a relative
 // path of letters, digits, '_', '-', '.' and '/', without '..' or '//'.
 bool ValidImageSource(const std::string& source);
@@ -340,6 +346,14 @@ struct DocumentModel {
 	// vendor data from the loaded model instead of parsing the source again;
 	// empty when the document has none.
 	std::string extensions;
+	// The document's shared vector art by ID, which a vector node's `symbol`
+	// property draws and its binding may switch between. Copies share it.
+	std::shared_ptr<const std::map<std::string, std::vector<VectorPath>>> symbols;
+	// Every node's authored values by (node, property), which a motion starts
+	// from. Document::Load builds them with the model (on a parse worker for
+	// a prefetched page), so a view's load need not; null for a model built
+	// any other way, whose motion builds its own.
+	std::shared_ptr<const PropertyValues> authoredValues;
 	const Node* FindNode(const std::string& id) const;
 	// Index the tree's node IDs so FindNode answers without a search. Only a
 	// tree that no longer changes may be indexed (Document indexes the model

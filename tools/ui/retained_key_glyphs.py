@@ -17,7 +17,8 @@ many keys of each family the action has
 A chip is sized in em of its strip, whose font size is the chip's height, so
 a page that grows its rows grows the strip's one length and every chip
 follows; the art is drawn in fractions of each glyph's box. Every slot repeats
-the same art, so the art is the document's shared symbols.
+the same art, so the art is the document's shared symbols, and a slot draws
+whichever its kind names through one vector whose `symbol` is bound.
 
 The module is self-contained: it takes the generator's Document (its
 `state`, `symbols` and `bind(node, prop, value)`) and builds plain nodes."""
@@ -334,6 +335,44 @@ def _mouse(kind: int) -> list:
     return paths
 
 
+def _choose(state: str, table: list) -> object:
+    """A balanced select over a numeric state: `table` is (value, result) in
+    rising value order, and the state at one of those values yields its
+    result. Any other value yields a neighbour's, which a hidden node never
+    draws."""
+    if len(table) == 1:
+        return table[0][1]
+    middle = len(table) // 2
+    return {"op": "select", "args": [{"op": "<", "args": [{"state": state}, table[middle][0]]},
+                                     _choose(state, table[:middle]), _choose(state, table[middle:])]}
+
+
+def _within(state: str, values) -> dict:
+    """The state is one of `values`: a range test when they run unbroken."""
+    values = sorted(values)
+    if values == list(range(values[0], values[-1] + 1)):
+        return {"op": "&&", "args": [{"op": ">=", "args": [{"state": state}, values[0]]},
+                                     {"op": "<=", "args": [{"state": state}, values[-1]]}]}
+    return _any(state, tuple(values))
+
+
+def _chosen_art(doc, ident: str, arts: list, symbol, width) -> dict:
+    """One glyph whose art is chosen by binding: `arts` is each
+    (symbol, width, draw) it can show, `symbol` and `width` the expressions
+    that choose. One node per slot draws whichever the slot's kind names,
+    where a node per kind left a slot about twenty hidden glyphs to build,
+    style and bind (docs/dev/ui/menu-page-weight.md)."""
+    for name, art_width, draw in arts:
+        if name not in doc.symbols:
+            doc.symbols[name] = _fractions(draw(), art_width)
+    node = {"id": ident, "type": "vector",
+            "properties": {"display": keyword("none"), "width": em(arts[0][1] / BOX), "height": em(1),
+                           "symbol": keyword(arts[0][0])}}
+    doc.bind(ident, "symbol", symbol)
+    doc.bind(ident, "width", width)
+    return node
+
+
 def key_slot(doc, ident: str, state: str) -> dict:
     """One keyboard or mouse key: `state` is its key state, with
     `state`.glyph and `state`.arrow beside it."""
@@ -344,21 +383,29 @@ def key_slot(doc, ident: str, state: str) -> dict:
     cap = _cap(doc, f"{ident}-cap", state, "key")
     cap["properties"]["display"] = keyword("none")
     _show(doc, cap, {"op": "&&", "args": [_is(kind, KEYCAP), _is(arrow, 0)]})
-    arrows = [_show(doc, _art(doc, f"{ident}-arrow-{d}", f"key-arrow-{d}", BOX, lambda d=d: _arrow(d)),
-                    {"op": "&&", "args": [_is(kind, KEYCAP), _is(arrow, d)]}) for d in (1, 2, 3, 4)]
-    mice = [_show(doc, _art(doc, f"{ident}-mouse-{v}", f"key-mouse-{v}", MOUSE_W, lambda v=v: _mouse(v)), _is(kind, v))
-            for v in (MOUSE_LEFT, MOUSE_RIGHT, MOUSE_MIDDLE, WHEEL_UP, WHEEL_DOWN)]
+    # An arrow key's keycap (a keycap kind with its arrow), or the mouse with
+    # its bound button: one node draws whichever the key is.
+    arrows = [(d, f"key-arrow-{d}") for d in (1, 2, 3, 4)]
+    mice = [(v, f"key-mouse-{v}") for v in (MOUSE_LEFT, MOUSE_RIGHT, MOUSE_MIDDLE, WHEEL_UP, WHEEL_DOWN, MOUSE_SIDE)]
+    arts = [(name, BOX, lambda d=d: _arrow(d)) for d, name in arrows] + \
+           [(name, MOUSE_W, lambda v=v: _mouse(v)) for v, name in mice]
+    keycap = _is(kind, KEYCAP)
+    art = _chosen_art(doc, f"{ident}-art", arts,
+                      {"op": "select", "args": [keycap, _choose(arrow, arrows), _choose(kind, mice)]},
+                      {"op": "select", "args": [keycap, 1.0, round(MOUSE_W / BOX, 4)]})
+    _show(doc, art, {"op": "||", "args": [{"op": "&&", "args": [keycap, {"op": "!=", "args": [{"state": arrow}, 0]}]},
+                                          _within(kind, [v for v, _ in mice])]})
     # A side button's number stands in the body under the split.
-    side = _show(doc, _art(doc, f"{ident}-mouse-{MOUSE_SIDE}", f"key-mouse-{MOUSE_SIDE}", MOUSE_W, lambda: _mouse(MOUSE_SIDE)),
-                 _is(kind, MOUSE_SIDE))
     number_text = _text(f"{ident}-side", 8.5, {"position": keyword("absolute"), "left": length(12.5, "%"), "top": length(46, "%"),
                                                 "width": length(75, "%"), "line-height": em(1.25)})
+    number_text["properties"]["display"] = keyword("none")
     doc.bind(f"{ident}-side", "text", {"state": state})
-    side["properties"]["position"] = keyword("relative")
-    side["children"] = [number_text]
+    _show(doc, number_text, _is(kind, MOUSE_SIDE))
+    art["properties"]["position"] = keyword("relative")
+    art["children"] = [number_text]
     return group(ident, {"position": keyword("relative"), "display": keyword("none"), "flex-direction": keyword("row"),
                          "align-items": keyword("center"), "height": em(1), "margin-right": em(GAP), "flex-shrink": number(0)},
-                 [cap, *arrows, *mice, side])
+                 [cap, art])
 
 
 def _pad_arts() -> dict:
@@ -404,8 +451,13 @@ def pad_slot(doc, ident: str, state: str) -> dict:
     doc.state[state] = {"type": "string", "initial": ""}
     doc.state[f"{state}.glyph"] = {"type": "number", "initial": 0}
     kind = f"{state}.glyph"
-    arts = [_show(doc, _art(doc, f"{ident}-kind-{value}", f"key-pad-{value}", width, lambda value=value: _pad_arts()[value][1]),
-                  _is(kind, value)) for value, (width, _) in PAD_WIDTHS.items()]
+    kinds = sorted(PAD_WIDTHS)
+    art = _chosen_art(doc, f"{ident}-art",
+                      [(f"key-pad-{value}", PAD_WIDTHS[value][0], lambda value=value: _pad_arts()[value][1]) for value in kinds],
+                      _choose(kind, [(value, f"key-pad-{value}") for value in kinds]),
+                      _choose(kind, [(value, round(PAD_WIDTHS[value][0] / BOX, 4)) for value in kinds]))
+    _show(doc, art, _within(kind, kinds))
+    arts = [art]
     cap = _cap(doc, f"{ident}-cap", state, "button")
     cap["properties"]["display"] = keyword("none")
     _show(doc, cap, _is(kind, BUTTON))

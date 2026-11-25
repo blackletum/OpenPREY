@@ -2192,6 +2192,7 @@ struct Runtime::Impl {
 			// first letter before any comparison.
 			const char first = name.empty() ? 0 : name[0];
 			if (first == 't' && name == "text") continue;
+			if (first == 's' && name == "symbol") continue; // The element's paths, not a style.
 			if (first == 'o' && name == "opacity") { if (value.data[0] < 1) templates.DeclareEffect(properties,"filter","opacity("+value.Css()+")"); }
 			else if (first == 'b' && name.starts_with("backdrop-") && (name == "backdrop-blur" || name == "backdrop-saturate" || name == "backdrop-streak" || BackdropFaultIndex(name) >= 0)) continue; // Folded into backdrop-filter.
 			else if (first == 'i' && name == "image") { if (!HasImageCoordinates(node)) templates.DeclareEffect(properties,"decorator",ImageDecorator(node,value.text)); }
@@ -2355,13 +2356,15 @@ struct Runtime::Impl {
 	// they change only with the state or the motion: an update at the same
 	// revisions (the settling passes of one frame, an event's refresh) reuses
 	// them instead of searching both tables for every branch again. A mask's
-	// area follows layout and is read on every update.
+	// area follows layout and is read on every update. openPR06: the motion's
+	// side is its eligibility stamp, which only a display or pointer-events
+	// write moves, so a page sliding or fading in reads them once.
 	std::uint64_t eligibilityStateRevision=0,eligibilityMotionRevision=0;
 	bool eligibilityCached=false;
 	void CollectInputEligibility() {
-		const bool reread=!eligibilityCached || eligibilityStateRevision!=state.Revision() || eligibilityMotionRevision!=motion.Revision();
+		const bool reread=!eligibilityCached || eligibilityStateRevision!=state.Revision() || eligibilityMotionRevision!=motion.EligibilityRevision();
 		CollectInputEligibility(inputBranches,true,reread);
-		eligibilityCached=true; eligibilityStateRevision=state.Revision(); eligibilityMotionRevision=motion.Revision();
+		eligibilityCached=true; eligibilityStateRevision=state.Revision(); eligibilityMotionRevision=motion.EligibilityRevision();
 	}
 	void CollectInputEligibility(InteractionBranch& branch, bool inherited, bool reread) {
 		if (!branch.node) return;
@@ -3242,6 +3245,15 @@ struct Runtime::Impl {
 					{float(viewport.width),float(viewport.height)})) host.Log(true,"Canonical opacity rejected: "+key.first);
 				paintDirty=true;
 			} else if (value.type == ValueType::Text) static_cast<VectorElement*>(element)->SetCanonicalText(string);
+			else if (key.second == "symbol") {
+				// A vector's bound art: the document validated every symbol a
+				// binding can name. Its paths draw from the next render.
+				const auto* symbols = canonical->Model().symbols.get();
+				const auto found = symbols ? symbols->find(value.text) : std::map<std::string,std::vector<VectorPath>>::const_iterator{};
+				if (!symbols || found == symbols->end()) host.Log(true,"Canonical symbol rejected: "+key.first+" "+value.text);
+				else static_cast<VectorElement*>(element)->SetPaths(found->second);
+				paintDirty=true;
+			}
 			else if (value.type == ValueType::Image) {
 				const auto* node = canonical->Model().FindNode(key.first);
 				if (!static_cast<VectorElement*>(element)->SetImageSource(value.text) &&
@@ -4220,6 +4232,7 @@ bool Runtime::Layout(const Viewport& viewport,double seconds) {
 			impl->RevealFocus(preserveAuthoredAxes); impl->context->Update();
 		}
 	}
+	impl->Stats().choiceRepaints+=impl->valueView.TakeChoiceRepaints();
 	impl->preserveRestoredScroll=false;
 	// The detail card follows the subject this layout settled on: its detail
 	// shows the card and its content, then the card's measured box places it.

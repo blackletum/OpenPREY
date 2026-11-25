@@ -40,6 +40,9 @@ class VectorGeometry {
 public:
 	void SetLinearMaskInterface(LinearMaskInterface* value) { linearMasks=value; }
 	void Configure(const std::vector<VectorPath>& paths, Host& host, RuntimeStatistics& statistics);
+	// New paths for a configured geometry (a bound symbol); compiled
+	// geometry is invalidated as by Configure.
+	void SetPaths(const std::vector<VectorPath>& paths);
 	// Copy authored paths and shared host ownership only; compiled geometry is
 	// always invalidated, including when replacing an already rendered copy.
 	void CopyArtworkFrom(const VectorGeometry& source);
@@ -101,6 +104,8 @@ public:
 	void Configure(const Node& node, Host& host, RuntimeStatistics& statistics);
 	void CopyArtworkFrom(const VectorElement& source);
 	void SetCanonicalText(const std::string& text);
+	// A bound symbol's art in place of the paths the element drew.
+	void SetPaths(const std::vector<VectorPath>& paths) { paint.SetPaths(paths); }
 	bool SetImageSource(const std::string& source);
 	void SetImageCoordinate(const std::string& property, double value);
 	// A signal fault's live values (dither, strength, phase), which its

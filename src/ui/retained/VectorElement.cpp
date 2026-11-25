@@ -127,6 +127,10 @@ void VectorGeometry::Configure(const std::vector<VectorPath>& source, Host& owne
 	cache.clear(); valid = renderReady = false; slidingRenders = 0;
 	hitGeometry.clear(); hitPrepared = hitValid = hitArea = false;
 }
+void VectorGeometry::SetPaths(const std::vector<VectorPath>& source) {
+	if (host && statistics) Configure(source,*host,*statistics);
+	else paths = source;
+}
 void VectorGeometry::CopyArtworkFrom(const VectorGeometry& source) {
 	paths = source.paths; host = source.host; statistics = source.statistics; linearMasks=source.linearMasks; multiply = {}; coverage = {};
 	self.reset(); sharedPaths.reset(); ++compileGeneration;
@@ -715,6 +719,7 @@ void VectorElement::Configure(const Node& node, Host& owner, RuntimeStatistics& 
 			case 'l': return name=="left";
 			case 't': return name=="top" || name=="transform";
 			case 'r': return name=="right";
+			case 's': return name=="symbol"; // Its art changes through a binding, which repaints.
 			case 'b': return name=="bottom";
 			case 'w': return name=="width";
 			case 'h': return name=="height";

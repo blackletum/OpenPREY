@@ -1190,6 +1190,62 @@ static void CheckVectorFadeReplay(TestHost& host) {
 	}
 	host.samplePoints.clear(); host.cacheLayers=false;
 }
+// A vector's `symbol` property draws a document symbol, and a binding may
+// switch it among the symbols it names: one node draws whichever glyph a
+// key is, where a node per glyph left the rest hidden.
+static void CheckBoundSymbol(TestHost& host) {
+	const std::string square=R"json([{"id":"a","op":"move","points":[[X0,10]]},{"id":"b","op":"line","points":[[X1,10]]},{"id":"c","op":"line","points":[[X1,40]]},{"id":"d","op":"line","points":[[X0,40]]},{"id":"z","op":"close"}])json";
+	const auto art=[&](const char* x0,const char* x1,const char* colour) {
+		auto commands=square;
+		for (const auto& [from,to] : {std::pair<std::string,std::string>{"X0",x0},{"X1",x1}})
+			for (size_t at=commands.find(from);at!=std::string::npos;at=commands.find(from)) commands.replace(at,from.size(),to);
+		return std::string(R"json([{"id":"fill","commands":)json")+commands+R"json(,"fill":{"type":"solid","color":{"type":"color","value":)json"+colour+"}}}]";
+	};
+	const std::string symbols=R"json("symbols":{"red":)json"+art("10","40","[1,0,0,1]")+R"json(,"blue":)json"+art("60","90","[0,0,1,1]")+"}";
+	const auto fixture=[&](const std::string& property,const std::string& binding,const std::string& extra) {
+		return std::string(R"json({"format":"retained-ui","version":1,"id":"bound-symbol",)json")+symbols+
+			R"json(,"state":{"lit":{"type":"boolean","initial":false}},"bindings":[)json"+binding+"]"+extra+
+			R"json(,"root":{"id":"root","type":"group","properties":{"width":{"type":"length","unit":"dp","value":200},"height":{"type":"length","unit":"dp","value":100}},"children":[
+			{"id":"glyph","type":"vector","properties":{"position":{"type":"keyword","value":"absolute"},"left":{"type":"length","unit":"dp","value":0},"top":{"type":"length","unit":"dp","value":0},"width":{"type":"length","unit":"dp","value":100},"height":{"type":"length","unit":"dp","value":50})json"+
+			property+"}}]}}";
+	};
+	const std::string chosen=R"json(,"symbol":{"type":"keyword","value":"red"})json";
+	const std::string choose=R"json({"id":"glyph.symbol","node":"glyph","property":"symbol","value":{"op":"select","args":[{"state":"lit"},"blue","red"]}})json";
+	{
+		Runtime runtime(host); std::vector<Diagnostic> diagnostics; std::string error;
+		const bool loaded=runtime.LoadDocument(fixture(chosen,choose,""),"bound-symbol.rui",diagnostics);
+		if (!loaded) for (const auto& diagnostic:diagnostics) std::fprintf(stderr,"%s\n",diagnostic.message.c_str());
+		Check(loaded,"load a vector whose symbol is bound");
+		const auto drawn=[&](bool blue) { return std::any_of(host.drawn.begin(),host.drawn.end(),[&](const auto& v) {
+			return blue ? v.b>.99f && v.r<.01f && v.a>.99f : v.r>.99f && v.b<.01f && v.a>.99f; }); };
+		host.ClearSamples(); Check(runtime.Frame({},0),"draw the authored symbol");
+		Check(drawn(false) && !drawn(true),"a symbol property draws that symbol's art");
+		double time=.1;
+		for (const bool lit : {true,false,true}) {
+			Check(runtime.SetState({{"lit",lit}},error,time),"switch the bound symbol");
+			host.ClearSamples(); Check(runtime.Frame({},time),"draw the switched symbol");
+			Check(drawn(lit) && !drawn(!lit),"a bound symbol draws the art it names, and only that");
+			Check(runtime.Statistics().frameReplays==0,"a switched symbol is drawn afresh, never replayed");
+			host.ClearSamples(); Check(runtime.Frame({},time+.05),"draw the switched symbol at rest");
+			Check(drawn(lit) && !drawn(!lit),"the switched art stays at rest");
+			time+=.1;
+		}
+	}
+	const auto refused=[&](const std::string& source,const char* message) {
+		Document document; std::vector<Diagnostic> diagnostics;
+		Check(!document.Load(source,diagnostics) && !diagnostics.empty(),message);
+	};
+	refused(fixture(R"json(,"symbol":{"type":"keyword","value":"green"})json","",""),"a symbol property names a declared symbol");
+	refused(fixture(chosen,R"json({"id":"glyph.symbol","node":"glyph","property":"symbol","value":{"op":"select","args":[{"state":"lit"},"green","red"]}})json",""),
+		"a bound symbol chooses among declared symbols");
+	refused(fixture(chosen,R"json({"id":"glyph.symbol","node":"glyph","property":"symbol","value":{"op":"select","args":[{"state":"lit"},"#str_1","red"]}})json",""),
+		"a bound symbol's choices are symbol IDs");
+	refused(fixture(chosen,"",R"json(,"timelines":[{"id":"swap","durationMs":10,"tracks":[{"node":"glyph","property":"symbol","keys":[{"atMs":0,"value":{"type":"keyword","value":"red"}},{"atMs":10,"value":{"type":"keyword","value":"blue"}}]}]}])json"),
+		"a symbol is bound, not animated");
+	refused(fixture(chosen,"",R"json(,"aliases":{"glyphArt":{"node":"glyph","property":"symbol"}})json"),"a symbol is not written through an alias");
+	refused(fixture(chosen+R"json(},"paths":)json"+art("0","5","[1,1,1,1]")+R"json(,"extensions":{"q":1)json","",""),
+		"a vector draws a symbol property or its own paths, not both");
+}
 static void CheckDecorativeTransforms(TestHost& host) {
 	const char* source=R"json({"format":"retained-ui","version":1,"id":"decorative-transforms",
 	 "root":{"id":"root","type":"group","children":[
@@ -2515,6 +2571,7 @@ int main(int argc, char** argv) {
 	CheckMovingMaskSourceCache(host,true);
 	CheckQuietButtonLayout(host);
 	CheckDecorativeTransforms(host);
+	CheckBoundSymbol(host);
 	CheckMenuFadeReplay(host);
 	CheckVectorFadeReplay(host);
 	CheckCoverageRaster();

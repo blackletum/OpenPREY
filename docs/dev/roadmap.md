@@ -4002,6 +4002,18 @@ Completion must advance through the existing dependencies:
   compilation on its own extent: Options opens at 1.5 ms a frame, the other
   pages under 1 ms, and the title prefetches MultiPrey. Open: the click
   frame's page setup (MultiPrey's network port and models, 40 ms).
+  Progress, 25 November: [menu page weight](ui/menu-page-weight.md). Options
+  carried a hidden vector for every glyph a binding chip might show (5,000 of
+  its 9,036 nodes, 10,200 of its paths); a vector's `symbol` is now a
+  bindable property and each chip one node, so the page holds 165 MB where
+  it held 249 MB and builds its view in 149 ms instead of 192. A list's value
+  text paints only its text (a tab change no longer repaints every list and
+  lays the page out again: 12 to 4.5 ms over its frames), input eligibility
+  follows `display` and `pointer-events` writes alone and sliders skip an
+  unchanged paint (Options opens at 1.5 ms a frame, MultiPrey 0.8 ms), and
+  the title's warm-up waits for a lead still parsing, so Options no longer
+  builds its view in the frame that opens it. Open: a tab's first showing
+  compiles its artwork; the view build is one main-thread step.
   Progress, 4 November: [moving weapon scopes](ui/runtime-performance.md#moving-weapon-scopes-4-november-2026)
   retain local meshes for their faint animated furniture. At 1080p the isolated
   rail/nail scope CPU medians fall from 6.99/8.80 ms to 0.018/0.037 ms; continuous

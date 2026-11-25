@@ -13397,6 +13397,11 @@ void idSessionLocal::WarmRetainedPages() {
 			common->GetPresentationTime() < retainedHandoffUntil || ( mapSpawned && IsMultiplayer() ) ) {
 		return;
 	}
+	// openPR06: a lead whose parse is still on the workers keeps the warm-up
+	// open, so its view is built once the parse lands. Declaring the rest done
+	// while OPTIONS, the slowest parse, was still in flight left it to build
+	// its view (0.2 to 0.5 s) in the frame that opened it.
+	bool parsing = false;
 	for ( int i = 0; i < static_cast<int>( sizeof( leads ) / sizeof( leads[0] ) ); ++i ) {
 		if ( idStr::Icmp( shown->Name(), leads[ i ][ 0 ] ) != 0 ) {
 			continue;
@@ -13416,6 +13421,7 @@ void idSessionLocal::WarmRetainedPages() {
 					common->DPrintf( "retained GUI %s loaded ahead, while %s rested (%d ms)\n", page, shown->Name(), Sys_Milliseconds() - started );
 					return;
 				}
+				parsing |= UI_RetainedPrefetched( page );
 				continue;
 			}
 			bool finished = false;
@@ -13425,7 +13431,7 @@ void idSessionLocal::WarmRetainedPages() {
 		}
 		break;
 	}
-	retainedWarmDone = true;
+	retainedWarmDone = !parsing;
 #endif
 }
 

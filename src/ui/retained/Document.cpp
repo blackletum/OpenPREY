@@ -66,6 +66,7 @@ bool ValidProperty(const std::string& name, const Value& value) {
 		else if (name == "text") valid = value.type == ValueType::Text;
 		else if (name == "transform") valid = value.type == ValueType::Transform;
 		else if (name == "image") valid = value.type == ValueType::Image && ValidImageSource(value.text);
+		else if (name == "symbol") valid = value.type == ValueType::Keyword && !value.text.empty(); // The reader checks it names a symbol.
 		return valid;
 	}
 std::string BackdropFilterCss(const Value* blur, const Value* saturate, const Value* streak) {
@@ -369,6 +370,8 @@ public:
 		for (const auto& timeline : model.timelines) timelineIndex.emplace(timeline.id,&timeline);
 		ReadBindings(root);
 		ReadAliases(root);
+		// A bound symbol switches a vector's art at run time: keep the art.
+		if (boundSymbols) model.symbols = std::make_shared<const std::map<std::string,std::vector<VectorPath>>>(std::move(symbols));
 		ReadActions(root);
 		ReadEvents(root);
 		ValidateCompletions(root);
@@ -637,6 +640,7 @@ private:
 				} else {
 					const auto found = node->properties.find(alias.property);
 					Require(found != node->properties.end(),value["property"],path+"/property","Presentation aliases require an explicit canonical property base");
+					Require(alias.property != "symbol",value["property"],path+"/property","A symbol is bound, not written through an alias");
 					const auto& base = found->second;
 					const bool supported = base.type == ValueType::Number || base.type == ValueType::Length || base.type == ValueType::Colour ||
 						base.type == ValueType::Text || base.type == ValueType::Keyword || base.type == ValueType::Font;
@@ -839,6 +843,13 @@ private:
 		if (!expression.op.empty() || expression.type != 2) return false;
 		return ValidImageSource(std::get<std::string>(expression.literal));
 	}
+	// A bound symbol is a choice among literal symbol IDs, so every value it
+	// can take is art the document declares.
+	bool SymbolResult(const Expression& expression) const {
+		if (expression.op == "select") return SymbolResult(expression.args[1]) && SymbolResult(expression.args[2]);
+		if (!expression.state.empty() || !expression.presentation.empty() || !expression.op.empty() || expression.type != 2) return false;
+		return symbols.contains(std::get<std::string>(expression.literal));
+	}
 	bool LocalizedTextResult(const Expression& expression) const {
 		if (!expression.state.empty() || !expression.presentation.empty() || expression.op == "numberText") return true;
 		if (expression.op == "select") return LocalizedTextResult(expression.args[1]) && LocalizedTextResult(expression.args[2]);
@@ -879,6 +890,10 @@ private:
 					Require(expression.type == expected,value["value"],at,"Expression type does not match its target");
 					if (!enabled && type == ValueType::Text) Require(LocalizedTextResult(expression),value["value"],at,"Literal display text must use localization keys");
 					if (!enabled && type == ValueType::Image) Require(ImageSourceResult(expression),value["value"],at,"Literal image sources must be relative VFS image paths");
+					if (!enabled && property == "symbol") {
+						Require(SymbolResult(expression),value["value"],at,"A bound symbol chooses among the document's symbol IDs");
+						boundSymbols = true;
+					}
 					effective.values.push_back(std::move(expression));
 				}
 				model.bindings.push_back(std::move(effective));
@@ -1240,6 +1255,7 @@ private:
 		return result;
 	}
 	std::map<std::string,std::vector<VectorPath>> symbols; // The document's shared vector art, by ID.
+	bool boundSymbols = false; // A binding switches a vector's symbol.
 	Node ReadNode(const Json::Value& value, const std::string& path, unsigned depth) {
 		Require(depth <= 48 && ++nodeCount <= 65536,value,path,"Document hierarchy exceeds the node/depth limit");
 		Fields(value,path,{"id","type","properties","children","paths","symbol","mask","control","modal","legacyText","scene","extensions"});
@@ -1483,7 +1499,13 @@ private:
 					parsed.navigation[name] = Id(control["navigation"][name],p+"/navigation/"+name);
 			}
 		}
-		if (result.type == "vector" && value.isMember("symbol")) {
+		// A `symbol` property also names the art, which a binding may switch;
+		// its paths are resolved once the properties are read.
+		const bool symbolProperty = value.isMember("properties") && value["properties"].isObject() && value["properties"].isMember("symbol");
+		if (symbolProperty) {
+			Require(result.type == "vector",value["properties"]["symbol"],path+"/properties/symbol","A symbol property requires a vector node");
+			Require(!value.isMember("paths") && !value.isMember("symbol"),value,path,"A vector node draws its own paths or a symbol's, not both");
+		} else if (result.type == "vector" && value.isMember("symbol")) {
 			Require(!value.isMember("paths"),value["paths"],path+"/paths","A vector node draws its own paths or a symbol's, not both");
 			Require(value["symbol"].isString(),value["symbol"],path+"/symbol","Expected a symbol ID");
 			const auto found = symbols.find(value["symbol"].asString());
@@ -1537,6 +1559,12 @@ private:
 				else sides.emplace_back(MemberName(member),std::move(property));
 			}
 			for (auto& [name,property] : sides) result.properties[std::string(name)] = std::move(property);
+		}
+		if (symbolProperty) {
+			const auto& name = result.properties.at("symbol").text;
+			const auto found = symbols.find(name);
+			Require(found != symbols.end(),value["properties"]["symbol"],path+"/properties/symbol","Unknown symbol '"+name+"'");
+			result.paths = found->second;
 		}
 		Require(result.type != "image" || result.properties.contains("image"),value,path,
 			"An image node requires an explicit image source property; an empty source shows no picture");
@@ -1879,6 +1907,7 @@ private:
 			};
 			eachProperty([&](const std::string& property) {
 				Require(node->properties.contains(property),entry,p,"Animated properties require an explicit base value on the target node");
+				Require(property != "symbol",entry,p,"A symbol is bound, not animated");
 				Require(targets.insert({track.node,property}).second,entry,p,"Duplicate effective property owner within a timeline");
 			});
 			const auto& keys = entry["keys"];
@@ -1985,7 +2014,7 @@ void MarkupNode(const Node& node, std::string& output) {
 	if (node.control) output += "position:relative;";
 	if (node.mask) output += "mask-image:q4-mask(alpha);";
 	if (const auto css = NodeBackdropFilterCss(node); !css.empty()) { output += "backdrop-filter:"; output += css; output += ';'; }
-	for (const auto& [name,value] : node.properties) if (name != "text") {
+	for (const auto& [name,value] : node.properties) if (name != "text" && name != "symbol") {
 		if (name == "opacity") { if (value.data[0] < 1) { output += "filter:opacity("; output += value.Css(); output += ");"; } }
 		else if (name == "backdrop-blur" || name == "backdrop-saturate" || name == "backdrop-streak" || BackdropFaultIndex(name) >= 0) continue; // Folded into backdrop-filter.
 		else if (name == "image") { if (!HasImageCoordinates(node)) { output += "decorator:"; output += ImageDecorator(node,value.text); output += ';'; } }
@@ -2037,6 +2066,22 @@ double Easing::Evaluate(double fraction) const {
 		if (bezier(mid,x1,x2) < x) low = mid; else high = mid;
 	}
 	return bezier((low+high)*.5,y1,y2);
+}
+// The nodes are taken in ID order, so each key follows the last and its
+// insert appends instead of searching a document's tens of thousands of keys;
+// among nodes sharing an ID the last in document order wins, as it did.
+PropertyValues AuthoredValues(const Node& root) {
+	std::vector<const Node*> nodes, pending{&root};
+	while (!pending.empty()) {
+		const auto* node = pending.back(); pending.pop_back();
+		nodes.push_back(node);
+		for (auto child = node->children.rbegin(); child != node->children.rend(); ++child) pending.push_back(&*child);
+	}
+	std::stable_sort(nodes.begin(),nodes.end(),[](const Node* a, const Node* b) { return a->id < b->id; });
+	PropertyValues values;
+	for (const auto* node : nodes)
+		for (const auto& [name,value] : node->properties) values.insert_or_assign(values.end(),PropertyKey{node->id,name},value);
+	return values;
 }
 bool ValidStateValue(const StateValue& value) {
 	if (const auto number = std::get_if<double>(&value)) return std::isfinite(*number) && std::abs(*number) <= 1000000000000.0;
@@ -2161,6 +2206,9 @@ bool Document::Load(const std::string& source, std::vector<Diagnostic>& diagnost
 		try { initial = std::make_shared<const State>(Validator(source,diagnostics,std::shared_ptr<DocumentModel>(candidate,&candidate->model)).Read(root,treeCheck)); }
 		catch (const ValidationError&) { return false; }
 		initialState = std::move(initial);
+		// openPR06: what a motion starts from, built here with the model (a
+		// prefetched page's on its parse worker) rather than in the view's load.
+		candidate->model.authoredValues = std::make_shared<const PropertyValues>(AuthoredValues(candidate->model.root));
 	}
 	impl = std::move(candidate);
 	return true;

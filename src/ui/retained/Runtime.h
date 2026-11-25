@@ -122,6 +122,9 @@ struct RuntimeStatistics {
 	// Authored property values the frame's presentation passes walked: none
 	// while nothing they read has changed since the last complete pass.
 	std::uint64_t motionInputsScanned = 0;
+	// Lists the frame repainted (value, rows, popup); a settled closed list
+	// repaints only after a pass that could undo its paint.
+	std::uint64_t choiceRepaints = 0;
 };
 
 class Host {

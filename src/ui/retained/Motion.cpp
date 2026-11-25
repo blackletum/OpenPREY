@@ -12,37 +12,25 @@ std::atomic<std::uint64_t> motionRevisions{0};
 bool SameValue(const Value& a, const Value& b) {
 	return a.type == b.type && a.data == b.data && a.unit == b.unit && a.text == b.text;
 }
-void CollectNodes(const Node& node, std::vector<const Node*>& nodes) {
-	nodes.push_back(&node);
-	for (const auto& child : node.children) CollectNodes(child,nodes);
-}
-// Every node's authored values by (node, property). The nodes are taken in
-// ID order, so each key follows the last and its insert appends instead of
-// searching a document's tens of thousands of keys; among nodes sharing an
-// ID the last in document order wins, as it did.
-void BaseValues(const Node& root, PropertyValues& values) {
-	std::vector<const Node*> nodes;
-	CollectNodes(root,nodes);
-	std::stable_sort(nodes.begin(),nodes.end(),[](const Node* a, const Node* b) { return a->id < b->id; });
-	for (const auto* node : nodes)
-		for (const auto& [name,value] : node->properties) values.insert_or_assign(values.end(),PropertyKey{node->id,name},value);
-}
 }
 void Motion::Reset(const DocumentModel& model) { Reset(std::make_shared<const DocumentModel>(model)); }
 void Motion::Reset(std::shared_ptr<const DocumentModel> shared) {
 	playing.clear(); completed.clear();
 	auto loaded = std::make_shared<std::map<std::string, const Timeline*>>();
 	for (const auto& timeline : shared->timelines) loaded->emplace(timeline.id,&timeline);
-	auto authored = std::make_shared<PropertyValues>();
-	BaseValues(shared->root,*authored);
+	// A loaded document's model carries its authored values (built with the
+	// model, off this thread for a prefetched page); any other model's are
+	// built here.
+	auto authored = shared->authoredValues ? shared->authoredValues : std::make_shared<const PropertyValues>(AuthoredValues(shared->root));
 	// The live values are the authored ones until a write replaces one.
 	model = std::move(shared); timelines = std::move(loaded);
 	base = std::move(authored); values.reset();
 	clock = 0; sampled = false;
 	changedKeys.clear(); changedAll = true;
-	Touch();
+	Touch(); TouchEligibility();
 }
 void Motion::Touch() { revision = ++motionRevisions; }
+void Motion::TouchEligibility() { eligibility = ++motionRevisions; }
 MotionValues Motion::Values() const {
 	static const PropertyValues none; // a moved-from Motion holds none
 	return {base ? *base : none,values ? *values : none};
@@ -55,6 +43,8 @@ PropertyValues& Motion::Writable() {
 	return *values;
 }
 void Motion::Changed(const PropertyKey& key) {
+	const auto& name = key.second;
+	if (!name.empty() && (name[0] == 'd' || name[0] == 'p') && (name == "display" || name == "pointer-events")) TouchEligibility();
 	// A frame writes the few values its playing tracks own; past this many the
 	// next reader re-reads every value instead.
 	if (changedAll || changedKeys.size() >= 512) { changedAll = true; changedKeys.clear(); return; }
@@ -78,6 +68,8 @@ void Motion::Rollback(Checkpoint&& saved) {
 	playing = std::move(saved.playing); changedKeys = std::move(saved.changedKeys); completed = std::move(saved.completed);
 	revision = saved.revision; clock = saved.clock; sampledClock = saved.sampledClock;
 	changedAll = saved.changedAll; sampled = saved.sampled;
+	// The restored values may include a display the sample had changed.
+	TouchEligibility();
 }
 bool Motion::TakeChanged(std::vector<PropertyKey>& keys) {
 	keys.clear();
@@ -288,7 +280,7 @@ bool Motion::Restore(const MotionSnapshot& snapshot, double seconds, std::string
 	candidate.Advance(seconds);
 	*this = std::move(candidate);
 	changedKeys.clear(); changedAll = true;
-	Touch();
+	Touch(); TouchEligibility();
 	return true;
 }
 } // namespace openq4::ui

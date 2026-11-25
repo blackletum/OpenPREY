@@ -224,18 +224,40 @@ void EventRepeats(const std::string& path, const std::string& event, int repeats
 	if (runtime.HasEvent("onInit") && !runtime.RunEvent("onInit",start,effects,error)) throw std::runtime_error("onInit: "+error);
 	runtime.PlayTimeline("open",start);
 	for (int i = 0; i <= 240; ++i) runtime.Frame(viewport,start+i/60.0);
-	std::vector<double> eventMs, frameMs;
+	// "setup,...,event": each setup event (a page's onActivate, which opens
+	// it) runs once and settles first, so the repeated event acts on the
+	// page as a player sees it.
+	double now = start+4;
+	std::string repeated = event;
+	for (size_t comma; (comma = repeated.find(',')) != std::string::npos; repeated.erase(0,comma+1)) {
+		const auto setup = repeated.substr(0,comma);
+		if (!runtime.RunEvent(setup,now,effects,error)) throw std::runtime_error(setup+": "+error);
+		for (int i = 0; i < 120; ++i) { now += 1/60.0; runtime.Frame(viewport,now); }
+	}
+	// Each repeat's event, the frame that shows it and the three after it,
+	// which may lay out or compile what the first one revealed.
+	std::vector<double> eventMs, frameMs, settleMs, layoutMs, paths, repaints;
 	for (int i = 1; i <= repeats; ++i) {
-		const double now = start+4+i/60.0;
+		now += 1/60.0;
 		const auto before = std::chrono::steady_clock::now();
-		if (!runtime.RunEvent(event,now,effects,error)) throw std::runtime_error(event+": "+error);
+		if (!runtime.RunEvent(repeated,now,effects,error)) throw std::runtime_error(repeated+": "+error);
 		eventMs.push_back(std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-before).count());
-		runtime.Frame(viewport,now);
-		frameMs.push_back(runtime.Statistics().frameMilliseconds);
+		double settle = 0, layout = 0, compiled = 0, lists = 0;
+		for (int frame = 0; frame < 4; ++frame) {
+			if (frame) now += 1/60.0;
+			runtime.Frame(viewport,now);
+			const auto stats = runtime.Statistics();
+			if (!frame) frameMs.push_back(stats.frameMilliseconds);
+			settle += stats.frameMilliseconds; layout += stats.layoutMilliseconds; compiled += static_cast<double>(stats.vectorPathsCompiled);
+			lists += static_cast<double>(stats.choiceRepaints);
+		}
+		settleMs.push_back(settle); layoutMs.push_back(layout); paths.push_back(compiled); repaints.push_back(lists);
 	}
 	if (!host.error.empty()) throw std::runtime_error("Event document logged an error: "+host.error);
-	std::printf("{\"scenario\":\"event\",\"document\":\"%s\",\"event\":\"%s\",\"repeats\":%d,\"event_p50_ms\":%.6f,\"event_min_ms\":%.6f,\"event_max_ms\":%.6f,\"frame_p50_ms\":%.6f}\n",
-		path.c_str(),event.c_str(),repeats,Percentile(eventMs,.5),Percentile(eventMs,0.0001),Percentile(eventMs,1),Percentile(frameMs,.5));
+	std::printf("{\"scenario\":\"event\",\"document\":\"%s\",\"event\":\"%s\",\"repeats\":%d,\"event_p50_ms\":%.6f,\"event_min_ms\":%.6f,\"event_max_ms\":%.6f,\"frame_p50_ms\":%.6f,"
+		"\"settle_p50_ms\":%.6f,\"settle_max_ms\":%.6f,\"settle_layout_p50_ms\":%.6f,\"settle_paths_p50\":%.1f,\"settle_choice_repaints_p50\":%.1f}\n",
+		path.c_str(),event.c_str(),repeats,Percentile(eventMs,.5),Percentile(eventMs,0.0001),Percentile(eventMs,1),Percentile(frameMs,.5),
+		Percentile(settleMs,.5),Percentile(settleMs,1),Percentile(layoutMs,.5),Percentile(paths,.5),Percentile(repaints,.5));
 	runtime.CloseDocument(); runtime.Shutdown();
 }
 
@@ -385,7 +407,7 @@ int main(int argc, char** argv) {
 			return 0;
 		}
 		if (argc >= 4 && std::string(argv[1]) == "--event") {
-			if (argc > 5) throw std::runtime_error("usage: openq4-retained-ui-benchmark --event <document.rui> <event> [repeats=60]");
+			if (argc > 5) throw std::runtime_error("usage: openq4-retained-ui-benchmark --event <document.rui> [setup,...,]<event> [repeats=60]");
 			const int repeats = argc > 4 ? std::stoi(argv[4]) : 60;
 			if (repeats < 1 || repeats > 100000) throw std::runtime_error("Invalid event repeat count");
 			EventRepeats(argv[2],argv[3],repeats);

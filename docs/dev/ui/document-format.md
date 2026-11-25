@@ -101,6 +101,15 @@ The property registry in `Document.cpp` currently supports:
   full-page frames, `tools/ui/build_retained_screens.py`).
 - Background and border colors, opacity, a composed transform and backdrop
   soft focus.
+- `symbol` (a keyword naming one of the document's `symbols`), on a vector
+  node only: the node draws that symbol's paths, in place of its own `paths`
+  or a `symbol` field. A binding may switch it among symbols the document
+  declares; its value must be a literal symbol ID or a `select` of them, so
+  the document names every art it can draw. A timeline or a presentation
+  alias may not write it. The runtime installs the new paths when the
+  binding changes and draws them afresh, never from a replayed frame
+  (openPR06's key glyphs, `tools/ui/retained_key_glyphs.py`, where one node
+  per slot replaced a hidden node per glyph; [menu page weight](menu-page-weight.md)).
 
 `backdrop-blur` (a non-negative `dp` or `px` length) and `backdrop-saturate`
 (a number 0–1) soften the composed frame beneath the node's border box: a

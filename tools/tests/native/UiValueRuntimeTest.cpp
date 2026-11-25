@@ -235,6 +235,34 @@ static void WidgetsAtRest(TestHost& host) {
 	view.Frame();
 	Check(quiet(),"a closed list leaves the page at rest");
 }
+// A closed list's value text may animate its colour (a page lights the
+// focused row's value): the list writes only that node's text, so the colour
+// leaves its paint standing. Repainting every list on the page for it cost
+// the Options page a second layout pass after each tab change.
+static void ValueColourKeepsPaint(TestHost& host) {
+	auto source=Parse(Source());
+	std::function<Json::Value*(Json::Value&)> find=[&](Json::Value& node) -> Json::Value* {
+		if (node["id"].asString()=="choice-value") return &node;
+		if (node.isMember("children")) for (auto& child:node["children"]) if (auto* found=find(child)) return found;
+		return nullptr;
+	};
+	auto* value=find(source["root"]);
+	Check(value!=nullptr,"the fixture's list has a value text");
+	(*value)["properties"]["color"]=Typed("color",Array({1,1,1,1}));
+	PropertyTimeline(source,"light-value","choice-value","color",Typed("color",Array({1,1,1,1})),Typed("color",Array({1,0,0,1})),200);
+	View view(host,Text(source));
+	for (int frame=0;frame<3;++frame) view.Frame();
+	Check(view.runtime.PlayTimeline("light-value",view.time),"start the value text's colour");
+	for (int frame=0;frame<6;++frame) {
+		view.Frame();
+		const auto stats=view.runtime.Statistics();
+		Check(stats.layoutUpdates==1 && stats.choiceRepaints==0,"a value text's colour restyles once and repaints no list");
+		Check(!view.Widget("choice").popupOpen,"the list stays closed while its value lights");
+	}
+	// Its text is still the list's: a state change repaints it.
+	view.State({{"choice",3.0}}); view.Frame();
+	Check(view.runtime.Statistics().choiceRepaints>0,"a changed value still repaints its list");
+}
 // The stock menu sounds (visual section 8, MOT-006): Focus once each time a
 // device event moves the lit control or option, never for frames, programs, a
 // finger, a held button or a pointer finding what the keys already lit;
@@ -554,7 +582,7 @@ static void CountedStateLabels(TestHost& host) {
 
 int main() {
 	TestHost host;PaddedValueParts(host);ReadbackAndToggle(host);ProjectedDragAndHandoff(host);PopupAndPersistence(host);ScrollBodyAndFocusReveal(host);PositionedOverflowBoundaries(host);
-	CountedStateLabels(host); SoundCues(host); WidgetsAtRest(host);
+	CountedStateLabels(host); SoundCues(host); ValueColourKeepsPaint(host); WidgetsAtRest(host);
 	Check(host.errors==0,"real Runtime/RmlUi reports no errors");
 	std::printf("Value Runtime: %u checks passed\n",checks);
     return 0;

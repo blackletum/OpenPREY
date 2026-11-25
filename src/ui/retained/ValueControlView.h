@@ -41,6 +41,8 @@ public:
 	// pass that writes none of these leaves every settled closed list as it
 	// was painted, so the caller need not count it.
 	bool PaintsNode(const std::string& id, const std::string& property) const;
+	// The lists repainted since the last call (value, rows and popup).
+	std::uint64_t TakeChoiceRepaints();
 	// Use the actual clipped Rml hit, except a captured slider projects outside
 	// its track. Coordinates are the same physical viewport pixels as RmlUi.
 	bool ChoiceScrollFresh(const std::string&, const Interaction&) const;
