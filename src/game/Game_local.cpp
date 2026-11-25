@@ -2073,7 +2073,8 @@ void idGameLocal::CacheDictionaryMedia( const idDict *dict ) {
 			} else {
 				declManager->MediaPrint( "Precaching gui %s\n", kv->GetValue().c_str() );
 #if 1 //HUMANHEAD rww - keep the gui around, so that we don't hit the disk again when we go to use it
-				uiManager->FindGui(kv->GetValue().c_str(), true, false, false);
+				// openPR06: reuse a loaded copy rather than load a spare one beside an interactive copy
+				uiManager->FindGui(kv->GetValue().c_str(), true, false, true);
 #else
 				idUserInterface *gui = uiManager->Alloc();
 				if ( gui ) {

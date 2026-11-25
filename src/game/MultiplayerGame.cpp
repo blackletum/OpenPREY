@@ -4652,7 +4652,10 @@ void idMultiplayerGame::Precache( void ) {
 	// MP guis. just make sure we hit all of them
 	i = 0;
 	while ( MPGuis[ i ] ) {
-		uiManager->FindGui( MPGuis[ i ], true );
+		// openPR06: reuse the copy Reset() already loaded. A plain FindGui skips an
+		// interactive copy and loads another, and menu GUIs are never freed, so
+		// every map load leaked one copy of each (issue #62, gui_precache_lifetime).
+		uiManager->FindGui( MPGuis[ i ], true, false, true );
 		i++;
 	}
 	// openPR06: the obituary feed's icons, so the first kill of a match draws without a load
