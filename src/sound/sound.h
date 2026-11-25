@@ -75,6 +75,11 @@ static const int	SSF_CENTER = BIT(15);	// sound through center channel only
 static const int	SSF_HILITE = BIT(16);	// display debug info for this emitter
 // RAVEN END
 
+// OPENPR06: Prey shader keywords with their own retail behaviour (PREY.exe 1.4 keeps them in
+// 0x800 and 0x2000, bits Quake 4 gives to SSF_NO_RANDOMSTART and SSF_IS_VO here).
+static const int	SSF_OMNI_WHEN_CLOSE =	BIT( 17 );	// omniwhenclose: unpositioned only inside minDistance
+static const int	SSF_NO_PORTAL_FLOW =	BIT( 18 );	// noportalflow: the emitter's sounds stay out of Prey's game portals
+
 // OpenQ4-only runtime classifications. Keep these out of the retail flag range
 // because game modules and shipped Q4 data use bits 10/11 for Doppler/no-random-start.
 static const int	SSF_VO =				BIT( 22 ); // VO - direct a portion of the sound through the center channel (set automatically on shaders that contain files that start with "sound/vo/")
@@ -446,8 +451,10 @@ public:
 
 	virtual void			SetSlowmoSpeed( float speed ) = 0;
 	virtual void			SetEnviroSuit( bool active ) = 0;
-	virtual void			SetSpiritWalkEffect( bool active ) { (void)active; /* TODO: retail Prey DSP parity */ }
-	virtual void			SetVoiceDucker( bool active ) { (void)active; /* TODO: retail Prey DSP parity */ }
+	// Prey: spirit walk low-passes the normal sound class (s_lowPassSpirit); the voice
+	// ducker fades the normal and spirit classes under dialogue (s_voiceDuck*)
+	virtual void			SetSpiritWalkEffect( bool active ) { (void)active; }
+	virtual void			SetVoiceDucker( bool active ) { (void)active; }
 
 	// openQ4: muffles everything while the listener's head is under a liquid surface. Derived from
 	// the eye position every frame, so it is deliberately not part of the savegame.

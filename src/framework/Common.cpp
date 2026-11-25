@@ -404,8 +404,9 @@ Step 1:
   it on headphones and OpenAL Soft's automatic HRTF never engaged. The device
   layout (0) gives a 5.1 system the same 5.1, so 6 is moved to it. 2 is left
   alone: it was retail's default and may be a deliberate choice.
-- s_quadraticFalloff 1 was Doom 3's value; Quake 4 1.4.2 ships 0 (linear) and
-  does not archive it.
+- OPENPR06: openQ4 also moved s_quadraticFalloff 1 to 0 here, Quake 4 1.4.2's
+  value. Retail PREY.exe 1.4 defaults to 1, which is openPR06's default too, and
+  neither archives it, so the step leaves it alone.
 
 Step 2:
 - The minimum, lowpower and performance presets switched room reverb off. Every
@@ -424,10 +425,6 @@ static void Common_MigrateLegacyAudioDefaults( void ) {
 		if ( cvarSystem->GetCVarInteger( "s_numberOfSpeakers" ) == 6 ) {
 			common->Printf( "Migrating legacy audio config: s_numberOfSpeakers 6 -> 0 (the output device's own layout)\n" );
 			cvarSystem->SetCVarInteger( "s_numberOfSpeakers", 0, CVAR_ARCHIVE );
-		}
-		if ( cvarSystem->GetCVarBool( "s_quadraticFalloff" ) ) {
-			common->Printf( "Migrating legacy audio config: s_quadraticFalloff 1 -> 0 (linear, as retail)\n" );
-			cvarSystem->SetCVarBool( "s_quadraticFalloff", false );
 		}
 	}
 	if ( applied < 2 && !cvarSystem->GetCVarBool( "s_useEAXReverb" ) ) {

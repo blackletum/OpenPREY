@@ -34,6 +34,7 @@ static const int	SOUND_REVERB_SLOTS = 4;
 // EAXSOURCE_ROOM values the retail mixer assigns
 static const int	SOUND_REVERB_ROOM_RADIO_MB = -10000;	// SND_CHANNEL_RADIO (10)
 static const int	SOUND_REVERB_ROOM_VOICEOVER_MB = -500;	// SSF_IS_VO
+static const int	SOUND_REVERB_ROOM_VOICE_CLASS_MB = -600;	// PREY.exe 1.4: SC_VOICE and SC_VOICEDUCKER
 // EAXSOURCE_OCCLUSION per blocking (PS_BLOCK_VIEW | PS_BLOCK_AIR) portal
 static const int	SOUND_REVERB_OCCLUSION_PER_PORTAL_MB = -1500;
 static const float	SOUND_REVERB_OCCLUSION_LF_RATIO = 0.0f;
