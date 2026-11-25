@@ -1,6 +1,6 @@
 # openPR06 UI Visual Design
 
-Specification version 1.31, 23 November 2026.
+Specification version 1.32, 25 November 2026.
 
 Status: reference survey and design contract. openPR06 presents the retained
 interface by default (`ui_retained 1`, since 0.15.0); `ui_retained 0` renders
@@ -1497,6 +1497,58 @@ vocabulary rather than replace it:
     projectile's entityDef (a def's own `mtr_obituary` and
     `mtr_obituaryBadge` override it). `testObituary` (a cheat) shows a death
     locally for captures.
+- **Weapon wheel.** Holding the wheel control (`_weaponWheel`: Q, a
+  controller's LB) opens Tommy's seven weapons on a ring; pointing at one
+  and letting go equips it. It is the weapon bar (section 10.1) bent round a
+  ring, so it brings no new chrome. Behaviour follows openQ4's wheel (its
+  `docs/dev/ui/weapon-wheels.md`), written for Prey's player.
+  - *Construction.* `guis/hud/weapon_wheel.rui`, drawn by
+    `tools/ui/build_retained_weapon_wheel.py` in a 560 dp square about the
+    view's centre. Seven tiles, wrench to launcher clockwise from the top in
+    the bar's order, from 100 to 228 dp out: a `hud.well` fill at 0.50 in a
+    1.2 dp `hud.ink` edge at 0.55, the bar's chamfered top-trailing corner as
+    a 16 dp cut on the outer, clockwise corner, and the bar's forward shear
+    as a 6 degree lean of the outer edge ahead of the inner. The chosen tile
+    grows to 240 dp with the `hud.selector` fill and rim, as the bar's chosen
+    tile does. The icons are the bar's own (`textures/interface/icons/*`),
+    72x36 dp at rest and 88x44 dp chosen, tinted as the bar tints them:
+    `DIM` 0.75 at rest, full when chosen, green and blue pulled down by
+    `EMPTY_RED` when the weapon is empty. The bar's two ammo lines bend along
+    each tile's outer edge (`hud.ammo.line`, the alternate line under it,
+    `hud.ammo.line` low when low). A weapon Tommy does not carry keeps its
+    place as a faint outline; the slot's key sits small on the tile's inner
+    edge. The hub is a `hud.well` disc in two ink rings, a `hud.ink`
+    highlight pointer turning to the choice, and a notch toward the weapon
+    held before. It names the weapon in the body face, Title Case, with
+    Prey's own localized names (the Controls page's weapon labels), and
+    reads out its ammunition under the name, `#B3CCE6`, danger red when
+    empty; the wrench draws an infinity. The readout is the one number the
+    wheel adds to Tommy's kit: it shows only while the player asks for the
+    wheel, so section 10.9's rule against numerals in the standing HUD holds.
+  - *Life.* A tap shorter than 180 ms swaps back to the previous weapon
+    without drawing anything. Held longer, the wheel fades in over 125 ms and
+    out over 160 ms (80 ms each under reduced motion); the tiles open
+    clockwise 14 ms apart from 0.92 scale, the hub grows from 0.6 and its
+    name and readout follow it. A new choice flashes the chosen rim
+    `hud.ink` highlight over 160 ms (not under reduced motion) and refades
+    the name.
+  - *Focus.* While it shows, the world goes out of focus behind the view
+    weapon (`SetViewDepthOfField` with `VIEW_DOF_FOCUS_VIEW_WEAPON`), so the
+    raised weapon and the ring stay sharp; the player's Depth of Field
+    setting turns it off. Single player slows to 0.18 of its speed;
+    multiplayer keeps its speed and lets the player move.
+  - *Place.* `ui_weaponWheelOffset` (Game Options > HUD > Wheel Offset)
+    moves it a percentage of the view's width from the centre, -40 to 40,
+    default 27; it scales with `ui_hudScale` and keeps inside
+    `ui_hudSafeInset`. Team games turn the chosen rim and the pointer to the
+    team colour (section 10.6).
+  - *Input.* The mouse steers a selector dot; a controller's stick and a
+    touch finger point by direction past a dead zone; the slot changes with
+    4 degrees of hysteresis. A weapon key, next and previous choose on the
+    open wheel. Escape, a controller's Back and a second press cancel. With
+    `ui_retained 0` the same wheel draws, and a controller moves the dot at
+    `in_weaponWheelSensitivity` (Wheel Sensitivity) as openQ4's Classic
+    wheel does. `testWeaponWheel` (a cheat) drives it for captures.
 
 New pages and settings follow that precedent: build them from the stock plates,
 rows, tabs and faces, at stock sizes and colours, inside the claw frame.
@@ -2128,13 +2180,13 @@ page up to 28.
 | Top tab | Side tab | First column | Second column |
 | --- | --- | --- | --- |
 | Controls | Movement | Movement: Forward, Backward, Move Left, Move Right, Jump, Crouch, Walk / Run (`_speed`, new), Strafe | Look: Turn Left, Turn Right, Look Up, Look Down, Mouse Look, Center View |
-| | Combat | Combat: Attack, Alternate Attack, Previous Weapon, Next Weapon, Zoom View, Crawler Grenade; Abilities: Toggle Light, Spirit Walk | Weapons: the seven weapon slots |
+| | Combat | Combat: Attack, Alternate Attack, Previous Weapon, Next Weapon, Zoom View, Crawler Grenade, Weapon Wheel (new); Abilities: Toggle Light, Spirit Walk | Weapons: the seven weapon slots |
 | | System | System: Quick Save, Quick Load, Screenshot | Multiplayer: Chat, Team Chat, Switch Teams, Spectate, Ready, Vote Yes, Vote No, Scoreboard |
 | | Mouse (new) | Aim: Free Look, Invert Mouse, Toggle Zoom; Mouse: Mouse Sensitivity, Mouse Smoothness; Keyboard: Always Run, Toggle Crouch (new) | Acceleration (new): Mouse Acceleration, Acceleration Offset, Acceleration Curve, Sensitivity Cap |
 | | Controller (new) | Sticks: Use Controller, Stick Layout, Dead Zone, Look Sensitivity, Look Curve, Move Curve, Invert Look; Prompts: Button Prompts, Swap Confirm/Back | Triggers and Rumble: Trigger Press Point, Rumble, Rumble Strength; Gyro and Touchpad: Gyro Aiming, Gyro Sensitivity, Touchpad, Touchpad Sensitivity |
 | | Profiles | The stock Profiles page (below) | |
 | Game Options | General | Gameplay: Adaptive Difficulty, Auto Switch Weapons (new); View: Field of View, Weapon Field of View, Weapon Aspect Fix, Show Weapon, Player Shadow (new but Show Weapon) | Detail: Show Decals, Blood Effects, Ragdoll Blood, Ejected Shells, Muzzle Flashes, Projectile Lights (new but Show Decals), Allow Profanity |
-| | HUD (new) | HUD: Show HUD, Gameplay Tips, FPS Counter; Crosshair: Crosshair | Chat: Chat Size, Chat Lines, Chat Opacity, Chat Duration |
+| | HUD (new) | HUD: Show HUD, Gameplay Tips, FPS Counter; Crosshair: Crosshair | Chat: Chat Size, Chat Lines, Chat Opacity, Chat Duration; Weapon Wheel: Wheel Offset, Wheel Sensitivity |
 | | Accessibility (new) | Subtitles: Subtitles, Mark Missing Captions; Comfort: Damage Double Vision, Underwater Warp | Interface: Reduced Motion, Opaque Dialogs, Text Backing |
 | | System (new) | System: 3D Menu Backdrop, Console Key, Screenshot Format | Startup: Skip Logo Videos, Check for Updates |
 | Video | Display | Screen: Rendering API, Monitor, Video Resolution, Full Screen, Fullscreen Mode, Borderless Window, Refresh Rate, Span All Monitors, Window Size, Custom Resolution | Frame and Scaling: Vertical Sync, Frame Rate Limit, Render Scale, Upscaling and Upscale Sharpness (new); Picture: Brightness, Gamma |
@@ -3217,6 +3269,13 @@ carries their summaries.
 ## Appendix D. Change record
 
 ### Version 1.31, 23 November 2026
+### Version 1.32, 25 November 2026
+
+- Section 12.1: the weapon wheel, Prey's weapon bar bent round a ring, with
+  the world out of focus behind the view weapon while it shows.
+- Section 12.5: the Controls page's Weapon Wheel binding and the HUD page's
+  Weapon Wheel rows.
+
 
 - Section 10.6: the multiplayer UI at openPR06's 32 players. The scoreboard
   keeps the stock board up to eight a list, then tightens to compact 13 u

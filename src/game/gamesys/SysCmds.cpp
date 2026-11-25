@@ -2930,6 +2930,21 @@ Let the system know about all of our commands
 so it can perform tab completion
 =================
 */
+/*
+===================
+Cmd_TestWeaponWheel_f
+
+openPR06: semantic commands for the weapon wheel (src/Prey/game_weaponwheel.cpp),
+for captures and tests without input.
+===================
+*/
+static void Cmd_TestWeaponWheel_f( const idCmdArgs &args ) {
+	idPlayer *player = gameLocal.GetLocalPlayer();
+	if ( player != NULL && player->IsType( hhPlayer::Type ) ) {
+		static_cast<hhPlayer *>( player )->DebugWeaponWheel( args );
+	}
+}
+
 void idGameLocal::InitConsoleCommands( void ) {
 	cmdSystem->AddCommand( "testEventDispatch", Cmd_TestEventDispatch_f, CMD_FL_GAME | CMD_FL_CHEAT, "tests mixed float/entity event callback marshalling" );
 	cmdSystem->AddCommand( "listEventCallbacks", idClass::ListEventCallbacks_f, CMD_FL_GAME, "lists event definitions and per-class event callbacks" );
@@ -3046,6 +3061,7 @@ void idGameLocal::InitConsoleCommands( void ) {
 	// multiplayer server commands
 	cmdSystem->AddCommand( "serverMapRestart",		idGameLocal::MapRestart_f,	CMD_FL_GAME,				"restart the current game" );
 	cmdSystem->AddCommand( "serverForceReady",	idMultiplayerGame::ForceReady_f,CMD_FL_GAME,				"force all players ready" );
+	cmdSystem->AddCommand( "testWeaponWheel",		Cmd_TestWeaponWheel_f,		CMD_FL_GAME|CMD_FL_CHEAT,	"drive the local weapon wheel: testWeaponWheel open | slot N | cursor X Y | step IMPULSE | release | cancel | empty N | probe" );
 	cmdSystem->AddCommand( "testObituary",			idMultiplayerGame::TestObituary_f, CMD_FL_GAME|CMD_FL_CHEAT,	"show a death in the obituary feed and chat locally: testObituary <killed|teamkill|suicide|died|telefrag> <victim> [killer] [projectile]" );
 	cmdSystem->AddCommand( "serverNextMap",			idGameLocal::NextMap_f,		CMD_FL_GAME,				"change to the next map" );
 

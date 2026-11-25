@@ -50,8 +50,10 @@ host:
   engine's `openAndroidSetup` command and `controls.touchLayout` state are
   unused); `PreyGame_InCinematic` is gated to false, so touch input is not held
   back during cinematics; and PREY's game module never sets
-  `ui_touchCanReload`, `ui_touchCanZoom` or `ui_radialOwner`, so the reload and
-  zoom buttons stay hidden and there is no weapon wheel.
+  `ui_touchCanReload` or `ui_touchCanZoom`, so the reload and zoom buttons stay
+  hidden. The weapon wheel (`src/Prey/game_weaponwheel.cpp`) takes the touch
+  wheel's hold, direction and cancel (`ui_radialTouchActive`, `ui_radialOwner`),
+  untried on a device.
 
 Remaining before a release lane: the signing secrets below, and every device
 check. No openPR06 APK has been installed on a device.

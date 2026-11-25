@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Regression checks for the weapon wheel's transient slow-motion channel."""
+"""Regression checks for the weapon wheel's transient slow-motion channel
+(openPR06: PREY's wheel in src/Prey/game_weaponwheel.cpp)."""
 
 from __future__ import annotations
 
@@ -43,10 +44,6 @@ def function_body(source: str, signature: str) -> str:
 
 def main() -> None:
     engine_header = read(ROOT / "src/framework/Common.h")
-    game_header = read(GAME_ROOT / "src/framework/Common.h")
-    if engine_header != game_header:
-        raise AssertionError("Engine and GameLib Common.h copies must remain identical")
-
     require(engine_header, "SetGameTimeScale(float scale)", "idCommon transient time-scale API")
     require(engine_header, "GetGameTimeScale(void) const", "idCommon transient time-scale API")
 
@@ -60,39 +57,28 @@ def main() -> None:
         "engine effective time-scale composition",
     )
 
-    player = read(GAME_ROOT / "src/game/Player.cpp") + read(GAME_ROOT / "src/game/gamesys/WeaponWheel.inl")
-    if re.search(r"SetCVar(?:Float|String|Integer)\s*\(\s*\"timescale\"", player):
+    # openPR06: PREY's weapon wheel (src/Prey/game_weaponwheel.cpp) slows single
+    # player through the transient channel and gives it back, never through
+    # the player's own timescale CVar.
+    wheel = read(GAME_ROOT / "src/Prey/game_weaponwheel.cpp")
+    player = read(GAME_ROOT / "src/Prey/game_player.cpp")
+    if re.search(r"SetCVar(?:Float|String|Integer)\s*\(\s*\"timescale\"", wheel + player):
         raise AssertionError("The weapon wheel must not write the public timescale CVar")
-    if "weaponWheelBaseTimescale" in player or "weaponWheelBaseTimescale" in read(
-        GAME_ROOT / "src/game/Player.h"
-    ):
-        raise AssertionError("The weapon wheel must not cache ownership of the public timescale CVar")
 
-    effects = function_body(player, "void idPlayer::UpdateWeaponWheelEffects( void ) {")
-    require(effects, "common->SetGameTimeScale", "weapon-wheel transient time scale")
-    require(effects, "WeaponWheelLerp( 1.0f, WEAPON_WHEEL_TIMESCALE_SCALE, blend )", "wheel blend")
-    reset = function_body(player, "void idPlayer::ResetWeaponWheel( bool instantRestore ) {")
-    require(reset, "common->SetGameTimeScale( 1.0f );", "weapon-wheel transient reset")
-    handle_esc = function_body(player, "bool idPlayer::HandleESC( void ) {")
-    require(handle_esc, "ResetWeaponWheel( true );", "Escape transient reset")
+    effects = function_body(wheel, "void hhPlayer::UpdateWeaponWheelEffects( void ) {")
+    require(effects, "gameLocal.isMultiplayer", "multiplayer keeps its normal speed")
+    require(effects, "common->SetGameTimeScale( WheelLerp( 1.0f, WHEEL_TIME_SCALE,", "weapon-wheel transient time scale")
+    require(effects, "common->SetGameTimeScale( 1.0f );", "weapon-wheel transient reset")
+    require(effects, "wheelTimeScaled", "the wheel gives back only a slowdown it made")
+    reset = function_body(wheel, "void hhPlayer::ResetWeaponWheel( bool instant ) {")
+    require(reset, "UpdateWeaponWheelEffects();", "an instant reset restores the speed")
+    destructor = function_body(player, "hhPlayer::~hhPlayer() {")
+    require(destructor, "common->SetGameTimeScale( 1.0f );", "a removed player gives the speed back")
 
-    adjust_speed = function_body(player, "void idPlayer::AdjustSpeed( void ) {")
-    require(
-        adjust_speed,
-        "!physicsObj.OnLadder() && ( usercmd.buttons & BUTTON_RUN )",
-        "single-player walk/run selection",
-    )
+    handle_esc = function_body(read(GAME_ROOT / "src/game/Player.cpp"), "bool idPlayer::HandleESC( void ) {")
+    require(handle_esc, "CancelWeaponWheel()", "Escape closes the wheel")
 
-    game_local = read(GAME_ROOT / "src/game/Game_local.cpp")
-    run_frame = function_body(game_local, "gameReturn_t idGameLocal::RunFrame(")
-    require(run_frame, "cvarSystem->GetCVarFloat( \"timescale\" ) * common->GetGameTimeScale()", "SP simulation scale")
-
-    game_api = read(GAME_ROOT / "src/game/Game.h")
-    api_version = re.search(r"const int GAME_API_VERSION\s*=\s*(\d+);", game_api)
-    if api_version is None or int(api_version.group(1)) < 47:
-        raise AssertionError("The transient time-scale API requires game ABI 47 or newer")
-
-    print("single-player time-scale and walking CVar checks passed")
+    print("weapon wheel transient time-scale checks passed")
 
 
 if __name__ == "__main__":

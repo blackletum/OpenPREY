@@ -1105,6 +1105,17 @@ void hhPlayerView::UpdateWeaponExamineFocus( void ) {
 		dof.fStop = f * f * width / ( ( focusMm - f ) * 36.0f * k );
 		dof.maxBlur = radius;
 	}
+
+	// openPR06: an open weapon wheel wins: the view weapon and the world near
+	// it stay sharp and the rest goes out of focus behind the ring
+	// (game_weaponwheel.cpp). The player's Depth of Field setting gates it in
+	// the renderer, as it does the examine focus.
+	const float wheel = static_cast<hhPlayer *>( player )->GetWeaponWheelBlend();
+	if ( wheel > 0.0f && !player->spectating && !pm_thirdPerson.GetBool() ) {
+		dof = renderViewDepthOfField_t();
+		dof.amount = wheel * wheel * ( 3.0f - 2.0f * wheel );
+		dof.flags = VIEW_DOF_FOCUS_VIEW_WEAPON;
+	}
 	renderSystem->SetViewDepthOfField( dof );
 }
 
@@ -1153,6 +1164,9 @@ void hhPlayerView::RenderPlayerView( idUserInterface *hud ) {
 		hud->SetStateBool("letterbox", bLetterBox);
 		player->DrawHUD( hud );
 	}
+
+	// openPR06: the weapon wheel over everything, with or without the HUD
+	static_cast<hhPlayer *>( player )->DrawWeaponWheel();
 
 	if ( net_clientLagOMeter.GetBool() && lagoMaterial && gameLocal.isClient ) {
 		renderSystem->SetColor4( 1.0f, 1.0f, 1.0f, 1.0f );

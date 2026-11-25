@@ -93,6 +93,7 @@ CONTROLS = [
         heading("#str_20229"),
         bind("_attack", "#str_20230"), bind("_attackAlt", "#str_20231"), bind("_impulse15", "#str_20232"),
         bind("_impulse14", "#str_20233"), bind("_zoom", "#str_20243"), bind("_impulse25", "#str_122232"),
+        bind("_weaponWheel", "#str_122316"),
         heading("#str_122102"),
         bind("_impulse16", "#str_20234"), bind("_impulse54", "#str_20235"),
     ], right=[
@@ -190,6 +191,9 @@ GAME = [
         slider("ui_chatLines", "#str_122158", 2, 16, 1),
         slider("ui_chatAlpha", "#str_122159", 0, 1, 0.05),
         slider("ui_chatTime", "#str_122160", 0, 30, 1),
+        heading("#str_122316"),
+        slider("ui_weaponWheelOffset", "#str_122317", -40, 40, 1),
+        slider("in_weaponWheelSensitivity", "#str_122318", 0.25, 16, 0.25),
     ]),
     side("#str_122161", name="access", left=[
         heading("#str_20267"),

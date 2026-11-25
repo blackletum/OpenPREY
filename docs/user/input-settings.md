@@ -21,7 +21,7 @@ The stock **Options -> Controls** menu has these tabs:
 | Tab | Actions |
 |---|---|
 | Movement | Forward, back, move left/right, jump, crouch, strafe. |
-| Combat | Attack, alternate attack, previous/next weapon, lighter, spirit walk, throw grenade. |
+| Combat | Attack, alternate attack, previous/next weapon, lighter, spirit walk, throw grenade, weapon wheel. |
 | Weapons | Direct weapon slots 1 to 7. |
 | Look | Turn left/right, look up/down, mouse look, centre view, zoom. |
 | Other | Quick save, quick load, screenshot, help. |
@@ -33,6 +33,17 @@ To rebind an action, select its row and press the key, mouse button or controlle
 The game's tips ("Press C to crouch") show the key of the device you used last: the keyboard's key or mouse button, or a picture of the controller button in the same style while you play on a controller (Xbox, PlayStation, Nintendo and Steam Deck buttons follow **Button Prompt Style**). When an action has no binding on the device you are using, the tip shows its binding on the other one.
 
 The retained interface (`ui_retained 1`, the default) adds **Mouse** and **Controller** tabs to Options -> Controls: acceleration, always run, toggle crouch, stick dead zone, look and move curves, invert look, trigger press point, rumble, gyro, touchpad, button prompt style and swapped confirm and back. Bound keys show as keycap, mouse and controller glyphs, and controllers have default bindings (`basepr/openpr06_bindings.cfg`). PREY's stock menus (`ui_retained 0`) have only the binding pages.
+
+## Weapon Wheel
+
+Hold **Weapon Wheel** (`_weaponWheel`; **Q**, and **LB** on a controller, by default) to see Tommy's seven weapons on a ring. Point at one and let go to equip it. A quick tap instead switches back to the weapon you held before, without showing the wheel.
+
+- **Mouse:** move the dot onto a weapon. **Controller:** push the left or right stick toward it. A weapon key, next weapon or previous weapon also chooses while the wheel is open.
+- **Cancel:** Escape, the controller's Back button (B / Circle) or a second press of the wheel control closes it and keeps your weapon.
+- A weapon you don't have stays as an outline; an empty one shows red and can't be chosen.
+- In single player the game slows while the wheel is open. In multiplayer it doesn't, and you can keep moving.
+- The world behind your weapon goes out of focus while the wheel shows; **Depth of Field** (Options -> Video -> Advanced FX) turns that off.
+- **Wheel Offset** (Options -> Game Options -> HUD, `ui_weaponWheelOffset`, -40 to 40, default 27) moves the wheel left or right of the centre as a percentage of the screen's width; 0 centres it. **Wheel Sensitivity** (`in_weaponWheelSensitivity`) sets how fast a controller moves the dot when PREY's stock menus are in use (`ui_retained 0`).
 
 ## Where openPR06 Stores Input Settings
 

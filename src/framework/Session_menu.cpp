@@ -438,7 +438,7 @@ static const int RETAINED_CONTROLS_ROWS = sizeof( RETAINED_CONTROLS_BINDINGS ) /
 static const char *const PREY_CONTROLS_BINDINGS[] = {
 	"_forward", "_back", "_moveLeft", "_moveRight", "_moveUp", "_moveDown", "_speed", "_strafe",
 	"_left", "_right", "_lookUp", "_lookDown", "_mlook", "_impulse18",
-	"_attack", "_attackAlt", "_impulse15", "_impulse14", "_zoom", "_impulse25", "_impulse16", "_impulse54",
+	"_attack", "_attackAlt", "_impulse15", "_impulse14", "_zoom", "_impulse25", "_weaponWheel", "_impulse16", "_impulse54",
 	"_impulse1", "_impulse2", "_impulse3", "_impulse4", "_impulse5", "_impulse6", "_impulse7",
 	"savegame quick", "loadgame quick", "screenshot",
 	"clientMessageMode", "clientMessageMode 1", "_impulse20", "_impulse22", "_impulse17", "_impulse28", "_impulse29", "_impulse19"
@@ -4846,7 +4846,7 @@ static const char *const MAINMENU_RESET_GAME_CVARS[] = {
 	"g_showBrass", "g_muzzleFlash", "g_projectileLights", "g_tips", "com_showFPS", "ui_chatScale", "ui_chatLines",
 	"ui_chatAlpha", "ui_chatTime", "ui_subtitleUntranscribed", "g_doubleVision", "r_underwater", "ui_retainedReducedMotion",
 	"ui_retainedOpaqueBacking", "gui_textBackground", "ui_menuScene", "con_allowConsole", "r_screenshotFormat",
-	"com_skipLogoVideos", "com_updateCheck"
+	"com_skipLogoVideos", "com_updateCheck", "ui_weaponWheelOffset", "in_weaponWheelSensitivity"
 };
 
 // The retained page's Mouse and Controller tabs, beyond Feel's rows above.

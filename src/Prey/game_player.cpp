@@ -163,6 +163,7 @@ hhPlayer::hhPlayer( void ) :
 	bCollidingWithPortal = false;
 	bPlayingLowHealthSound = false;
 	bLotaTunnelMode = false;
+	InitWeaponWheel();	// openPR06
 
 	for (int ix=0; ix<MAX_TRACKED_ATTACKERS; ix++) {
 		lastAttackers[ix].attacker = NULL;
@@ -270,6 +271,9 @@ void hhPlayer::Spawn( void ) {
 	bDeathWalkStage2 = false;
 
 	physicsObj.SetInwardGravity(-1); //rww
+
+	// openPR06: the local player's weapon wheel loads inside the level load
+	PrecacheWeaponWheel();
 }
 
 void hhPlayer::RestorePersistantInfo( void ) {
@@ -334,6 +338,12 @@ Release any resources used by the player.
 ==============
 */
 hhPlayer::~hhPlayer() {
+	// openPR06: an open wheel's slowdown and its document go with the player
+	if ( wheelTimeScaled ) {
+		common->SetGameTimeScale( 1.0f );
+	}
+	FreeWeaponWheelGui();
+
 	//rww - remove me if i'm a pilot
 	if (InVehicle() && GetVehicleInterface() && GetVehicleInterface()->GetVehicle()) {
 		GetVehicleInterface()->GetVehicle()->EjectPilot();
@@ -1094,8 +1104,8 @@ void hhPlayer::DrawHUD( idUserInterface *_hud ) {
 	}
 	//HUMANHEAD END
 
-	// weapon targeting crosshair
-	if ( !GuiActive() ) {
+	// weapon targeting crosshair (openPR06: not under the weapon wheel)
+	if ( !GuiActive() && GetWeaponWheelBlend() <= 0.01f ) {
 		if ( cursor ) {
 			UpdateCrosshairs();
 			cursor->Redraw( gameLocal.realClientTime );
@@ -2798,6 +2808,13 @@ idAngles hhPlayer::DetermineViewAngles( const usercmd_t& cmd, idAngles& cmdAngle
 	if ( !noclip && ( gameLocal.inCinematic || privateCameraView || gameLocal.GetCamera() || influenceActive == INFLUENCE_LEVEL2 ) ) {
 		// no view changes at all, but we still want to update the deltas or else when
 		// we get out of this mode, our view will snap to a kind of random angle
+		return GetUntransformedViewAngles();
+	}
+
+	// openPR06: the weapon wheel's control turns look input into its selector;
+	// the view stays put and picks up from here when the control is let go
+	if ( WeaponWheelHoldsView() ) {
+		UpdateDeltaViewAngles( GetUntransformedViewAngles() );
 		return GetUntransformedViewAngles();
 	}
 
@@ -5167,6 +5184,8 @@ void hhPlayer::Think( void ) {
 	usercmd = gameLocal.usercmds[ entityNumber ];
 	buttonMask &= usercmd.buttons;
 	usercmd.buttons &= ~buttonMask;
+	// openPR06: a held weapon wheel keeps the weapon from firing
+	ApplyWeaponWheelInputMask();
 
 	if ( gameLocal.skipCinematic && ( gameLocal.inCinematic || InCinematic() ) ) {
 		return;
@@ -5345,6 +5364,11 @@ void hhPlayer::Think( void ) {
 	renderEntity.suppressShadowInLightID = LIGHTID_VIEW_MUZZLE_FLASH + entityNumber;
 	if ( headRenderEnt ) {
 		headRenderEnt->suppressShadowInLightID = LIGHTID_VIEW_MUZZLE_FLASH + entityNumber;
+	}
+
+	// openPR06: the local player's weapon wheel, once a game frame
+	if ( gameLocal.isNewFrame ) {
+		UpdateWeaponWheel();
 	}
 
 	if ( !g_stopTime.GetBool() ) {
@@ -6926,6 +6950,11 @@ void hhPlayer::ClientPredictionThink( void ) {
 
 	idPlayer::ClientPredictionThink();
 
+	// openPR06: a multiplayer client's own weapon wheel
+	if ( gameLocal.isNewFrame ) {
+		UpdateWeaponWheel();
+	}
+
 	if (InVehicle()) {
 		UpdateHud( GetVehicleInterfaceLocal()->GetHUD() );
 	}
@@ -7532,6 +7561,9 @@ void hhPlayer::Restore( idRestoreGame *savefile ) {
 	if ( bLighter ) {
 		lighterHandle = gameRenderWorld->AddLightDef( &lighter );
 	}
+
+	// openPR06: the weapon wheel is never saved; a restored game starts with it shut
+	ResetWeaponWheel( true );
 }
 
 int hhPlayer::GetSpiritPower() {

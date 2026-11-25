@@ -434,6 +434,68 @@ public:
 
 	virtual void		Show();
 
+	// openPR06 weapon wheel (game_weaponwheel.cpp): hold _weaponWheel to choose
+	// a weapon on a ring. Its presentation is local, never saved or sent;
+	// what the held control does to the usercmd is decided from the usercmd.
+	void				InitWeaponWheel( void );
+	void				PrecacheWeaponWheel( void );
+	void				FreeWeaponWheelGui( void );
+	void				ResetWeaponWheel( bool instant );
+	void				UpdateWeaponWheel( void );
+	void				DrawWeaponWheel( void );
+	bool				CancelWeaponWheel( void );
+	bool				WeaponWheelAllowed( void );
+	bool				WeaponWheelHeld( void );
+	bool				WeaponWheelHoldsView( void );
+	void				ApplyWeaponWheelInputMask( void );
+	bool				WeaponWheelTakesImpulse( int impulse );
+	bool				HandleWeaponWheelImpulse( int impulse );
+	float				GetWeaponWheelBlend( void ) const;
+	void				DebugWeaponWheel( const idCmdArgs &args );
+	static bool			IsWeaponWheelImpulse( int impulse );
+
+protected:
+	typedef struct weaponWheelAmmo_s {
+		int				count;
+		int				altCount;
+		float			fill;
+		float			altFill;
+		bool			hasAlt;
+		bool			infinite;
+		bool			empty;
+		bool			low;
+		bool			altLow;
+	} weaponWheelAmmo_t;
+
+	int					WeaponWheelSlotWeapon( int slot ) const;
+	int					WeaponWheelWeaponSlot( int weaponNum ) const;
+	bool				WeaponWheelSlotOwned( int slot );
+	void				GetWeaponWheelAmmo( int slot, weaponWheelAmmo_t &ammo );
+	int					GetWeaponWheelDefaultSlot( void );
+	int					GetWeaponWheelSlotAtAngle( float angle );
+	void				AdvanceWeaponWheelCursor( void );
+	void				UpdateWeaponWheelEffects( void );
+
+	bool				wheelActive;
+	bool				wheelCanceled;		// dismissed while its control is still held
+	bool				wheelDebug;			// testWeaponWheel holds it
+	bool				wheelDebugHeld;
+	bool				wheelGuiOpen;		// the document has been told "open"
+	bool				wheelGuiFailed;
+	bool				wheelTimeScaled;	// single player's slowdown is ours to undo
+	int					wheelSlot;
+	int					wheelHeldWeapon;	// the weapon in hand when last looked
+	int					wheelPreviousWeapon;	// the wheel's weapon held before it, for a tap and the notch
+	int					wheelGuiSlot;
+	int					wheelOpenedTime;	// Sys_Milliseconds
+	int					wheelLastTime;
+	int					wheelLastMouseX;
+	int					wheelLastMouseY;
+	float				wheelBlend;
+	idVec2				wheelCursor;
+	idAngles			wheelLastAngles;
+	idUserInterface *	wheelGui;
+
 protected:
 	idUserInterface *	guiOverlay;
 	idClipModel			thirdPersonCameraClipBounds;

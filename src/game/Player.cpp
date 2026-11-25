@@ -4617,6 +4617,11 @@ void idPlayer::PerformImpulse( int impulse ) {
 }
 
 bool idPlayer::HandleESC( void ) {
+	// openPR06: Escape closes an open weapon wheel and keeps the current weapon
+	if ( static_cast<hhPlayer *>( this )->CancelWeaponWheel() ) {
+		return true;
+	}
+
 	if ( gameLocal.inCinematic ) {
 		return SkipCinematic();
 	}
@@ -4653,7 +4658,11 @@ void idPlayer::EvaluateControls( void ) {
 	}
 
 	if ( ( usercmd.flags & UCF_IMPULSE_SEQUENCE ) != ( oldFlags & UCF_IMPULSE_SEQUENCE ) ) {
-		PerformImpulse( usercmd.impulse );
+		// openPR06: under a held weapon wheel the weapon controls choose on the
+		// wheel, on the server as on the client (hhPlayer::WeaponWheelTakesImpulse)
+		if ( !static_cast<hhPlayer *>( this )->WeaponWheelTakesImpulse( usercmd.impulse ) ) {
+			PerformImpulse( usercmd.impulse );
+		}
 	}
 
 	scoreBoardOpen = ( ( usercmd.buttons & BUTTON_SCORES ) != 0 || forceScoreBoard );
@@ -6676,13 +6685,17 @@ void idPlayer::ClientPredictionThink( void ) {
 
 	buttonMask &= usercmd.buttons;
 	usercmd.buttons &= ~buttonMask;
+	// openPR06: a held weapon wheel keeps the weapon from firing, predicted as on the server
+	static_cast<hhPlayer *>( this )->ApplyWeaponWheelInputMask();
 
 	// clear the ik before we do anything else so the skeleton doesn't get updated twice
 	walkIK.ClearJointMods();
 
 	if ( gameLocal.isNewFrame ) {
 		if ( ( usercmd.flags & UCF_IMPULSE_SEQUENCE ) != ( oldFlags & UCF_IMPULSE_SEQUENCE ) ) {
-			PerformImpulse( usercmd.impulse );
+			if ( !static_cast<hhPlayer *>( this )->WeaponWheelTakesImpulse( usercmd.impulse ) ) {
+				PerformImpulse( usercmd.impulse );
+			}
 		}
 	}
 
