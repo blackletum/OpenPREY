@@ -208,6 +208,20 @@ DEFERRED_PREY_API_V7_TESTS = frozenset(
     )
 )
 
+# openPR06: tools/tests/suite_status.json is the one list of scripts that are
+# expected to fail until their lane or source port lands (issue #62); the
+# profiles skip them too, so the full-suite runner and this runner agree.
+SUITE_STATUS_SKIPPED_GROUPS = ("deferred-release-lane", "pending-source-port")
+
+
+def suite_status_skipped_tests(root: Path) -> frozenset[str]:
+    status = json.loads((root / "tools" / "tests" / "suite_status.json").read_text(encoding="utf-8"))
+    return frozenset(
+        f"{name}.py"
+        for group in SUITE_STATUS_SKIPPED_GROUPS
+        for name in status["groups"][group]["tests"]
+    )
+
 MACOS_FORBIDDEN_XATTRS = (
     "com.apple.quarantine",
 )
@@ -850,6 +864,7 @@ def run_python_tests(args: argparse.Namespace, root: Path, env: dict[str, str]) 
         DEFERRED_RELEASE_LANE_TESTS
         | INHERITED_OPENQ4_ONLY_TESTS
         | DEFERRED_PREY_API_V7_TESTS
+        | suite_status_skipped_tests(root)
     )
     tests = [test for test in inherited_tests if test.name not in excluded_tests]
     inherited_argument_checks = [
