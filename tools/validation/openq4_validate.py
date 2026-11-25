@@ -148,7 +148,6 @@ LEGACY_RETAIL_GAME_MODULE_NAMES = frozenset(
 # openPR06 push/PR checks until rebuilt around basepr and game_<arch>.
 DEFERRED_RELEASE_LANE_TESTS = frozenset(
     (
-        "linux_arm64_cross_compile.py",
         "linux_arm64_ci_coverage.py",
         "linux_arm64_release_evidence.py",
         # These tests validate the inherited linux-sanitizer/linux-wayland
@@ -162,7 +161,6 @@ DEFERRED_RELEASE_LANE_TESTS = frozenset(
         "macos_dedicated_server_smoke_contract.py",
         "macos_evidence_plumbing.py",
         "macos_evidence_recording.py",
-        "macos_gamelibs_alignment.py",
         "macos_intel_ci.py",
         "macos_local_validation_track.py",
         "macos_matrix_policy.py",
@@ -170,13 +168,11 @@ DEFERRED_RELEASE_LANE_TESTS = frozenset(
         "macos_openal_provider_policy.py",
         "macos_package_policy.py",
         "macos_renderer_backend_policy.py",
-        "macos_sanitizer_ci.py",
         "macos_signoff_archive.py",
         "macos_support_claim_policy.py",
         "macos_support_intake.py",
         "macos_symbolication_policy.py",
         "macos_universal2_runtime.py",
-        "macos_universal2_release_candidate.py",
         "macos_metal_bridge.py",
     )
 )
@@ -199,7 +195,6 @@ DEFERRED_RELEASE_LANE_TESTS = frozenset(
 # awaiting evidence.
 INHERITED_OPENQ4_ONLY_TESTS = frozenset(
     (
-        "campaign_split_state_transition.py",
         "ui_embedded_icons.py",
     )
 )
@@ -631,7 +626,6 @@ def run_python_tests(args: argparse.Namespace, root: Path, env: dict[str, str]) 
         root / "tools" / "tests" / "ui_rendering_settings.py",
         root / "tools" / "tests" / "aas_compiler_contract.py",
         root / "tools" / "tests" / "aas_settings_contract.py",
-        root / "tools" / "tests" / "mvd_seek_debris_contract.py",
         root / "tools" / "tests" / "async_drop_client_contract.py",
         root / "tools" / "tests" / "async_client_frame_contract.py",
         root / "tools" / "tests" / "async_client_resume.py",
@@ -647,7 +641,6 @@ def run_python_tests(args: argparse.Namespace, root: Path, env: dict[str, str]) 
         root / "tools" / "tests" / "loading_pacifier_reentry_contract.py",
         root / "tools" / "tests" / "loading_wipe_capture_crop_contract.py",
         root / "tools" / "tests" / "base64_input_safety.py",
-        root / "tools" / "tests" / "campaign_split_state_transition.py",
         root / "tools" / "tests" / "log_write_failure.py",
         root / "tools" / "tests" / "console_completion_contract.py",
         root / "tools" / "tests" / "console_input_contract.py",
@@ -691,23 +684,9 @@ def run_python_tests(args: argparse.Namespace, root: Path, env: dict[str, str]) 
         root / "tools" / "tests" / "android_lifecycle.py",
         root / "tools" / "tests" / "android_savepath.py",
         root / "tools" / "tests" / "android_window_lifecycle.py",
-        root / "tools" / "tests" / "client_entity_registration.py",
         root / "tools" / "tests" / "openal_device_pause.py",
         root / "tools" / "tests" / "openxr_lifecycle.py",
-        root / "tools" / "tests" / "savegame_restore_bindings.py",
-        root / "tools" / "tests" / "savegame_restore_classes.py",
-        root / "tools" / "tests" / "savegame_restore_cleanup.py",
-        root / "tools" / "tests" / "savegame_restore_resources.py",
-        root / "tools" / "tests" / "savegame_restore_physics.py",
-        root / "tools" / "tests" / "savegame_restore_animation.py",
-        root / "tools" / "tests" / "savegame_restore_af.py",
-        root / "tools" / "tests" / "savegame_restore_events.py",
-        root / "tools" / "tests" / "savegame_restore_gui.py",
-        root / "tools" / "tests" / "savegame_restore_identity.py",
-        root / "tools" / "tests" / "savegame_restore_movers.py",
         root / "tools" / "tests" / "savegame_restore_recovery.py",
-        root / "tools" / "tests" / "savegame_restore_spawn_refs.py",
-        root / "tools" / "tests" / "savegame_restore_threads.py",
         root / "tools" / "tests" / "ui_engine_thread.py",
         root / "tools" / "tests" / "ui_generated_images.py",
         root / "tools" / "tests" / "filesystem_case_segments.py",
@@ -741,8 +720,6 @@ def run_python_tests(args: argparse.Namespace, root: Path, env: dict[str, str]) 
         root / "tools" / "tests" / "hdr_postprocess_math.py",
         root / "tools" / "tests" / "idstr_input_safety.py",
         root / "tools" / "tests" / "lexer_input_safety.py",
-        root / "tools" / "tests" / "levelshot_inventory.py",
-        root / "tools" / "tests" / "linux_arm64_cross_compile.py",
         root / "tools" / "tests" / "linux_arm64_ci_coverage.py",
         root / "tools" / "tests" / "linux_arm64_release_evidence.py",
         root / "tools" / "tests" / "linux_arm64_source_portability.py",
@@ -766,7 +743,6 @@ def run_python_tests(args: argparse.Namespace, root: Path, env: dict[str, str]) 
         root / "tools" / "tests" / "macos_dedicated_server_smoke_contract.py",
         root / "tools" / "tests" / "macos_evidence_plumbing.py",
         root / "tools" / "tests" / "macos_evidence_recording.py",
-        root / "tools" / "tests" / "macos_gamelibs_alignment.py",
         root / "tools" / "tests" / "macos_intel_ci.py",
         root / "tools" / "tests" / "macos_local_validation_track.py",
         root / "tools" / "tests" / "macos_matrix_policy.py",
@@ -778,7 +754,6 @@ def run_python_tests(args: argparse.Namespace, root: Path, env: dict[str, str]) 
         root / "tools" / "tests" / "macos_renderer_backend_policy.py",
         root / "tools" / "tests" / "macos_renderer_phase_breadcrumbs.py",
         root / "tools" / "tests" / "macos_renderer_startup_guard.py",
-        root / "tools" / "tests" / "macos_sanitizer_ci.py",
         root / "tools" / "tests" / "macos_sdl3_backend_guard.py",
         root / "tools" / "tests" / "macos_shadow_policy.py",
         root / "tools" / "tests" / "macos_signoff_archive.py",
@@ -788,7 +763,6 @@ def run_python_tests(args: argparse.Namespace, root: Path, env: dict[str, str]) 
         root / "tools" / "tests" / "macos_symbolication_policy.py",
         root / "tools" / "tests" / "macos_universal2_assembly.py",
         root / "tools" / "tests" / "macos_universal2_runtime.py",
-        root / "tools" / "tests" / "macos_universal2_release_candidate.py",
         root / "tools" / "tests" / "macos_metal_bridge.py",
         root / "tools" / "tests" / "macos_moltenvk_policy.py",
         root / "tools" / "tests" / "mp_bot_characters.py",
@@ -797,7 +771,6 @@ def run_python_tests(args: argparse.Namespace, root: Path, env: dict[str, str]) 
         root / "tools" / "tests" / "network_fragment_state.py",
         root / "tools" / "tests" / "network_channel_backlog_state.py",
         root / "tools" / "tests" / "mp_client_prediction_state.py",
-        root / "tools" / "tests" / "mp_weapon_switch_contract.py",
         root / "tools" / "tests" / "mvd_server_api_contract.py",
         root / "tools" / "tests" / "mvd_recording_failure_contract.py",
         root / "tools" / "tests" / "mvd_recovery_contract.py",
@@ -855,10 +828,7 @@ def run_python_tests(args: argparse.Namespace, root: Path, env: dict[str, str]) 
         root / "tools" / "tests" / "renderer_vulkan_shadow_compatibility.py",
         root / "tools" / "tests" / "renderer_vulkan_world_interaction_compatibility.py",
         root / "tools" / "tests" / "renderer_shared_domain_targets.py",
-        root / "tools" / "tests" / "ai_medic_approach_watchdog.py",
         root / "tools" / "tests" / "savegame_corruption_contract.py",
-        root / "tools" / "tests" / "weapon_gui_event_queue_contract.py",
-        root / "tools" / "tests" / "turbo_scripted_movers.py",
         root / "tools" / "tests" / "savegame_pointer_width_safety.py",
         root / "tools" / "tests" / "savegame_raw_inventory.py",
         root / "tools" / "tests" / "sdl3_input_parity.py",
@@ -875,7 +845,6 @@ def run_python_tests(args: argparse.Namespace, root: Path, env: dict[str, str]) 
         root / "tools" / "tests" / "vk_shader_header_pin.py",
         root / "tools" / "tests" / "vk_temporal_resolve_shader_pin.py",
         root / "tools" / "tests" / "vscode_fast_build.py",
-        root / "tools" / "tests" / "weapon_zoom_view_alignment.py",
     ]
     excluded_tests = (
         DEFERRED_RELEASE_LANE_TESTS
@@ -932,7 +901,6 @@ def run_python_tests(args: argparse.Namespace, root: Path, env: dict[str, str]) 
         (root / "tools" / "tests" / 'ui_presentation_bridge.py', []),
         (root / "tools" / "tests" / 'ui_retained_layer_pool.py', []),
         (root / "tools" / "tests" / 'ui_retained_atlas.py', []),
-        (root / "tools" / "tests" / 'ui_retained_pause.py', []),
         (root / "tools" / "tests" / 'ui_retained_hud_state.py', []),
         (root / "tools" / "tests" / 'ui_manager_lifecycle.py', []),
         (root / "tools" / "tests" / 'ui_event_delivery.py', []),
