@@ -163,9 +163,10 @@ idSaveGame::~idSaveGame()
 ================
 */
 idSaveGame::~idSaveGame() {
-	if ( objects.Num() ) {
-		Close();
-	}
+	// openPR06: idGameLocal::SaveGame closes a successful save explicitly, so
+	// objects are still registered here only while an error unwinds the save.
+	// Serializing then would write objects the failed map may already have
+	// released, and a failed write would raise again inside the unwind.
 }
 
 /*
