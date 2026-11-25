@@ -165,7 +165,7 @@ static void TestFiles( const fs::path &scratch ) {
 	CHECK( ExtractZip( zip, out, files, error ), "extract good zip: %s", error.c_str() );
 	CHECK( ( files == std::vector<std::string> { "README.txt", "basepr/game_x64.dll", "empty.txt", "launch.sh" } ), "extracted names" );
 	std::string digest;
-	CHECK( SHA256File( out / "basepr" / "game-sp_x64.dll", digest, error ) && digest == FIXTURE_PAYLOAD_SHA256, "deflated member is intact" );
+	CHECK( SHA256File( out / "basepr" / "game_x64.dll", digest, error ) && digest == FIXTURE_PAYLOAD_SHA256, "deflated member is intact" );
 	CHECK( fs::file_size( out / "empty.txt", ec ) == 0, "empty member" );
 #if !defined( _WIN32 )
 	CHECK( ( fs::status( out / "launch.sh" ).permissions() & fs::perms::owner_exec ) != fs::perms::none, "Unix exec bit restored" );
