@@ -281,40 +281,11 @@ GAMEPLAY_BENCHMARK_HARNESS = [
         "command": "python tools\\tests\\renderer_gameplay_benchmark.py --profile required",
         "coverage": "representative stock Prey SP maps plus the `game/dmroadhouse` listen-server/local-client case using the selected tier and presentation settings",
     },
-    {
-        "profile": "world-ambient",
-        "command": "python tools\\tests\\renderer_gameplay_benchmark.py --profile world-ambient --pacing-only --no-gpu-timers",
-        "coverage": "bordered stock maps/tools/mv2 capture with light, subview, GUI, post, portal-fade, and overlay islands disabled for shared world-ambient A/B ownership and explicit-blocker rollback evidence",
-    },
-    {
-        "profile": "deform",
-        "command": "python tools\\tests\\renderer_gameplay_benchmark.py --profile deform --pacing-only --no-gpu-timers",
-        "coverage": "bordered stock maps/tools/mv2 capture with the stock shaderDemos/move material override, fixed camera, shared world-ambient ownership, and explicit material-deform contract ownership",
-    },
-    {
-        "profile": "interaction",
-        "renderApi": "gl",
-        "command": "python tools\\tests\\renderer_gameplay_benchmark.py --profile interaction --render-api gl --pacing-only --no-gpu-timers --reference-dir .tmp\\renderer-references\\interaction\\gl\\classic\\savepaths --require-references --image-rms-threshold 0 --image-max-threshold 0 --difference-reference-dir .tmp\\renderer-references\\interaction\\gl\\shadows-off\\savepaths",
-        "coverage": "OpenGL controlled unshadowed, stencil, projected-plus-point mapped, mixed mapped/stencil, and named map-admission fallback ownership with exact shared/classic TGA parity and a required shadows-on/off image delta",
-    },
-    {
-        "profile": "interaction",
-        "renderApi": "vk",
-        "command": "python tools\\tests\\renderer_gameplay_benchmark.py --profile interaction --render-api vk --pacing-only --no-gpu-timers --reference-dir .tmp\\renderer-references\\interaction\\vk\\classic\\savepaths --require-references --image-rms-threshold 0 --image-max-threshold 0 --difference-reference-dir .tmp\\renderer-references\\interaction\\vk\\shadows-off\\savepaths",
-        "coverage": "Vulkan controlled unshadowed, stencil, projected-plus-point mapped, mixed mapped/stencil, and named map-admission fallback ownership with exact shared/classic TGA parity and a required shadows-on/off image delta",
-    },
-    {
-        "profile": "interaction-shadow-stock",
-        "renderApi": "gl",
-        "command": "python tools\\tests\\renderer_gameplay_benchmark.py --profile interaction-shadow-stock --render-api gl --pacing-only --no-gpu-timers --reference-dir .tmp\\renderer-references\\interaction-shadow-stock\\gl\\classic\\savepaths --require-references --image-rms-threshold 0 --image-max-threshold 0 --difference-reference-dir .tmp\\renderer-references\\interaction-shadow-stock\\gl\\shadows-off\\savepaths",
-        "coverage": "OpenGL stock projected, point, CSM/parallel, dynamic, perforated, same-light hybrid, and exact translucent-moment fallback ownership with exact shared/classic TGA parity and required shadows-on/off image deltas",
-    },
-    {
-        "profile": "interaction-shadow-stock",
-        "renderApi": "vk",
-        "command": "python tools\\tests\\renderer_gameplay_benchmark.py --profile interaction-shadow-stock --render-api vk --pacing-only --no-gpu-timers --reference-dir .tmp\\renderer-references\\interaction-shadow-stock\\vk\\classic\\savepaths --require-references --image-rms-threshold 0 --image-max-threshold 0 --difference-reference-dir .tmp\\renderer-references\\interaction-shadow-stock\\vk\\shadows-off\\savepaths",
-        "coverage": "Vulkan stock projected, point, CSM/parallel, dynamic, perforated, same-light hybrid, and exact translucent-moment fallback ownership with exact shared/classic TGA parity and required shadows-on/off image deltas",
-    },
+    # openPR06: renderer_gameplay_benchmark.py no longer offers the world-ambient,
+    # deform, interaction and interaction-shadow-stock profiles. Their scenes were
+    # Quake 4 maps (maps/tools/mv2, airdefense, storage2, medlabs) with no Prey
+    # counterpart, so the benchmark keeps those scene sets empty; register the
+    # profiles here again once Prey scenes with the same evidence value exist.
     {
         "profile": "tiers",
         "command": "python tools\\tests\\renderer_gameplay_benchmark.py --profile tiers",
@@ -322,7 +293,7 @@ GAMEPLAY_BENCHMARK_HARNESS = [
     },
     {
         "profile": "presentation",
-        "command": "python tools\tests\renderer_gameplay_benchmark.py --profile presentation --pacing-only",
+        "command": "python tools\\tests\\renderer_gameplay_benchmark.py --profile presentation --pacing-only",
         "coverage": "windowed coverage for r_swapInterval 0/1 and com_maxfps 0/120/240 while preserving uncapped high-refresh presentation behavior",
     },
     {
