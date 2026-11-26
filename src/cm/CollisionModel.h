@@ -159,8 +159,18 @@ public:
 	
 	// Sets up a trace model for collision with other trace models.
 	virtual idCollisionModel *ModelFromTrm(const char* mapName, const char* modelName, const idTraceModel &trm, const idMaterial *material ) = 0;
+	// Doom 3's SetupTrmModel filled one scratch model that every call reused, and
+	// the game code (idClipModel::Handle, idClip::GetModelContactFeature) relies
+	// on that: it uses the model right away and never frees it. ModelFromTrm makes
+	// a new standalone model each time, so free the previous one here instead of
+	// leaking a model on every call.
 	idCollisionModel *SetupTrmModel( const idTraceModel &trm, const idMaterial *material ) {
-		return ModelFromTrm( NULL, "_legacy_trm_model_", trm, material );
+		static idCollisionModel *scratchTrmModel = NULL;
+		if ( scratchTrmModel != NULL ) {
+			FreeModel( scratchTrmModel );
+		}
+		scratchTrmModel = ModelFromTrm( NULL, "_legacy_trm_model_", trm, material );
+		return scratchTrmModel;
 	}
 
 	const char *GetModelName( idCollisionModel *model ) const {
