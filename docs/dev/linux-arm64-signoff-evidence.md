@@ -14,11 +14,20 @@ commit cannot contain its own final SHA. Accepted records are committed on a
 separate evidence branch or tag and supplied to the manual release workflow by
 the immutable `linux_arm64_evidence_ref` input.
 
+openPR06's `manual-release.yml` does not have that input, the first-class
+selector or the candidate mode yet: it ships Linux ARM64 as a preview, and
+rebuilding the first-class lane is part of `TODO-RELEASE-LANES` in
+`docs/dev/prey-rebase/status-ledger.md`. The record format, the verifier
+(`tools/build/verify_linux_arm64_release_evidence.py`) and the two stock-media
+harnesses already follow openPR06's layout: one openPR06 commit, because the
+game library builds in place, and the client, dedicated server and unified
+`basepr/game_arm64.so` module.
+
 ## Acceptance Requirements
 
 First-class evidence must come from a physical 64-bit little-endian AArch64
 machine, not emulation, using the exact first-class-named candidate archive and
-unmodified retail Quake 4 PK4s. The machine must provide a desktop OpenGL compatibility driver;
+unmodified retail PREY PK4s. The machine must provide a desktop OpenGL compatibility driver;
 GLES-only systems are outside the current renderer
 contract.
 
@@ -42,11 +51,11 @@ contract.
 - Verify keyboard, relative mouse, controller hotplug/gameplay, audio playback,
   audio-device hotplug, focus loss/recovery, windowed/fullscreen transitions,
   and at least one display-mode change relevant to the hardware.
-- Preserve `openq4.log`, dedicated/client logs, screenshots from active SP and MP
+- Preserve the engine log, dedicated/client logs, screenshots from active SP and MP
   gameplay, and a concise description of every warning or limitation reviewed.
-- Keep the generated candidate values unchanged: the full openQ4 and
-  openQ4-game SHAs, release version and tags, exact archive filename, archive
-  SHA-256, and the client, dedicated-server, SP-module, and MP-module SHA-256s.
+- Keep the generated candidate values unchanged: the full openPR06 SHA,
+  release version and tags, exact archive filename, archive SHA-256, and the
+  client, dedicated-server and unified game-module SHA-256s.
   Every SHA-256 is a canonical 64-character lowercase hexadecimal value.
 
 Both stock-media harnesses record a best-effort host inspection alongside the
@@ -61,8 +70,8 @@ the verifier rejects accepted evidence that leaves that context undisclosed.
 
 ## Required Two-Pass Workflow
 
-The two passes deliberately use the same triggering openQ4 commit, resolved
-openQ4-game commit, explicit release version, and Linux build configuration.
+The two passes deliberately use the same triggering openPR06 commit, explicit
+release version, and Linux build configuration.
 Prepare a pushed candidate branch that descends from the current `main` and
 already contains every prospective first-class source, front-door support, and
 release-note change. Do not merge it yet: a merge, squash, rebase, amend, or
@@ -72,7 +81,7 @@ evidence.
 1. Keep `linux_arm64_support_tier=preview`, set
    `generate_linux_arm64_evidence_candidate=true`, and dispatch the manual
    release from that pushed candidate branch. Supply an explicit
-   `version_override` and preferably a full openQ4-game commit SHA. Candidate
+   `version_override`. Candidate
    mode runs only the native ARM64 job, does not require the release webhook,
    and creates no tag or GitHub release. Its dedicated workflow artifact
    contains the exact no-`-preview` first-class-named archive and a pending TOML
@@ -99,7 +108,7 @@ evidence.
    squash, rebase, or amend it. If `main` advanced and cannot be fast-forwarded
    to the candidate unchanged, regenerate and retest a new candidate. Then
    re-dispatch from that same commit on `main` with the same explicit release
-   version and full openQ4-game SHA, select
+   version, select
    `linux_arm64_support_tier=first-class`, and set
    `linux_arm64_evidence_ref` to the evidence branch, tag, or preferably its full
    commit SHA.
@@ -109,9 +118,10 @@ evidence.
    rejects duplicate/unknown/missing JSON fields, and requires the generated
    report type, passing native ARM64/Wayland state, physical-host attestation
    plus clean virtualization inspection, and candidate client/game-module
-   hashes. The dedicated report must also match the candidate server and MP
-   module hashes and a canonical matching declaration checksum; both reports
-   must name the same retail `pak001.pk4` bytes. Report acceptance requires the
+   hashes. The dedicated report must also match the candidate server hash and
+   a canonical matching declaration checksum; both reports must name the same
+   retail PREY base pak (`pak000.pk4` or `pak_data.pk4`) bytes. A commit a
+   report records must be the candidate's openPR06 commit. Report acceptance requires the
    exact harness marker sets and complete nontrivial screenshot/save result
    structures, not arbitrary true-valued markers or a status-only result.
    The native ARM64 job then hashes the actual post-strip staged binaries,
@@ -122,7 +132,7 @@ evidence.
    matches and no unapproved file is present; the uploaded GitHub release asset
    names are checked again after creation or update.
 
-Linux release builds set `SOURCE_DATE_EPOCH` from the frozen openQ4 commit, and
+Linux release builds set `SOURCE_DATE_EPOCH` from the frozen openPR06 commit, and
 the runtime tar writer normalizes archive ordering, ownership, permissions, and
 timestamps. Toolchain or runner drift can still change binary bytes. Such a
 change is intentionally a hard failure: generate a new candidate, repeat the
@@ -150,9 +160,9 @@ release. Placeholder markers such as `TODO`, `TBD`, `unknown`, `n/a`, and
 - `[review]`: reviewer/date plus hardware, graphics/compositor, audio/input,
   SP, MP, dedicated-server, device/display, logs/screenshots, and accepted-
   limitation evidence.
-- `[candidate]`: exact full source SHAs, release version, version tag, release
+- `[candidate]`: the exact full openPR06 SHA, release version, version tag, release
   tag, and first-class ARM64 archive filename.
-- `[sha256]`: the archive and all four runtime ELF hashes.
+- `[sha256]`: the archive and all three runtime ELF hashes.
 - `[runtime_reports]`: SHA-256s of the exact canonical stock-SP and
   dedicated/client JSON report blobs committed beside the accepted record.
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Regression checks for Linux ARM64 CI coverage."""
 
+import importlib.util
 import json
 import os
 import subprocess
@@ -11,15 +12,10 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-GAME_LIBS_ROOT = Path(os.environ.get("OPENQ4_GAMELIBS_REPO", ROOT)).resolve()
 
 
 def read(relative_path: str) -> str:
     return (ROOT / relative_path).read_text(encoding="utf-8")
-
-
-def read_game_libs(relative_path: str) -> str:
-    return (GAME_LIBS_ROOT / relative_path).read_text(encoding="utf-8")
 
 
 def require(haystack: str, needle: str, context: str) -> None:
@@ -38,131 +34,67 @@ def require_count(haystack: str, needle: str, expected: int, context: str) -> No
         raise AssertionError(f"Expected {expected} occurrence(s) of {needle!r} in {context}, found {actual}")
 
 
-def matrix_entry_for_artifact(source: str, artifact_suffix: str) -> str:
-    marker = f"artifact_suffix: {artifact_suffix}"
-    require_count(source, marker, 1, "commit validation Wayland matrix")
-    marker_offset = source.index(marker)
-    entry_start = source.rfind("\n          - ", 0, marker_offset)
-    entry_end = source.find("\n          - ", marker_offset)
-    if entry_start == -1:
-        raise AssertionError(f"Unable to find matrix-entry start for {artifact_suffix!r}")
-    if entry_end == -1:
-        entry_end = source.find("\n\n    steps:", marker_offset)
-    if entry_end == -1:
-        raise AssertionError(f"Unable to find matrix-entry end for {artifact_suffix!r}")
-    return source[entry_start + 1 : entry_end]
+def lane_entry(source: str, platform: str) -> str:
+    marker = f"          - platform: {platform}\n"
+    require_count(source, marker, 1, "openPR06 validation unified-gamelib matrix")
+    entry = source[source.index(marker) :]
+    end = entry.find("\n          - platform:", 1)
+    if end == -1:
+        end = entry.index("\n\n    steps:")
+    return entry[:end]
 
 
-def validate_push_workflow() -> None:
-    source = read(".github/workflows/push-verification.yml")
-
-    require(source, "Linux ARM64 Push Verification", "push verification workflow")
-    require(source, "os: ubuntu-24.04-arm", "push verification workflow")
-    require(source, "artifact_name: linux-arm64", "push verification workflow")
-    require(source, "runtime_smoke: true", "push verification workflow")
-    require(source, "startsWith(matrix.os, 'ubuntu-')", "push verification Linux dependency gate")
-    require(source, "binutils", "push verification readelf dependency")
-    require(source, "xvfb", "push verification runtime display dependency")
-    require(source, "libgl1-mesa-dri", "push verification software GL runtime dependency")
-    require(source, "libglx-mesa0", "push verification GLX runtime dependency")
-    require(source, "xvfb-run -a bash tools/validation/validate_push.sh", "push verification runtime smoke")
-    require(
-        source,
-        'runtime_cases="renderer-foundation-selftests,renderer-pbr-visible-selftest,renderer-cluster-grid-selftest,renderer-default-safety-selftest"',
-        "push verification runtime smoke",
-    )
-    require(source, '--runtime-cases "${runtime_cases}"', "push verification runtime smoke")
-    require(source, "sdl3-x11-display-diagnostics", "push verification X11 display diagnostics case")
-    require(source, "OPENQ4_FORCE_X11=1 xvfb-run -a python tools/tests/renderer_validation_matrix.py", "push verification OPENQ4_FORCE_X11 runtime smoke")
-    require(source, "--cases sdl3-force-x11-display-diagnostics", "push verification OPENQ4_FORCE_X11 runtime smoke")
-    require(source, "--runtime-skip-official-pak-validation", "push verification assetless runtime smoke")
-    require(source, "LIBGL_ALWAYS_SOFTWARE=1", "push verification software GL runtime smoke")
-    require(source, "SDL_VIDEO_DRIVER=x11 SDL_VIDEODRIVER=x11", "push verification runtime display override")
-    require(source, "push-${{ matrix.artifact_name }}-renderer-validation", "push verification renderer report artifact")
-    require(source, "path: .tmp/renderer-validation", "push verification renderer report artifact")
-    require(source, "include-hidden-files: true", "push verification hidden staging/report artifacts")
-    require(source, "python tools/tests/linux_arm64_ci_coverage.py", "push script-smoke regression check")
+def step_block(source: str, name: str) -> str:
+    marker = f"      - name: {name}\n"
+    require_count(source, marker, 1, "workflow steps")
+    block = source[source.index(marker) + len(marker) :]
+    end = block.find("\n      - name:")
+    return block if end == -1 else block[:end]
 
 
-def validate_commit_workflow() -> None:
-    source = read(".github/workflows/commit-validation.yml")
+def validate_validation_workflow() -> None:
+    # openPR06: no push-verification/commit-validation workflows. Linux ARM64
+    # builds natively in openpr06-validation.yml's unified-gamelib matrix.
+    source = read(".github/workflows/openpr06-validation.yml")
 
-    require(source, "Linux ARM64 Commit Validation", "commit validation workflow")
-    require(source, "runs-on: ubuntu-24.04-arm", "commit validation workflow")
-    require(source, "binutils", "commit validation readelf dependency")
-    require(source, "xvfb", "commit validation runtime display dependency")
-    require(source, "libgl1-mesa-dri", "commit validation software GL runtime dependency")
-    require(source, "libglx-mesa0", "commit validation GLX runtime dependency")
-    require(source, "xvfb-run -a bash tools/validation/validate_pr.sh", "commit validation runtime smoke")
-    require(
-        source,
-        "--runtime-cases renderer-foundation-selftests,renderer-pbr-visible-selftest,renderer-cluster-grid-selftest,renderer-default-safety-selftest",
-        "commit validation runtime smoke",
-    )
-    require(source, "sdl3-x11-display-diagnostics", "commit validation X11 display diagnostics case")
-    require(source, "OPENQ4_FORCE_X11=1 xvfb-run -a python tools/tests/renderer_validation_matrix.py", "commit validation OPENQ4_FORCE_X11 runtime smoke")
-    require(source, "--cases sdl3-force-x11-display-diagnostics", "commit validation OPENQ4_FORCE_X11 runtime smoke")
-    require(source, "--runtime-skip-official-pak-validation", "commit validation assetless runtime smoke")
-    require(source, "LIBGL_ALWAYS_SOFTWARE=1", "commit validation software GL runtime smoke")
-    require(source, "SDL_VIDEO_DRIVER=x11 SDL_VIDEODRIVER=x11", "commit validation runtime display override")
-    require(source, "commit-linux-arm64-renderer-validation", "commit validation renderer report artifact")
-    require(source, "path: .tmp/renderer-validation", "commit validation renderer report artifact")
-    require(source, "include-hidden-files: true", "commit validation hidden report artifact")
-    require(source, "python tools/tests/linux_arm64_ci_coverage.py", "commit script-smoke regression check")
-    require(source, "linux-wayland:", "commit validation native Wayland job")
-    require(source, "Linux ${{ matrix.arch_label }} ${{ matrix.compiler_label }} Wayland ${{ matrix.libdecor_label }} Commit Validation", "commit validation native Wayland job")
-    require(source, "CC: ${{ matrix.cc }}", "commit validation compiler selection")
-    require(source, "CXX: ${{ matrix.cxx }}", "commit validation C++ compiler selection")
-    arm64_clang = matrix_entry_for_artifact(source, "arm64-clang-no-libdecor-wayland-only")
+    arm64 = lane_entry(source, "Linux ARM64")
     for token in (
-        "arch_label: ARM64",
-        "runner: ubuntu-24.04-arm",
-        "expected_uname: aarch64",
-        "compiler_label: Clang",
-        "cc: clang",
-        "cxx: clang++",
-        "libdecor_label: no-libdecor",
-        'disable_libdecor: "1"',
-        "linux_x11: disabled",
+        "os: ubuntu-24.04-arm\n",
+        "arch: arm64\n",
+        "module: game_arm64.so\n",
+        "client: openPR06-client_arm64\n",
+        "dedicated: openPR06-ded_arm64\n",
+        "renderer_gl: renderer-gl_arm64.so\n",
+        "renderer_vk: renderer-vk_arm64.so\n",
     ):
-        require(arm64_clang, token, "commit validation ARM64 Clang Wayland-only matrix entry")
+        require(arm64, token, "Linux ARM64 unified-gamelib lane")
+    reject(arm64, "game-sp_", "Linux ARM64 unified-gamelib lane")
+    reject(arm64, "game-mp_", "Linux ARM64 unified-gamelib lane")
 
-    arm64_gcc = matrix_entry_for_artifact(source, "arm64-libdecor")
-    for token in (
-        "arch_label: ARM64",
-        "runner: ubuntu-24.04-arm",
-        "expected_uname: aarch64",
-        "compiler_label: GCC",
-        "cc: gcc",
-        "cxx: g++",
-        "libdecor_label: libdecor",
-    ):
-        require(arm64_gcc, token, "commit validation ARM64 GCC libdecor matrix entry")
+    dependencies = step_block(source, "Install Linux native dependencies")
+    require(dependencies, "if: runner.os == 'Linux'", "Linux dependency gate")
+    for package in ("binutils", "libgl1-mesa-dri", "libglx-mesa0", "libwayland-dev", "libdecor-0-dev"):
+        require(dependencies, f"{package} \\\n", "Linux native dependencies")
 
+    build = step_block(source, "Configure, build, and stage (Linux)")
+    require(build, "if: runner.os == 'Linux'", "Linux build gate")
+    require(build, "bash tools/build/meson_setup.sh setup --wipe builddir", "Linux Meson setup")
+    require(build, "-Dbuild_games=true", "Linux unified game module build")
+    require(build, "install -C builddir --no-rebuild --skip-subprojects", "Linux staging")
+
+    payload = step_block(source, "Verify unified staged payload")
+    require(payload, 'test -f ".install/basepr/${{ matrix.module }}"', "staged unified game module")
+    require(payload, 'test -f ".install/${{ matrix.dedicated }}"', "staged dedicated server")
+    require(payload, "openPR06 ships one game_<arch> module.", "split game-module rejection")
+
+    # openPR06: no lane runs the Xvfb/Wayland assetless runtime smoke. PREY's
+    # game module does not define g_allowAssetlessStartup, so the client cannot
+    # start without retail PREY assets (see manual-release.yml's header).
     require(
-        source,
-        "  linux-arm64:\n"
-        "    name: Linux ARM64 Commit Validation\n"
-        "    runs-on: ubuntu-24.04-arm\n"
-        "    timeout-minutes: 150\n"
-        "    env:\n"
-        "      OPENQ4_GAMELIBS_REPO: ${{ github.workspace }}\n"
-        "      CC: gcc\n"
-        "      CXX: g++",
-        "commit validation native ARM64 GCC dedicated job",
+        read(".github/workflows/manual-release.yml"),
+        "PREY's game module does not define g_allowAssetlessStartup",
+        "documented assetless runtime-smoke boundary",
     )
-    require(source, "weston --backend=headless-backend.so", "commit validation native Wayland compositor")
-    require(source, "SDL_VIDEO_DRIVER=wayland", "commit validation native Wayland video driver")
-    require(source, "SDL_VIDEODRIVER=wayland", "commit validation native Wayland legacy video driver")
-    require(source, "OPENQ4_WAYLAND_DISABLE_LIBDECOR=1", "commit validation libdecor opt-out matrix")
-    require(source, "OPENQ4_WAYLAND_PREFER_LIBDECOR=1", "commit validation preferred libdecor matrix")
-    require(source, "OPENQ4_WAYLAND_SYNC_WINDOW_OPS=1", "commit validation sync-window matrix")
-    require(source, "sdl3-wayland-window-lifecycle", "commit validation Wayland window lifecycle case")
-    require(source, "sdl3-wayland-window-stress", "commit validation Wayland window stress case")
-    require(source, "sdl3-wayland-mouse-capture", "commit validation Wayland mouse capture case")
-    require(source, "sdl3-wayland-mouse-capture-stress", "commit validation Wayland mouse capture stress case")
-    require(source, "sdl3-wayland-display-diagnostics", "commit validation Wayland display diagnostics case")
-    require(source, "commit-linux-wayland-${{ matrix.artifact_suffix }}-renderer-validation", "commit validation Wayland renderer report artifact")
 
 
 def validate_linux_hardening_contract() -> None:
@@ -203,11 +135,12 @@ def validate_runtime_flags() -> None:
     require(renderer, '"id": "sdl3-wayland-window-lifecycle"', "renderer validation Wayland window lifecycle case")
     require(renderer, "native Wayland SDL3 window lifecycle smoke", "renderer validation Wayland window lifecycle case")
     require(renderer, '"SDL3: current video driver: wayland"', "renderer validation Wayland driver assertion")
-    require(renderer, '"SDL3: native Wayland window state after fullscreen change"', "renderer validation Wayland fullscreen assertion")
+    # openPR06: the lifecycle and stress cases resize windowed only; they check fullscreen=no.
+    require(renderer, '["fullscreen=no"]', "renderer validation Wayland windowed-state assertion")
     require(renderer, '"SDL3: native Wayland window state after windowed change"', "renderer validation Wayland windowed assertion")
     require(renderer, '"+vid_restart"', "renderer validation window lifecycle restart command")
     require(renderer, '"id": "sdl3-wayland-window-stress"', "renderer validation Wayland window stress case")
-    require(renderer, "native Wayland SDL3 repeated window/fullscreen transition stress", "renderer validation Wayland window stress case")
+    require(renderer, "native Wayland SDL3 repeated windowed-resize stress", "renderer validation Wayland window stress case")
     require(renderer, '"r_windowWidth",\n                "1280"', "renderer validation Wayland window stress width change")
     require(renderer, '"id": "sdl3-wayland-mouse-capture"', "renderer validation Wayland mouse capture case")
     require(renderer, "native Wayland SDL3 relative mouse capture smoke", "renderer validation Wayland mouse capture case")
@@ -230,7 +163,7 @@ def validate_runtime_flags() -> None:
     require(renderer, "SDL3 X11/Xvfb fallback display diagnostics smoke", "renderer validation X11 display diagnostics case")
     require(renderer, '"SDL3: current video driver: x11"', "renderer validation X11 driver assertion")
     require(renderer, '"id": "sdl3-force-x11-display-diagnostics"', "renderer validation OPENQ4_FORCE_X11 display diagnostics case")
-    require(renderer, "openQ4 XWayland fallback diagnostics smoke", "renderer validation OPENQ4_FORCE_X11 display diagnostics case")
+    require(renderer, "openPR06 XWayland fallback diagnostics smoke", "renderer validation OPENQ4_FORCE_X11 display diagnostics case")
     require(renderer, '"OPENQ4_FORCE_X11=1"', "renderer validation OPENQ4_FORCE_X11 environment assertion")
     require(renderer, '"videoDriver": "x11"', "renderer validation X11 driver-specific metadata")
     require(renderer, '"videoDriver": "wayland"', "renderer validation Wayland driver-specific metadata")
@@ -264,355 +197,124 @@ def validate_assetless_renderer_bootstrap() -> None:
     require(source, "_default material fallback not available", "renderer default material fallback fatal guard")
 
 
-def validate_assetless_game_bootstrap() -> None:
-    for module in ("game", "mpgame"):
-        game_local = read_game_libs(f"src/{module}/Game_local.cpp")
-        sys_cvar = read_game_libs(f"src/{module}/gamesys/SysCvar.cpp")
-        sys_cvar_header = read_game_libs(f"src/{module}/gamesys/SysCvar.h")
-
-        require(game_local, 'FindEntityDefDict( "aas_types", false )', f"{module} stock AAS lookup")
-        require(game_local, "g_allowAssetlessStartup.GetBool()", f"{module} assetless AAS guard")
-        require(game_local, "continuing without AAS because g_allowAssetlessStartup is enabled", f"{module} assetless AAS log")
-        require(sys_cvar, '"g_allowAssetlessStartup"', f"{module} assetless startup cvar")
-        require(sys_cvar_header, "g_allowAssetlessStartup", f"{module} assetless startup cvar declaration")
+# openPR06: PREY's game module has no assetless AAS startup (g_allowAssetlessStartup);
+# validate_validation_workflow checks that the boundary stays documented.
 
 
 def validate_release_note() -> None:
-    source = read("docs/dev/release-completion.md")
+    # openPR06: the release completion list and the unreleased notes record the
+    # ARM64 preview lane and the native ARM64 CI lanes.
+    completion = read("docs/dev/release-completion.md")
+    unreleased = read("docs/dev/releases/unreleased.md")
 
-    require(source, "Linux builds and Wayland validation are harder to regress", "release completion notes")
-    require(source, "OPENQ4_WAYLAND_DISABLE_LIBDECOR=1", "release completion notes")
-    require(source, "Linux ARM64 is now covered by normal CI", "release completion notes")
-    require(source, "assetless renderer startup smoke", "release completion notes")
-    require(source, "AAS declarations", "release completion notes")
+    require(completion, "Linux x64 and ARM64 (preview) with AppImages", "release completion notes")
+    require(
+        unreleased,
+        "The ARM64 lanes build natively on the same `windows-11-arm` and `ubuntu-24.04-arm` runners as the release",
+        "unreleased CI notes",
+    )
+
+
+def load_evidence_helper():
+    path = ROOT / "tools" / "build" / "verify_linux_arm64_release_evidence.py"
+    spec = importlib.util.spec_from_file_location("verify_linux_arm64_release_evidence", path)
+    if spec is None or spec.loader is None:
+        raise AssertionError(f"could not load {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 def validate_linux_arm64_release_claim_policy() -> None:
+    # openPR06: manual-release.yml ships Linux ARM64 as a preview and has no
+    # first-class selector or evidence inputs yet (TODO-RELEASE-LANES). Run its
+    # release-matrix script and check the preview names it publishes, and that
+    # the evidence verifier accepts the archive name a first-class release uses.
     workflow = read(".github/workflows/manual-release.yml")
     evidence = read("docs/dev/linux-arm64-signoff-evidence.md")
     evidence_template = read("docs/dev/linux-arm64-first-class-evidence.toml")
     evidence_helper = read("tools/build/verify_linux_arm64_release_evidence.py")
 
-    input_start = workflow.index("      linux_arm64_support_tier:")
-    input_end = workflow.index("      macos_support_tier:", input_start)
-    support_input = workflow[input_start:input_end]
-    require(support_input, "default: preview", "manual release Linux ARM64 support input")
-    require(support_input, "- preview", "manual release Linux ARM64 support input")
-    require(support_input, "- first-class", "manual release Linux ARM64 support input")
-    require(support_input, "linux_arm64_evidence_ref:", "manual release Linux ARM64 evidence input")
-    require(
-        support_input,
-        "generate_linux_arm64_evidence_candidate:",
-        "manual release Linux ARM64 candidate input",
-    )
-
-    for token in (
-        "OPENQ4_LINUX_ARM64_SUPPORT_TIER",
-        "OPENQ4_LINUX_ARM64_EVIDENCE_SHA",
-        "OPENQ4_ARM64_EVIDENCE_CANDIDATE",
-        "OPENQ4_RELEASE_VERSION_TAG",
-        'linux_arm64_support_tier == "first-class"',
-        "Resolve accepted Linux ARM64 evidence",
-        "docs/dev/linux-arm64-first-class-evidence.toml",
-        "docs/dev/linux-arm64-evidence/stock-sp-report.json",
-        "docs/dev/linux-arm64-evidence/dedicated-report.json",
-        "verify_linux_arm64_release_evidence.py validate",
-        "verify_linux_arm64_release_evidence.py verify",
-        "verify_linux_arm64_release_evidence.py write-candidate",
-        "verify_release_asset_set.py",
-        "--print-archive-sha256",
-        "--stock-sp-report",
-        "--dedicated-report",
-        "--expected-openq4-commit",
-        "--expected-openq4-game-commit",
-        "--expected-release-version",
-        "--expected-version-tag",
-        "--expected-release-tag",
-        "--expected-package-filename",
-        "Verify first-class Linux ARM64 evidence against staged and packaged bytes",
-        "Write Linux ARM64 first-class evidence candidate",
-        "Upload Linux ARM64 first-class evidence candidate",
-        "Revalidate accepted Linux ARM64 archive after artifact download",
-        "linux_arm64_archive_sha256",
-        "generate_linux_arm64_evidence_candidate",
-        "linux_arm64_evidence_ref",
-        "source_date_epoch",
-        "SOURCE_DATE_EPOCH",
-        "stale_user_preview_claims",
-        "selected_curated_release_notes",
-        '" (preview)" if linux_arm64_support_tier == "preview" else ""',
-        'f"Linux ARM64{linux_arm64_label_suffix}"',
-        '"-preview" if linux_arm64_support_tier == "preview" else ""',
-        "linux-arm64-preview.tar.xz",
-        "linux-arm64-preview-debugsymbols.tar.xz",
-        "## Linux ARM64 Support",
-        "linux_arm64_preview_claim_pattern",
-        "linux[[:space:]_-]+arm64",
-        "stale_linux_arm64_assets",
-        "gh release delete-asset",
-        "linux_arm64_support_tier=preview",
-        "linux_arm64_release_reason",
-        "Linux ARM64 first-class evidence candidate",
-        "Publishing manual releases must be dispatched from refs/heads/main",
-        "Linux ARM64 evidence candidates must be dispatched from a pushed branch",
-        "must descend from the current origin/main",
-        "inputs.generate_linux_arm64_evidence_candidate == false",
-    ):
-        require(workflow, token, "manual release Linux ARM64 support policy")
-    reject(workflow, "required_record_fields", "legacy free-form Linux ARM64 evidence parsing")
-    reject(workflow, "linux-arm64-signoff-status:start", "legacy Markdown Linux ARM64 status parsing")
-
-    heredoc_start_marker = "          python - <<'PY' >> \"$GITHUB_OUTPUT\"\n"
+    matrix_step = step_block(workflow, "Build release matrix")
+    heredoc_start_marker = "          python - <<'PY' >> \"${GITHUB_OUTPUT}\"\n"
     heredoc_end_marker = "\n          PY\n"
-    heredoc_start = workflow.index(heredoc_start_marker) + len(heredoc_start_marker)
-    heredoc_end = workflow.index(heredoc_end_marker, heredoc_start)
-    embedded_python = textwrap.dedent(workflow[heredoc_start:heredoc_end])
+    require_count(matrix_step, heredoc_start_marker, 1, "manual release matrix script")
+    heredoc_start = matrix_step.index(heredoc_start_marker) + len(heredoc_start_marker)
+    heredoc_end = matrix_step.index(heredoc_end_marker, heredoc_start)
+    embedded_python = textwrap.dedent(matrix_step[heredoc_start:heredoc_end])
     compile(embedded_python, ".github/workflows/manual-release.yml:release-matrix", "exec")
 
-    with tempfile.TemporaryDirectory(prefix="openq4-linux-arm64-release-policy-") as temp_dir:
-        temp_root = Path(temp_dir)
-        preview_docs = {
-            temp_root / "README.md": "preview Linux ARM64\n",
-            temp_root / "docs" / "user" / "getting-started.md": (
-                "Linux ARM64 packages are preview builds\n"
-            ),
-            temp_root / "assets" / "release" / "README.html": (
-                "Linux ARM64 Preview Notes\n"
-            ),
+    with tempfile.TemporaryDirectory(prefix="openpr06-linux-arm64-release-policy-") as temp_dir:
+        summary = Path(temp_dir) / "summary.md"
+        environment = {
+            key: value
+            for key, value in os.environ.items()
+            if not key.startswith("MACOS_")
         }
-        for path, contents in preview_docs.items():
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(contents, encoding="utf-8")
-
-        base_environment = os.environ.copy()
-        base_environment["OPENQ4_MACOS_SUPPORT_TIER"] = "preview"
-        base_environment["OPENQ4_RELEASE_VERSION_TAG"] = "9.9.9-test"
-        base_environment["OPENQ4_ARM64_EVIDENCE_CANDIDATE"] = "false"
-
-        preview_environment = base_environment.copy()
-        preview_environment["OPENQ4_LINUX_ARM64_SUPPORT_TIER"] = "preview"
-        preview_result = subprocess.run(
+        environment["OPENPR06_RELEASE_VERSION_TAG"] = "9.9.9"
+        environment["GITHUB_STEP_SUMMARY"] = str(summary)
+        result = subprocess.run(
             [sys.executable, "-c", embedded_python],
-            cwd=temp_root,
-            env=preview_environment,
+            cwd=temp_dir,
+            env=environment,
             check=False,
             capture_output=True,
             text=True,
         )
-        if preview_result.returncode != 0:
-            raise AssertionError(
-                "preview Linux ARM64 release matrix failed:\n"
-                + preview_result.stdout
-                + preview_result.stderr
-            )
-        preview_matrix_line = next(
-            (
-                line
-                for line in preview_result.stdout.splitlines()
-                if line.startswith("release_matrix=")
-            ),
-            "",
-        )
-        require(preview_matrix_line, "release_matrix=", "preview Linux ARM64 release matrix")
-        preview_matrix = json.loads(preview_matrix_line.split("=", 1)[1])["include"]
-        preview_linux = {
-            entry["binary_arch"]: entry
-            for entry in preview_matrix
-            if entry["platform"] == "linux"
-        }
-        if preview_linux["x64"]["package_suffix"] != "":
-            raise AssertionError("Linux x64 release must not inherit the ARM64 preview suffix")
-        if preview_linux["arm64"]["package_suffix"] != "-preview":
-            raise AssertionError("preview Linux ARM64 archive must use the -preview suffix")
-        if preview_linux["arm64"]["label"] != "Linux ARM64 (preview)":
-            raise AssertionError("preview Linux ARM64 matrix label is not explicit")
+    if result.returncode != 0:
+        raise AssertionError("manual release matrix script failed:\n" + result.stdout + result.stderr)
+    outputs = dict(line.split("=", 1) for line in result.stdout.splitlines() if "=" in line)
+    matrix = json.loads(outputs["release_matrix"])["include"]
+    linux = {entry["binary_arch"]: entry for entry in matrix if entry["platform"] == "linux"}
+    if sorted(linux) != ["arm64", "x64"]:
+        raise AssertionError(f"manual release must build Linux x64 and ARM64, got {sorted(linux)}")
+    if linux["x64"]["package_suffix"] != "":
+        raise AssertionError("Linux x64 release must not inherit the ARM64 preview suffix")
+    if linux["arm64"]["package_suffix"] != "-preview":
+        raise AssertionError("preview Linux ARM64 archive must use the -preview suffix")
+    if linux["arm64"]["label"] != "Linux ARM64 (preview)":
+        raise AssertionError("preview Linux ARM64 matrix label is not explicit")
+    if linux["arm64"]["os"] != "ubuntu-24.04-arm":
+        raise AssertionError("Linux ARM64 release must build on the native ubuntu-24.04-arm runner")
 
-        candidate_environment = base_environment.copy()
-        candidate_environment["OPENQ4_LINUX_ARM64_SUPPORT_TIER"] = "preview"
-        candidate_environment["OPENQ4_ARM64_EVIDENCE_CANDIDATE"] = "true"
-        candidate_result = subprocess.run(
-            [sys.executable, "-c", embedded_python],
-            cwd=temp_root,
-            env=candidate_environment,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        if candidate_result.returncode != 0:
-            raise AssertionError(
-                "Linux ARM64 evidence-candidate matrix failed:\n"
-                + candidate_result.stdout
-                + candidate_result.stderr
-            )
-        candidate_matrix_line = next(
-            (
-                line
-                for line in candidate_result.stdout.splitlines()
-                if line.startswith("release_matrix=")
-            ),
-            "",
-        )
-        require(
-            candidate_matrix_line,
-            "release_matrix=",
-            "Linux ARM64 evidence-candidate matrix",
-        )
-        candidate_matrix = json.loads(candidate_matrix_line.split("=", 1)[1])["include"]
-        if len(candidate_matrix) != 1:
-            raise AssertionError("evidence-candidate mode must schedule exactly one build")
-        candidate_entry = candidate_matrix[0]
-        if candidate_entry["platform"] != "linux" or candidate_entry["binary_arch"] != "arm64":
-            raise AssertionError("evidence-candidate mode scheduled a non-ARM64 Linux build")
-        if candidate_entry["label"] != "Linux ARM64 first-class evidence candidate":
-            raise AssertionError("evidence-candidate matrix label is not explicit")
-        if candidate_entry["package_suffix"] != "":
-            raise AssertionError("evidence-candidate archive must use the first-class filename")
+    expected_assets = set(json.loads(outputs["expected_assets"]))
+    for asset in (
+        "openpr06-9.9.9-linux-arm64-preview.tar.xz",
+        "openpr06-9.9.9-linux-arm64-preview-debugsymbols.tar.xz",
+        "openpr06-9.9.9-preview-aarch64.AppImage",
+        "openpr06-9.9.9-preview-aarch64.AppImage.zsync",
+        "openpr06-9.9.9-linux-x64.tar.xz",
+    ):
+        if asset not in expected_assets:
+            raise AssertionError(f"manual release does not expect {asset}")
+    require(
+        outputs["linux_arm64_release_reason"],
+        "First-class publication needs real-hardware",
+        "Linux ARM64 preview release reason",
+    )
 
-        invalid_candidate_environment = candidate_environment.copy()
-        invalid_candidate_environment["OPENQ4_LINUX_ARM64_SUPPORT_TIER"] = "first-class"
-        invalid_candidate_result = subprocess.run(
-            [sys.executable, "-c", embedded_python],
-            cwd=temp_root,
-            env=invalid_candidate_environment,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        if invalid_candidate_result.returncode == 0:
-            raise AssertionError("evidence-candidate mode accepted the first-class tier")
-        require(
-            invalid_candidate_result.stdout + invalid_candidate_result.stderr,
-            "non-publishing preview-tier builds",
-            "first-class evidence-candidate tier rejection",
-        )
-
-        first_class_environment = base_environment.copy()
-        first_class_environment["OPENQ4_LINUX_ARM64_SUPPORT_TIER"] = "first-class"
-        missing_evidence_result = subprocess.run(
-            [sys.executable, "-c", embedded_python],
-            cwd=temp_root,
-            env=first_class_environment,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        if missing_evidence_result.returncode == 0:
-            raise AssertionError("first-class Linux ARM64 release accepted no evidence commit")
-        require(
-            missing_evidence_result.stdout + missing_evidence_result.stderr,
-            "require a resolved immutable accepted-evidence commit",
-            "missing Linux ARM64 accepted-evidence commit rejection",
-        )
-
-        first_class_environment["OPENQ4_LINUX_ARM64_EVIDENCE_SHA"] = "e" * 40
-
-        selected_release_notes = (
-            temp_root / "docs" / "dev" / "releases" / "v9.9.9-test.md"
-        )
-        selected_release_notes.parent.mkdir(parents=True, exist_ok=True)
-        selected_release_notes.write_text(
-            "# Synthetic release\n\nThe linux-arm64-preview archive remains available.\n",
-            encoding="utf-8",
-        )
-
-        stale_notes_result = subprocess.run(
-            [sys.executable, "-c", embedded_python],
-            cwd=temp_root,
-            env=first_class_environment,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        if stale_notes_result.returncode == 0:
-            raise AssertionError(
-                "first-class Linux ARM64 release accepted stale curated preview notes"
-            )
-        require(
-            stale_notes_result.stdout + stale_notes_result.stderr,
-            "user-facing preview claims still remain",
-            "stale curated Linux ARM64 preview-note rejection",
-        )
-        # macOS is a preview too, so the scan skips "preview" when macOS or
-        # Apple follows it, but a preview claim that still reaches Linux ARM64
-        # must keep failing.
-        for path in preview_docs:
-            path.write_text("first-class Linux ARM64 support\n", encoding="utf-8")
-        selected_release_notes.write_text(
-            "# Synthetic release\n\nLinux ARM64 and macOS packages are preview builds.\n",
-            encoding="utf-8",
-        )
-        shared_preview_result = subprocess.run(
-            [sys.executable, "-c", embedded_python],
-            cwd=temp_root,
-            env=first_class_environment,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        if shared_preview_result.returncode == 0:
-            raise AssertionError(
-                "first-class Linux ARM64 release accepted a preview claim shared with macOS"
-            )
-        require(
-            shared_preview_result.stdout + shared_preview_result.stderr,
-            "user-facing preview claims still remain",
-            "shared Linux ARM64/macOS preview-claim rejection",
-        )
-
-        for path in preview_docs:
-            path.write_text(
-                "first-class Linux ARM64 support beside preview Apple Silicon/arm64 macOS\n",
-                encoding="utf-8",
-            )
-        selected_release_notes.write_text(
-            "# Synthetic release\n\nLinux ARM64 first-class support. The preview macOS "
-            "packages stay unsigned.\n",
-            encoding="utf-8",
-        )
-
-        accepted_result = subprocess.run(
-            [sys.executable, "-c", embedded_python],
-            cwd=temp_root,
-            env=first_class_environment,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        if accepted_result.returncode != 0:
-            raise AssertionError(
-                "first-class Linux ARM64 release rejected resolved evidence commit:\n"
-                + accepted_result.stdout
-                + accepted_result.stderr
-            )
-        require(
-            accepted_result.stdout,
-            "linux_arm64_support_tier=first-class",
-            "accepted Linux ARM64 first-class release matrix",
-        )
-        accepted_matrix_line = next(
-            (
-                line
-                for line in accepted_result.stdout.splitlines()
-                if line.startswith("release_matrix=")
-            ),
-            "",
-        )
-        require(accepted_matrix_line, "release_matrix=", "accepted Linux ARM64 release matrix")
-        accepted_matrix = json.loads(accepted_matrix_line.split("=", 1)[1])["include"]
-        accepted_linux_arm64 = next(
-            entry
-            for entry in accepted_matrix
-            if entry["platform"] == "linux" and entry["binary_arch"] == "arm64"
-        )
-        if accepted_linux_arm64["package_suffix"] != "":
-            raise AssertionError("first-class Linux ARM64 archive retained the preview suffix")
-        if accepted_linux_arm64["label"] != "Linux ARM64":
-            raise AssertionError("first-class Linux ARM64 matrix label retained preview wording")
+    helper = load_evidence_helper()
+    for archive in ("openpr06-9.9.9-linux-arm64.tar.xz", "openpr06-9.9.9-linux-arm64-preview.tar.xz"):
+        helper.require_package_filename(archive, "Linux ARM64 release archive")
+    try:
+        helper.require_package_filename("openq4-9.9.9-linux-arm64.tar.xz", "Linux ARM64 release archive")
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("evidence verifier accepted an openQ4 archive name")
+    runtime_paths = {key: path.as_posix() for key, path in helper.ARM64_RUNTIME_PATHS.items()}
+    if runtime_paths != {
+        "client": "openPR06-client_arm64",
+        "dedicated": "openPR06-ded_arm64",
+        "game": "basepr/game_arm64.so",
+    }:
+        raise AssertionError(f"evidence verifier hashes the wrong ARM64 runtime files: {runtime_paths}")
 
     require(evidence, "Required Two-Pass Workflow", "Linux ARM64 signoff evidence")
     require(evidence, "linux_arm64_evidence_ref", "Linux ARM64 signoff evidence")
     require(evidence, "generate_linux_arm64_evidence_candidate", "Linux ARM64 signoff evidence")
-    require(evidence, "same triggering openQ4 commit", "Linux ARM64 signoff evidence")
+    require(evidence, "same triggering openPR06 commit", "Linux ARM64 signoff evidence")
     require(evidence, "Fast-forward the exact tested candidate commit", "Linux ARM64 signoff evidence")
     require(evidence, "creates no tag or GitHub release", "Linux ARM64 signoff evidence")
     require(evidence, "SOURCE_DATE_EPOCH", "Linux ARM64 signoff evidence")
@@ -625,6 +327,7 @@ def validate_linux_arm64_release_claim_policy() -> None:
     require(evidence, "Verify keyboard, relative mouse, controller", "Linux ARM64 signoff evidence")
     require(evidence, "SHA-256", "Linux ARM64 signoff evidence")
     require(evidence, "schema version 2", "Linux ARM64 signoff evidence")
+    require(evidence, "TODO-RELEASE-LANES", "Linux ARM64 signoff evidence release-lane boundary")
     require(
         evidence,
         "human audible playback",
@@ -637,17 +340,17 @@ def validate_linux_arm64_release_claim_policy() -> None:
         "[runtime_reports]",
         "[candidate]",
         "[sha256]",
-        'openq4_commit = "pending"',
-        'openq4_game_commit = "pending"',
+        'openpr06_commit = "pending"',
         'package_filename = "pending"',
         'archive = "pending"',
         'client = "pending"',
         'dedicated = "pending"',
-        'game_sp = "pending"',
-        'game_mp = "pending"',
+        'game = "pending"',
         'stock_sp = "pending"',
     ):
         require(evidence_template, token, "Linux ARM64 evidence TOML template")
+    for token in ("openq4_commit", "openq4_game_commit", "game_sp", "game_mp"):
+        reject(evidence_template, token, "Linux ARM64 evidence TOML template")
     for token in (
         "GIT_SHA_RE",
         "SHA256_RE",
@@ -677,58 +380,31 @@ def validate_linux_arm64_release_claim_policy() -> None:
         '"linux_arm64_release_evidence.py"',
         "validation runner ARM64 evidence fixture wiring",
     )
-    for validation_workflow in (
-        ".github/workflows/commit-validation.yml",
-        ".github/workflows/push-verification.yml",
-    ):
-        require(
-            read(validation_workflow),
-            "tools/tests/linux_arm64_release_evidence.py",
-            f"ARM64 evidence fixture wiring in {validation_workflow}",
-        )
 
     for path, token in (
-        ("README.md", "preview Linux ARM64"),
-        ("docs/user/getting-started.md", "Linux ARM64 packages are preview builds"),
-        ("assets/release/README.html", "Linux ARM64 Preview Notes"),
-        ("docs/dev/releases/v0.8.1.md", "Linux ARM64 packages remain preview"),
-        (".github/scripts/announce-release-discord.mjs", "Linux ARM64 preview"),
+        ("README.md", "the ARM64 preview"),
+        ("docs/user/getting-started.md", "Linux ARM64 and macOS are previews"),
+        ("assets/release/README.html", "ARM64 as a preview"),
+        ("docs/dev/releases/v0.15.0.md", "ARM64 is a preview"),
+        (".github/scripts/announce-release-discord.mjs", "linux-arm64-preview.tar.xz"),
     ):
         require(read(path), token, f"Linux ARM64 preview claim in {path}")
 
-    for path in (
-        "BUILDING.md",
-        "docs/dev/platform-support.md",
-        "docs/dev/linux-arm64-cross-compilation.md",
-    ):
-        require(
-            read(path),
-            "linux-arm64-signoff-evidence.md",
-            f"Linux ARM64 evidence link in {path}",
-        )
-
-
-def validate_no_duplicate_jobs() -> None:
-    push = read(".github/workflows/push-verification.yml")
-    commit = read(".github/workflows/commit-validation.yml")
-
-    require_count(push, "windows-build:", 1, "push verification workflow")
-    require_count(push, "Linux ARM64 Push Verification", 1, "push verification workflow")
-    require_count(commit, "Linux ARM64 Commit Validation", 1, "commit validation workflow")
-    require_count(commit, "linux-wayland:", 1, "commit validation workflow")
+    require(
+        read("docs/dev/linux-arm64-cross-compilation.md"),
+        "linux-arm64-signoff-evidence.md",
+        "Linux ARM64 evidence link in docs/dev/linux-arm64-cross-compilation.md",
+    )
 
 
 def main() -> None:
-    validate_push_workflow()
-    validate_commit_workflow()
+    validate_validation_workflow()
     validate_linux_hardening_contract()
     validate_runtime_flags()
     validate_renderer_selftest_object_lifetime()
     validate_assetless_renderer_bootstrap()
-    validate_assetless_game_bootstrap()
     validate_release_note()
     validate_linux_arm64_release_claim_policy()
-    validate_no_duplicate_jobs()
     print("linux_arm64_ci_coverage: ok")
 
 

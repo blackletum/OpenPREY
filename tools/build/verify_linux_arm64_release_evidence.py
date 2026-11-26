@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""Validate candidate-bound Linux ARM64 release signoff evidence."""
+"""Validate candidate-bound Linux ARM64 release signoff evidence.
+
+The evidence binds an openPR06 commit, the release archive and its staged
+client, dedicated server and unified game_arm64.so module to the reports of
+tools/tests/linux_wayland_stock_sp_smoke.py and
+tools/tests/linux_dedicated_stock_map_smoke.py. The game library builds in
+place, so one commit covers the engine and the game.
+"""
 
 from __future__ import annotations
 
@@ -90,15 +97,14 @@ REVIEW_KEYS = frozenset(
 )
 CANDIDATE_KEYS = frozenset(
     {
-        "openq4_commit",
-        "openq4_game_commit",
+        "openpr06_commit",
         "release_version",
         "version_tag",
         "release_tag",
         "package_filename",
     }
 )
-SHA256_KEYS = frozenset({"archive", "client", "dedicated", "game_sp", "game_mp"})
+SHA256_KEYS = frozenset({"archive", "client", "dedicated", "game"})
 RUNTIME_REPORT_KEYS = frozenset({"stock_sp", "dedicated"})
 
 EXECUTION_EVIDENCE_KEYS = frozenset(
@@ -169,8 +175,8 @@ SP_REPORT_KEYS = frozenset(
         "glErrorMarkers",
         "audioErrorMarkers",
         "elapsedSeconds",
-        "openQ4Commit",
-        "openQ4GameCommit",
+        "openPR06Commit",
+        "OpenPreyGameCommit",
         "sha256",
         "elf",
         "paths",
@@ -190,10 +196,16 @@ SP_AUDIO_EVIDENCE_KEYS = frozenset(
         "scope",
     }
 )
-SP_HASH_KEYS = frozenset({"client", "gameSp", "retailPak001"})
-SP_ELF_KEYS = frozenset({"client", "gameSp"})
+SP_HASH_KEYS = frozenset({"client", "game", "retailPreyPak"})
+SP_ELF_KEYS = frozenset({"client", "game"})
 SP_ENVIRONMENT_KEYS = frozenset(
-    {"SDL_VIDEO_DRIVER", "SDL_VIDEODRIVER", "DISPLAYRemoved", "OPENQ4_FORCE_X11Removed"}
+    {
+        "SDL_VIDEO_DRIVER",
+        "SDL_VIDEODRIVER",
+        "DISPLAYRemoved",
+        "OPENPR06_FORCE_X11Removed",
+        "OPENQ4_FORCE_X11Removed",
+    }
 )
 SP_LIFECYCLE_COUNT_KEYS = frozenset(
     {"mapInitialization", "firstActiveDraw", "gameMapShutdown"}
@@ -210,7 +222,7 @@ SP_CLIENT_MARKER_KEYS = frozenset(
     {
         "nonempty engine log",
         "native Wayland active",
-        "selected packaged game_sp",
+        "selected packaged unified game",
         "common initialization completed",
         "cinematic auto-skip configured",
         "sound enabled",
@@ -280,8 +292,8 @@ DEDICATED_REPORT_KEYS = frozenset(
         "missingMarkers",
         "fatalMarkers",
         "elapsedSeconds",
-        "openQ4Commit",
-        "openQ4GameCommit",
+        "openPR06Commit",
+        "OpenPreyGameCommit",
         "sha256",
         "elf",
         "paths",
@@ -289,8 +301,8 @@ DEDICATED_REPORT_KEYS = frozenset(
         "clientCommand",
     }
 )
-DEDICATED_HASH_KEYS = frozenset({"dedicated", "client", "gameMp", "retailPak001"})
-DEDICATED_ELF_KEYS = frozenset({"dedicated", "client", "gameMp"})
+DEDICATED_HASH_KEYS = frozenset({"dedicated", "client", "game", "retailPreyPak"})
+DEDICATED_ELF_KEYS = frozenset({"dedicated", "client", "game"})
 DEDICATED_SERVER_MARKER_KEYS = frozenset(
     {
         "dedicated client connected",
@@ -301,10 +313,10 @@ DEDICATED_SERVER_MARKER_KEYS = frozenset(
 DEDICATED_CLIENT_MARKER_KEYS = frozenset(
     {
         "native Wayland active",
-        "client selected packaged game_mp",
+        "client selected packaged unified game",
         "client decl checksum",
         "client received connect response",
-        "client entered mp/q4dm1",
+        "client entered game/dmroadhouse",
         "client SpawnPlayer",
         "client first active draw",
         "client capture cfg executed",
@@ -329,17 +341,15 @@ CONTAINER_DISCLOSURE_PATTERN = re.compile(
 )
 
 ARM64_RUNTIME_PATHS: Mapping[str, PurePosixPath] = {
-    "client": PurePosixPath("openQ4-client_arm64"),
-    "dedicated": PurePosixPath("openQ4-ded_arm64"),
-    "game_sp": PurePosixPath("baseoq4/game-sp_arm64.so"),
-    "game_mp": PurePosixPath("baseoq4/game-mp_arm64.so"),
+    "client": PurePosixPath("openPR06-client_arm64"),
+    "dedicated": PurePosixPath("openPR06-ded_arm64"),
+    "game": PurePosixPath("basepr/game_arm64.so"),
 }
 
 
 @dataclass(frozen=True)
 class CandidateMetadata:
-    openq4_commit: str
-    openq4_game_commit: str
+    openpr06_commit: str
     release_version: str
     version_tag: str
     release_tag: str
@@ -536,7 +546,7 @@ def require_package_filename(value: Any, label: str) -> str:
         "/" in value
         or "\\" in value
         or ".." in value
-        or not value.startswith("openq4-")
+        or not value.startswith("openpr06-")
         or not valid_suffix
     ):
         raise RuntimeError(
@@ -547,10 +557,7 @@ def require_package_filename(value: Any, label: str) -> str:
 
 def validate_expected_candidate(candidate: CandidateMetadata) -> CandidateMetadata:
     return CandidateMetadata(
-        openq4_commit=require_git_sha(candidate.openq4_commit, "expected openQ4 commit"),
-        openq4_game_commit=require_git_sha(
-            candidate.openq4_game_commit, "expected openQ4-game commit"
-        ),
+        openpr06_commit=require_git_sha(candidate.openpr06_commit, "expected openPR06 commit"),
         release_version=require_release_value(
             candidate.release_version, "expected release version"
         ),
@@ -735,10 +742,7 @@ def read_runtime_report(path: Path, label: str) -> tuple[Mapping[str, Any], str]
 def _candidate_from_table(table: Mapping[str, Any]) -> CandidateMetadata:
     _strict_keys(table, CANDIDATE_KEYS, "candidate table")
     return CandidateMetadata(
-        openq4_commit=require_git_sha(table["openq4_commit"], "candidate openQ4 commit"),
-        openq4_game_commit=require_git_sha(
-            table["openq4_game_commit"], "candidate openQ4-game commit"
-        ),
+        openpr06_commit=require_git_sha(table["openpr06_commit"], "candidate openPR06 commit"),
         release_version=require_release_value(
             table["release_version"], "candidate release version"
         ),
@@ -947,6 +951,15 @@ def _validate_optional_source_commit(value: Any, expected: str, label: str) -> N
         raise RuntimeError(f"{label} {value} does not match candidate commit {expected}")
 
 
+def _validate_source_commits(report: Mapping[str, Any], evidence: Evidence, label: str) -> None:
+    # The game library builds in place, so a recorded game commit must be the
+    # candidate commit too; the runners leave it empty without --game-libs-repo.
+    for key in ("openPR06Commit", "OpenPreyGameCommit"):
+        _validate_optional_source_commit(
+            report[key], evidence.candidate.openpr06_commit, f"{label}.{key}"
+        )
+
+
 def _validate_elf_metadata(value: Any, expected_keys: frozenset[str], label: str) -> None:
     elf = _require_table(value, label)
     _strict_keys(elf, expected_keys, label)
@@ -1002,7 +1015,7 @@ def _validate_stock_sp_report(
     _require_exact_string(report["status"], "pass", f"{label}.status")
     _require_exact_string(report["architecture"], "arm64", f"{label}.architecture")
     _require_plain_string(report["host"], f"{label}.host")
-    _require_exact_string(report["map"], "game/airdefense1", f"{label}.map")
+    _require_exact_string(report["map"], "game/roadhouse", f"{label}.map")
     _require_plain_string(report["saveSlot"], f"{label}.saveSlot", maximum=64)
     _validate_wayland_identity(report, label)
     container_detected = _validate_execution_evidence(
@@ -1077,18 +1090,11 @@ def _validate_stock_sp_report(
     ):
         _require_empty_list(report[key], f"{label}.{key}")
     _require_number(report["elapsedSeconds"], f"{label}.elapsedSeconds")
-    _validate_optional_source_commit(
-        report["openQ4Commit"], evidence.candidate.openq4_commit, f"{label}.openQ4Commit"
-    )
-    _validate_optional_source_commit(
-        report["openQ4GameCommit"],
-        evidence.candidate.openq4_game_commit,
-        f"{label}.openQ4GameCommit",
-    )
+    _validate_source_commits(report, evidence, label)
     hashes = _validate_report_hashes(
         report["sha256"],
         SP_HASH_KEYS,
-        {"client": evidence.sha256["client"], "gameSp": evidence.sha256["game_sp"]},
+        {"client": evidence.sha256["client"], "game": evidence.sha256["game"]},
         f"{label}.sha256",
     )
     _validate_elf_metadata(report["elf"], SP_ELF_KEYS, f"{label}.elf")
@@ -1107,12 +1113,9 @@ def _validate_stock_sp_report(
     _require_bool(
         environment["DISPLAYRemoved"], f"{environment_label}.DISPLAYRemoved", expected=True
     )
-    _require_bool(
-        environment["OPENQ4_FORCE_X11Removed"],
-        f"{environment_label}.OPENQ4_FORCE_X11Removed",
-        expected=True,
-    )
-    return hashes["retailPak001"], container_detected
+    for key in ("OPENPR06_FORCE_X11Removed", "OPENQ4_FORCE_X11Removed"):
+        _require_bool(environment[key], f"{environment_label}.{key}", expected=True)
+    return hashes["retailPreyPak"], container_detected
 
 
 def _validate_dedicated_report(
@@ -1127,7 +1130,7 @@ def _validate_dedicated_report(
     _require_exact_string(report["status"], "pass", f"{label}.status")
     _require_exact_string(report["architecture"], "arm64", f"{label}.architecture")
     _require_plain_string(report["host"], f"{label}.host")
-    _require_exact_string(report["map"], "mp/q4dm1", f"{label}.map")
+    _require_exact_string(report["map"], "game/dmroadhouse", f"{label}.map")
     port = _require_int(report["port"], f"{label}.port")
     if not 1 <= port <= 65535:
         raise RuntimeError(f"{label}.port must be between 1 and 65535")
@@ -1185,21 +1188,14 @@ def _validate_dedicated_report(
     )
     _validate_screenshot_result(report["screenshot"], f"{label}.screenshot")
     _require_number(report["elapsedSeconds"], f"{label}.elapsedSeconds")
-    _validate_optional_source_commit(
-        report["openQ4Commit"], evidence.candidate.openq4_commit, f"{label}.openQ4Commit"
-    )
-    _validate_optional_source_commit(
-        report["openQ4GameCommit"],
-        evidence.candidate.openq4_game_commit,
-        f"{label}.openQ4GameCommit",
-    )
+    _validate_source_commits(report, evidence, label)
     hashes = _validate_report_hashes(
         report["sha256"],
         DEDICATED_HASH_KEYS,
         {
             "client": evidence.sha256["client"],
             "dedicated": evidence.sha256["dedicated"],
-            "gameMp": evidence.sha256["game_mp"],
+            "game": evidence.sha256["game"],
         },
         f"{label}.sha256",
     )
@@ -1207,7 +1203,7 @@ def _validate_dedicated_report(
     _require_table(report["paths"], f"{label}.paths")
     _require_string_list(report["serverCommand"], f"{label}.serverCommand")
     _require_string_list(report["clientCommand"], f"{label}.clientCommand")
-    return hashes["retailPak001"], container_detected
+    return hashes["retailPreyPak"], container_detected
 
 
 def validate_runtime_reports(evidence: Evidence, paths: RuntimeReportPaths) -> None:
@@ -1230,7 +1226,7 @@ def validate_runtime_reports(evidence: Evidence, paths: RuntimeReportPaths) -> N
     )
     if stock_retail_hash != dedicated_retail_hash:
         raise RuntimeError(
-            "stock SP and dedicated runtime reports used different retail pak001.pk4 bytes"
+            "stock SP and dedicated runtime reports used different retail PREY base pak bytes"
         )
     if stock_container or dedicated_container:
         disclosure = " ".join(
@@ -1313,8 +1309,7 @@ def parse_evidence(document: Mapping[str, Any], *, require_accepted: bool) -> Ev
 
 def _compare_candidate(actual: CandidateMetadata, expected: CandidateMetadata) -> None:
     for field_name in (
-        "openq4_commit",
-        "openq4_game_commit",
+        "openpr06_commit",
         "release_version",
         "version_tag",
         "release_tag",
@@ -1391,7 +1386,7 @@ def verify_release_evidence(
 ) -> Evidence:
     evidence = validate_evidence_manifest(manifest, expected, runtime_reports)
     actual_hashes = collect_candidate_hashes(runtime_root, package_dir, archive, expected)
-    for key in ("client", "dedicated", "game_sp", "game_mp", "archive"):
+    for key in ("client", "dedicated", "game", "archive"):
         if actual_hashes[key] != evidence.sha256[key]:
             raise RuntimeError(
                 f"{key} SHA-256 {actual_hashes[key]} does not match accepted evidence "
@@ -1433,8 +1428,7 @@ def render_pending_candidate(expected: CandidateMetadata, hashes: Mapping[str, s
         'dedicated = "pending"',
         "",
         "[candidate]",
-        f"openq4_commit = {_toml_quote(expected.openq4_commit)}",
-        f"openq4_game_commit = {_toml_quote(expected.openq4_game_commit)}",
+        f"openpr06_commit = {_toml_quote(expected.openpr06_commit)}",
         f"release_version = {_toml_quote(expected.release_version)}",
         f"version_tag = {_toml_quote(expected.version_tag)}",
         f"release_tag = {_toml_quote(expected.release_tag)}",
@@ -1444,8 +1438,7 @@ def render_pending_candidate(expected: CandidateMetadata, hashes: Mapping[str, s
         f"archive = {_toml_quote(canonical_hashes['archive'])}",
         f"client = {_toml_quote(canonical_hashes['client'])}",
         f"dedicated = {_toml_quote(canonical_hashes['dedicated'])}",
-        f"game_sp = {_toml_quote(canonical_hashes['game_sp'])}",
-        f"game_mp = {_toml_quote(canonical_hashes['game_mp'])}",
+        f"game = {_toml_quote(canonical_hashes['game'])}",
         "",
     ]
     return "\n".join(lines)
@@ -1476,8 +1469,7 @@ def write_candidate(
 
 
 def _add_expected_arguments(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--expected-openq4-commit", required=True)
-    parser.add_argument("--expected-openq4-game-commit", required=True)
+    parser.add_argument("--expected-openpr06-commit", required=True)
     parser.add_argument("--expected-release-version", required=True)
     parser.add_argument("--expected-version-tag", required=True)
     parser.add_argument("--expected-release-tag", required=True)
@@ -1508,8 +1500,7 @@ def _runtime_report_paths_from_args(args: argparse.Namespace) -> RuntimeReportPa
 
 def _expected_from_args(args: argparse.Namespace) -> CandidateMetadata:
     return CandidateMetadata(
-        openq4_commit=args.expected_openq4_commit,
-        openq4_game_commit=args.expected_openq4_game_commit,
+        openpr06_commit=args.expected_openpr06_commit,
         release_version=args.expected_release_version,
         version_tag=args.expected_version_tag,
         release_tag=args.expected_release_tag,

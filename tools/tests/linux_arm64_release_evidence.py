@@ -39,19 +39,17 @@ def load_helper() -> ModuleType:
 HELPER = load_helper()
 
 EXPECTED = HELPER.CandidateMetadata(
-    openq4_commit="1" * 40,
-    openq4_game_commit="2" * 40,
+    openpr06_commit="1" * 40,
     release_version="0.8.1",
     version_tag="0.8.1",
     release_tag="v0.8.1",
-    package_filename="openq4-0.8.1-linux-arm64.tar.xz",
+    package_filename="openpr06-0.8.1-linux-arm64.tar.xz",
 )
 
 FIXTURE_BYTES = {
     "client": b"synthetic ARM64 client\x00\x01\n",
     "dedicated": b"synthetic ARM64 dedicated server\x02\n",
-    "game_sp": b"synthetic ARM64 single-player module\x03\n",
-    "game_mp": b"synthetic ARM64 multiplayer module\x04\n",
+    "game": b"synthetic ARM64 unified game module\x03\n",
 }
 
 ACCEPTED_REVIEW_VALUES = {
@@ -162,7 +160,7 @@ def screenshot_result(name: str) -> dict[str, object]:
     bits_per_pixel = 24
     return {
         "status": "pass",
-        "path": f"/tmp/openq4/{name}.tga",
+        "path": f"/tmp/openpr06/{name}.tga",
         "bytes": 18 + width * height * (bits_per_pixel // 8),
         "sha256": sha256_bytes(f"synthetic {name} screenshot".encode("utf-8")),
         "width": width,
@@ -178,10 +176,10 @@ def save_result() -> dict[str, object]:
     minimum_bytes = {"save": 4096, "tga": 65536, "txt": 1}
     return {
         "status": "pass",
-        "directory": "/tmp/openq4/baseoq4/savegames",
+        "directory": "/tmp/openpr06/basepr/savegames",
         "files": {
             key: {
-                "path": f"/tmp/openq4/baseoq4/savegames/linux_wayland_roundtrip.{key}",
+                "path": f"/tmp/openpr06/basepr/savegames/linux_wayland_roundtrip.{key}",
                 "bytes": minimum,
                 "minimumBytes": minimum,
                 "sha256": sha256_bytes(f"synthetic {key} save artifact".encode("utf-8")),
@@ -194,14 +192,14 @@ def save_result() -> dict[str, object]:
 
 
 def runtime_report_documents(candidate_hashes: dict[str, str]) -> dict[str, dict[str, object]]:
-    retail_hash = sha256_bytes(b"synthetic unmodified retail pak001.pk4")
+    retail_hash = sha256_bytes(b"synthetic unmodified retail PREY pak000.pk4")
     stock_sp = {
         "reportSchemaVersion": 1,
         "reportType": "linux-wayland-stock-sp",
         "status": "pass",
         "architecture": "arm64",
         "host": "Linux 6.8.0 aarch64",
-        "map": "game/airdefense1",
+        "map": "game/roadhouse",
         "saveSlot": "linux_wayland_roundtrip",
         "nativeWayland": True,
         "waylandDisplay": "wayland-0",
@@ -240,20 +238,21 @@ def runtime_report_documents(candidate_hashes: dict[str, str]) -> dict[str, dict
         "glErrorMarkers": [],
         "audioErrorMarkers": [],
         "elapsedSeconds": 1.5,
-        "openQ4Commit": EXPECTED.openq4_commit,
-        "openQ4GameCommit": EXPECTED.openq4_game_commit,
+        "openPR06Commit": EXPECTED.openpr06_commit,
+        "OpenPreyGameCommit": "",
         "sha256": {
             "client": candidate_hashes["client"],
-            "gameSp": candidate_hashes["game_sp"],
-            "retailPak001": retail_hash,
+            "game": candidate_hashes["game"],
+            "retailPreyPak": retail_hash,
         },
-        "elf": elf_metadata(("client", "gameSp")),
-        "paths": {"installRoot": "/tmp/openq4"},
-        "command": ["/tmp/openq4/openQ4-client_arm64"],
+        "elf": elf_metadata(("client", "game")),
+        "paths": {"installRoot": "/tmp/openpr06"},
+        "command": ["/tmp/openpr06/openPR06-client_arm64"],
         "environmentContract": {
             "SDL_VIDEO_DRIVER": "wayland",
             "SDL_VIDEODRIVER": "wayland",
             "DISPLAYRemoved": True,
+            "OPENPR06_FORCE_X11Removed": True,
             "OPENQ4_FORCE_X11Removed": True,
         },
     }
@@ -263,7 +262,7 @@ def runtime_report_documents(candidate_hashes: dict[str, str]) -> dict[str, dict
         "status": "pass",
         "architecture": "arm64",
         "host": "Linux 6.8.0 aarch64",
-        "map": "mp/q4dm1",
+        "map": "game/dmroadhouse",
         "port": 28120,
         "nativeWayland": True,
         "waylandDisplay": "wayland-0",
@@ -294,18 +293,18 @@ def runtime_report_documents(candidate_hashes: dict[str, str]) -> dict[str, dict
         "missingMarkers": [],
         "fatalMarkers": [],
         "elapsedSeconds": 2.0,
-        "openQ4Commit": EXPECTED.openq4_commit,
-        "openQ4GameCommit": EXPECTED.openq4_game_commit,
+        "openPR06Commit": EXPECTED.openpr06_commit,
+        "OpenPreyGameCommit": "",
         "sha256": {
             "dedicated": candidate_hashes["dedicated"],
             "client": candidate_hashes["client"],
-            "gameMp": candidate_hashes["game_mp"],
-            "retailPak001": retail_hash,
+            "game": candidate_hashes["game"],
+            "retailPreyPak": retail_hash,
         },
-        "elf": elf_metadata(("dedicated", "client", "gameMp")),
-        "paths": {"installRoot": "/tmp/openq4"},
-        "serverCommand": ["/tmp/openq4/openQ4-ded_arm64"],
-        "clientCommand": ["/tmp/openq4/openQ4-client_arm64"],
+        "elf": elf_metadata(("dedicated", "client", "game")),
+        "paths": {"installRoot": "/tmp/openpr06"},
+        "serverCommand": ["/tmp/openpr06/openPR06-ded_arm64"],
+        "clientCommand": ["/tmp/openpr06/openPR06-client_arm64"],
     }
     return {"stock_sp": stock_sp, "dedicated": dedicated}
 
@@ -396,7 +395,7 @@ def main() -> None:
                 f"unknown={sorted(actual_keys - expected_keys)}"
             )
 
-    with tempfile.TemporaryDirectory(prefix="openq4-arm64-release-evidence-") as temp_dir:
+    with tempfile.TemporaryDirectory(prefix="openpr06-arm64-release-evidence-") as temp_dir:
         temp_root = Path(temp_dir)
         runtime_root = temp_root / "runtime"
         package_dir = temp_root / "package"
@@ -431,7 +430,7 @@ def main() -> None:
         if dict(generated_hashes) != expected_hashes or dict(pending.sha256) != expected_hashes:
             raise AssertionError("generated candidate hashes do not match fixture bytes")
 
-        preview_named_archive = temp_root / "openq4-0.8.1-linux-arm64-preview.tar.xz"
+        preview_named_archive = temp_root / "openpr06-0.8.1-linux-arm64-preview.tar.xz"
         preview_named_archive.write_bytes(archive_bytes)
         expect_error(
             lambda: HELPER.write_candidate(
@@ -511,10 +510,8 @@ def main() -> None:
                 str(stock_sp_report),
                 "--dedicated-report",
                 str(dedicated_report),
-                "--expected-openq4-commit",
-                EXPECTED.openq4_commit,
-                "--expected-openq4-game-commit",
-                EXPECTED.openq4_game_commit,
+                "--expected-openpr06-commit",
+                EXPECTED.openpr06_commit,
                 "--expected-release-version",
                 EXPECTED.release_version,
                 "--expected-version-tag",
@@ -811,14 +808,25 @@ def main() -> None:
         def replace_retail_hash(document: dict[str, object]) -> None:
             hashes = document["sha256"]
             assert isinstance(hashes, dict)
-            hashes["retailPak001"] = "f" * 64
+            hashes["retailPreyPak"] = "f" * 64
 
         expect_modified_report_error(
             "dedicated",
             "different-retail-media",
             replace_retail_hash,
-            "used different retail pak001.pk4 bytes",
+            "used different retail PREY base pak bytes",
         )
+
+        # The game library builds in place, so a recorded game commit must be
+        # the candidate's openPR06 commit, and so must the engine commit.
+        for commit_key in ("openPR06Commit", "OpenPreyGameCommit"):
+            for report_key in ("stock_sp", "dedicated"):
+                expect_modified_report_error(
+                    report_key,
+                    f"foreign-{commit_key}",
+                    lambda document, commit_key=commit_key: document.update({commit_key: "2" * 40}),
+                    "does not match candidate commit",
+                )
 
         duplicate_key_contents = report_contents["stock_sp"].replace(
             b"{\n",
@@ -1011,12 +1019,11 @@ def main() -> None:
         )
 
         for field_name, mismatched_value in (
-            ("openq4_commit", "3" * 40),
-            ("openq4_game_commit", "4" * 40),
+            ("openpr06_commit", "3" * 40),
             ("release_version", "0.8.2"),
             ("version_tag", "0.8.2"),
             ("release_tag", "v0.8.2"),
-            ("package_filename", "openq4-0.8.2-linux-arm64.tar.xz"),
+            ("package_filename", "openpr06-0.8.2-linux-arm64.tar.xz"),
         ):
             mismatched_expected = replace(EXPECTED, **{field_name: mismatched_value})
             expect_error(
@@ -1029,7 +1036,7 @@ def main() -> None:
 
         malformed_commit_path = temp_root / "malformed-commit.toml"
         malformed_commit_path.write_text(
-            accepted_text.replace(EXPECTED.openq4_commit, "abc123", 1),
+            accepted_text.replace(EXPECTED.openpr06_commit, "abc123", 1),
             encoding="utf-8",
         )
         expect_error(

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 
@@ -22,7 +23,10 @@ def validate_building_packager_notes() -> None:
     source = read("BUILDING.md")
 
     require(source, "## Building on Linux / macOS", "BUILDING Linux build section")
-    require(source, "1.2.0 or newer", "BUILDING Meson floor")
+    meson_floor = re.search(r"meson_version: '>=([0-9.]+)'", read("meson.build"))
+    if meson_floor is None:
+        raise AssertionError("meson.build no longer declares a meson_version floor")
+    require(source, f"{meson_floor.group(1)} or newer", "BUILDING Meson floor")
     require(source, "libglew-dev", "BUILDING OpenGL development dependency")
     require(source, "libopenal-dev", "BUILDING OpenAL development dependency")
     require(source, "OPENPR06_FORCE_X11=1", "BUILDING project XWayland fallback")
@@ -30,7 +34,7 @@ def validate_building_packager_notes() -> None:
     require(source, "openq4_game_sources.json", "BUILDING canonical source inventory")
     require(source, "tools/build/meson_setup.sh", "BUILDING canonical Linux wrapper")
     require(source, "install -C builddir --no-rebuild --skip-subprojects", "BUILDING package staging command")
-    require(source, "openpr06-<version-tag>-linux.tar.xz", "BUILDING Linux archive identity")
+    require(source, "openpr06-<version-tag>-linux-x64.tar.xz", "BUILDING Linux archive identity")
     require(source, "openpr06-<version-tag>-x86_64.AppImage", "BUILDING Linux AppImage identity")
     require(source, "basepr/game_<arch>.(dll|so|dylib)", "BUILDING unified game module layout")
 
@@ -57,13 +61,8 @@ def validate_plan_status() -> None:
 
 
 def validate_ci_wiring() -> None:
-    commit = read(".github/workflows/commit-validation.yml")
-    push = read(".github/workflows/push-verification.yml")
+    # openPR06: no push-verification/commit-validation workflows; openq4_validate.py is the runner.
     runner = read("tools/validation/openq4_validate.py")
-
-    for source, context in ((commit, "commit script smoke"), (push, "push script smoke")):
-        require(source, "tools/tests/linux_packaging_guidance.py", context)
-        require(source, "python tools/tests/linux_packaging_guidance.py", context)
 
     require(runner, "linux_packaging_guidance.py", "validation runner")
 
@@ -73,7 +72,7 @@ def validate_release_note() -> None:
 
     require(source, "Archive/AppImage tooling is rebranded for openPR06", "release completion notes")
     require(source, "Wayland/X11 runtime boundaries", "release completion notes")
-    require(source, "publication lanes", "release completion notes")
+    require(source, "nightly publication lane", "release completion notes")
 
 
 def main() -> None:
