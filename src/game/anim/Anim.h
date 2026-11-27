@@ -245,7 +245,9 @@ private:
 
 public:
 							idMD5Anim();
-							~idMD5Anim();
+							// HUMANHEAD's hhMD5Anim derives from this, and idAnimManager deletes
+							// it through an idMD5Anim pointer.
+	virtual					~idMD5Anim();
 
 	void					Free( void );
 	bool					Reload( void );
