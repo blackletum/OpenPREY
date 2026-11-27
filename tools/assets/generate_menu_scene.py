@@ -644,6 +644,10 @@ GLOW_SPAN = (-50.0, 50.0)
 # so its coordinates (and the haze's) are written this many times larger and
 # the materials scale them back.
 UV_SPREAD = 1000.0
+# A ray whose miss distance is within this fraction of EARTH_R grazes the limb.
+# Rounding leaves a limb point's miss up to about 4e-16 off; the haze's rings
+# next to the limb miss by 3e-9 or more.
+LIMB_GRAZE = 1e-12
 
 
 def glow_at(units):
@@ -674,18 +678,33 @@ def earth_meshes(scene):
                         for phi in np.linspace(-EARTH_PHI, EARTH_PHI, 4001)])
     limb_xy = limb_xy[np.isfinite(limb_xy).all(axis=1)]
 
-    def hits_earth(point):
+    def limb_side(point):
+        """1 if the rest camera's ray to the point meets Earth, -1 if it
+        passes above, 0 if it grazes the limb. A point on the limb, which
+        the haze clamps its upper rings to, grazes it by construction: there
+        its miss distance equals EARTH_R up to rounding, and a strict
+        comparison came out differently from one platform's floating point to
+        the next (issue #78)."""
         ray = norm(np.asarray(point) - scene.cam_rest)
         to_centre = scene.earth - scene.cam_rest
-        return np.linalg.norm(to_centre - ray * (to_centre @ ray)) < EARTH_R and to_centre @ ray > 0
+        if to_centre @ ray <= 0:
+            return -1
+        miss = float(np.linalg.norm(to_centre - ray * (to_centre @ ray)))
+        if abs(miss - EARTH_R) <= LIMB_GRAZE * EARTH_R:
+            return 0
+        return 1 if miss < EARTH_R else -1
 
     def beneath(point):
-        """Canvas units from the drawn limb: positive over Earth, negative above it."""
+        """Canvas units from the drawn limb: positive over Earth, negative
+        above it, and 0 on it."""
         x, y = scene.project(point)
         if not math.isfinite(x):
             return HAZE_DEPTH
+        side = limb_side(point)
+        if side == 0:
+            return 0.0
         distance = float(np.min(np.hypot(limb_xy[:, 0] - x, limb_xy[:, 1] - y)))
-        return distance if hits_earth(point) else -distance
+        return distance * side
 
     def v_of(point, lo, hi):
         return float(np.clip((beneath(point) - lo) / (hi - lo), 0.0, 1.0))
