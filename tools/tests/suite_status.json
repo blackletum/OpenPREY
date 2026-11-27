@@ -23,8 +23,6 @@
         "macos_symbolication_policy",
         "macos_universal2_assembly",
         "macos_universal2_runtime",
-        "p0_governance_evidence",
-        "packaging_safety",
         "release_tooling_safety"
       ]
     },

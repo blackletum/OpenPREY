@@ -958,10 +958,10 @@ def validate_renderer_module_staging() -> None:
     )
     for filename in required_files:
         write_file(install_dir / filename, filename.encode("utf-8"))
-    if PACKAGE.get_required_updater_binaries("linux", "x64") != ("openQ4-updater_x64",) or \
-            PACKAGE.get_required_updater_binaries("windows", "arm64") != ("openQ4-updater_arm64.exe",) or \
+    if PACKAGE.get_required_updater_binaries("linux", "x64") != ("openPR06-updater_x64",) or \
+            PACKAGE.get_required_updater_binaries("windows", "arm64") != ("openPR06-updater_arm64.exe",) or \
             PACKAGE.get_required_updater_binaries("macos", "arm64") != ():
-        raise AssertionError("openQ4-updater ships with the Windows and Linux packages only")
+        raise AssertionError("openPR06-updater ships with the Windows and Linux packages only")
 
     missing = PACKAGE.copy_required_binaries(
         "linux",
@@ -1482,47 +1482,37 @@ def validate_prepare_windows_openal_path_boundary_guard() -> None:
 
 
 def validate_repository_metadata_manifest() -> None:
-    manifest_path = WORK / "repository-metadata" / "assembly-manifest.json"
-    manifest = {
-        "format": 1,
-        "projectGitCommit": "1" * 40,
-        "projectGitDirty": False,
-        "gameLibsGitCommit": "2" * 40,
-        "gameLibsGitDirty": False,
-    }
-    write_file(manifest_path, (json.dumps(manifest) + "\n").encode("utf-8"))
+    # openPR06: the game library builds in place, so there is no GameLibs stage
+    # manifest; collect_package_repository_metadata reads the one source commit
+    # and reports it as both the engine and the game commit.
+    repo = WORK / "repository-metadata"
+    write_file(repo / "file.txt", b"one\n")
+    git = ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@example.invalid", "-c", "commit.gpgsign=false"]
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run([*git, "add", "file.txt"], check=True)
+    subprocess.run([*git, "commit", "-q", "-m", "one"], check=True)
+    head = subprocess.run([*git, "rev-parse", "HEAD"], check=True, capture_output=True, text=True).stdout.strip()
 
-    metadata = PACKAGE.read_staged_repository_metadata(
-        WORK,
-        repository_manifest=manifest_path,
-    )
-    expected = {
-        "openq4_commit": "1" * 40,
-        "openq4_dirty": "false",
-        "openq4_game_commit": "2" * 40,
-        "openq4_game_dirty": "false",
-    }
+    expected = {"openq4_commit": head, "openq4_dirty": "false", "openq4_game_commit": head, "openq4_game_dirty": "false"}
+    metadata = PACKAGE.collect_package_repository_metadata(repo)
     if metadata != expected:
-        raise AssertionError(f"explicit repository metadata manifest was not consumed: {metadata!r}")
+        raise AssertionError(f"package repository metadata does not name the source commit: {metadata!r}")
 
-    default_build_dir = WORK / "repository-metadata" / "builddir"
-    default_manifest = default_build_dir / PACKAGE.GAMELIBS_STAGE_MANIFEST_PATH
-    write_file(default_manifest, (json.dumps(manifest) + "\n").encode("utf-8"))
-    if PACKAGE.read_staged_repository_metadata(WORK, default_build_dir) != expected:
-        raise AssertionError("build-local GameLibs metadata manifest was not consumed")
+    write_file(repo / "file.txt", b"two\n")
+    dirty = PACKAGE.collect_package_repository_metadata(repo)
+    if dirty["openq4_dirty"] != "true" or dirty["openq4_game_dirty"] != "true" or dirty["openq4_commit"] != head:
+        raise AssertionError(f"package repository metadata missed a dirty tree: {dirty!r}")
+
+    outside = PACKAGE.collect_package_repository_metadata(WORK / "repository-metadata-missing")
+    if outside["openq4_commit"] != "unavailable" or outside["openq4_dirty"] != "unavailable":
+        raise AssertionError(f"package repository metadata outside a checkout must be unavailable: {outside!r}")
 
 
 def validate_validation_wiring() -> None:
+    # openPR06: no push-verification/commit-validation workflows; openq4_validate.py is the runner.
     validator = (ROOT / "tools" / "validation" / "openq4_validate.py").read_text(encoding="utf-8")
-    push = (ROOT / ".github" / "workflows" / "push-verification.yml").read_text(encoding="utf-8")
-    commit = (ROOT / ".github" / "workflows" / "commit-validation.yml").read_text(encoding="utf-8")
-    for context, text in (
-        ("validation runner", validator),
-        ("push workflow", push),
-        ("commit workflow", commit),
-    ):
-        if "packaging_safety.py" not in text:
-            raise AssertionError(f"packaging_safety.py is not wired into {context}")
+    if "packaging_safety.py" not in validator:
+        raise AssertionError("packaging_safety.py is not wired into validation runner")
 
 
 def validate_target_repository_metadata() -> None:
