@@ -16,6 +16,12 @@ import subprocess
 import time
 
 ROOT = Path(__file__).resolve().parents[2]
+# openPR06: PREY's game library has no g_autoExecAfterMapLoad (an openQ4 cvar),
+# so the smoke config runs through the engine's waitMsec/exec_savepath after the
+# map command, as in tools/tests/renderer_gameplay_benchmark.py.
+GAME_DIR = "basepr"
+SMOKE_CFG = "render-smoke.cfg"
+SMOKE_DONE = "OPENPR06_SMOKE_DONE"
 
 
 def inspect_screenshot(path):
@@ -53,32 +59,32 @@ def main():
     args = parser.parse_args()
     runtime = args.runtime.resolve()
     arch = "arm64" if platform.machine().lower() in ("aarch64", "arm64") else "x64"
-    executable = runtime / (f"openQ4-client_{arch}" + (".exe" if os.name == "nt" else ""))
+    executable = runtime / (f"openPR06-client_{arch}" + (".exe" if os.name == "nt" else ""))
     if not executable.is_file():
         parser.error(f"Missing client: {executable}")
-    output = (args.output or ROOT / ".tmp/android-gles-smoke" / f"{args.render_api}-{args.mode}-{time.time_ns()}").resolve()
+    output = (args.output or ROOT / ".tmp/render-smoke" / f"{args.render_api}-{args.mode}-{time.time_ns()}").resolve()
     output.mkdir(parents=True, exist_ok=False)
     save = output / "save"
-    game = save / "baseoq4"
+    game = save / GAME_DIR
     game.mkdir(parents=True)
-    screenshot = game / "screenshots/android-gles-smoke.tga"
-    (game / "android-gles-smoke.cfg").write_text(
+    screenshot = game / "screenshots/render-smoke.tga"
+    (game / SMOKE_CFG).write_text(
         'gfxInfo\nr_actualRenderApi\nrendererTierSelfTest\n'
-        'screenshot "screenshots/android-gles-smoke.tga"\n'
-        'echo OPENQ4_SMOKE_DONE\nquit\n', encoding="utf-8")
+        'screenshot "screenshots/render-smoke.tga"\n'
+        f'echo {SMOKE_DONE}\nquit\n', encoding="utf-8")
     cvars = {
         "fs_basepath": str(args.basepath.resolve()), "fs_savepath": str(save),
-        "fs_cachepath": str(output / "cache"), "fs_game": "baseoq4",
+        "fs_cachepath": str(output / "cache"), "fs_game": GAME_DIR,
         "r_renderApi": "vulkan" if args.render_api == "vk" else args.render_api,
         "r_renderer": "glesd3" if args.render_api == "gles" else "arb2",
         "r_mode": "-1", "r_customWidth": "960", "r_customHeight": "540",
-        "logFile": "2", "logFileName": "logs/openq4.log", "developer": "1",
-        "com_skipIntroVideos": "1", "com_skipLoadingContinue": "1",
-        "g_autoSkipCinematics": "1", "g_autoScreenshot": "0",
-        "g_autoExecAfterMapLoad": "android-gles-smoke.cfg",
-        "g_autoExecAfterMapLoadDelayMs": str(args.delay_ms),
+        "logFile": "2", "logFileName": "logs/render-smoke.log", "developer": "1",
+        # openPR06: openQ4's com_skipIntroVideos and g_autoScreenshot do not
+        # exist here; the engine's screenshot cvar is com_autoScreenshot.
+        "com_skipLoadingContinue": "1",
+        "g_autoSkipCinematics": "1", "com_autoScreenshot": "0",
         "ui_autoJoin": "1", "net_serverDedicated": "0", "si_pure": "0",
-        "si_gameType": "singleplayer" if args.mode == "sp" else "DM",
+        "si_gameType": "singleplayer" if args.mode == "sp" else "deathmatch",
     }
     for setting in args.set_cvar:
         name, separator, value = setting.partition("=")
@@ -90,8 +96,9 @@ def main():
     command = [str(executable)]
     for name, value in cvars.items():
         command.extend(("+set", name, value))
-    map_name = args.map or ("game/hangar1" if args.mode == "sp" else "mp/q4dm1")
+    map_name = args.map or ("game/roadhouse" if args.mode == "sp" else "game/dmroadhouse")
     command.extend(("+map" if args.mode == "sp" else "+spawnServer", map_name))
+    command.extend(("+waitMsec", str(max(0, args.delay_ms)), "+exec_savepath", SMOKE_CFG))
     (output / "command.json").write_text(json.dumps(command, indent=2), encoding="utf-8")
     timed_out = False
     with (output / "console.log").open("wb") as console:
@@ -101,10 +108,10 @@ def main():
             exit_code = result.returncode
         except subprocess.TimeoutExpired:
             timed_out, exit_code = True, -1
-    log_path = game / "logs/openq4.log"
+    log_path = game / "logs/render-smoke.log"
     log = log_path.read_text(encoding="utf-8", errors="replace") if log_path.exists() else ""
     screenshot_check = inspect_screenshot(screenshot)
-    complete = "OPENQ4_SMOKE_DONE" in log and all(
+    complete = SMOKE_DONE in log and all(
         screenshot_check[key] for key in ("valid", "nonBlack", "colorVariation"))
     active_match = re.search(r'"r_actualRenderApi" is:"([^"\r\n]+)"', log)
     active_api = active_match.group(1) if active_match else None
