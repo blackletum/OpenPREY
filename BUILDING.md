@@ -332,6 +332,20 @@ No retail Prey assets are required, and the matrix forces windowed mode. The bui
 
 Linux engine and game translation units disable only UBSan's `vptr` check. The runtime-loaded modules consume polymorphic engine interfaces, while engine code also consumes game interfaces whose key functions and RTTI are owned by those modules; instrumenting either side for `vptr` creates link-time RTTI references that cannot be resolved without changing the executable/module ABI or weakening the modules' `-z defs` contract. AddressSanitizer and all other requested UBSan checks stay enabled.
 
+### Linux Stock Gameplay Smokes
+
+`tools/tests/linux_wayland_stock_sp_smoke.py` plays `game/roadhouse` on native Wayland, saves, loads the save and captures the restored game. `tools/tests/linux_dedicated_stock_map_smoke.py` starts the dedicated server on `game/dmroadhouse` and connects a native-Wayland client to it. Both need a staged `.install/` and the retail Prey PK4s, and both are in the `needs-runtime` group. Without a desktop session, a headless Weston gives them a Wayland socket that opens no window:
+
+```bash
+export XDG_RUNTIME_DIR=$HOME/.wl-runtime
+mkdir -p "$XDG_RUNTIME_DIR" && chmod 700 "$XDG_RUNTIME_DIR"
+weston --backend=headless --renderer=pixman --socket=wayland-smoke --width=1920 --height=1080 --idle-time=0 &
+python tools/tests/linux_wayland_stock_sp_smoke.py --basepath /path/to/prey --wayland-display wayland-smoke --xdg-runtime-dir "$XDG_RUNTIME_DIR"
+python tools/tests/linux_dedicated_stock_map_smoke.py --basepath /path/to/prey --wayland-display wayland-smoke --xdg-runtime-dir "$XDG_RUNTIME_DIR"
+```
+
+Use Weston's `pixman` renderer: with `noop` it never answers frame callbacks, so the client blocks at its first buffer swap. The single-player smoke fails on any OpenAL device error; on a machine without an audio device, `ALSOFT_DRIVERS=null` gives OpenAL Soft a silent one. On WSL, Mesa picks zink, which fails there, and falls back to llvmpipe, which is too slow for these smokes; `GALLIUM_DRIVER=d3d12` uses the GPU instead. In testing, the d3d12 driver sometimes ended the process after 15 to 25 map loads, with or without saves (`_exit(0x80070057)` from a driver thread, or a segfault inside it). The smokes load far fewer maps, but longer map-cycling runs on WSL need llvmpipe.
+
 ---
 
 ## Building on Windows

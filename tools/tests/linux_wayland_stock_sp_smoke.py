@@ -4,8 +4,9 @@
 This is an opt-in native-Linux runtime test because it requires the retail
 Prey (2006) PK4s. It launches the staged client through a real Wayland socket,
 enters ``game/roadhouse``, saves and restores an isolated slot through two
-``g_autoExecAfterMapLoad`` configs, captures post-restore gameplay, and writes
-an evidence bundle under ``.tmp`` (or an explicitly selected output root).
+configs run with ``exec_savepath`` after a ``waitMsec`` delay, captures
+post-restore gameplay, and writes an evidence bundle under ``.tmp`` (or an
+explicitly selected output root).
 
 The automated audio check proves OpenAL and the engine sound system initialized
 without errors. It cannot hear the speakers. Audible playback and physical
@@ -45,6 +46,16 @@ LOG_NAME = "linux-wayland-stock-sp.log"
 SCREENSHOT_REL = "screenshots/linux-wayland-stock-sp/after-load.tga"
 FIRST_CFG_REL = "linux_wayland_stock_sp/save_and_load.cfg"
 RESTORED_CFG_REL = "linux_wayland_stock_sp/after_load.cfg"
+# openPR06: g_autoExecAfterMapLoad and its "AutoExecAfterMapLoad:" log lines are
+# openQ4 game-library cvars that PREY's game library does not have. The configs
+# run through the engine's waitMsec/exec_savepath instead (as in
+# renderer_gameplay_benchmark.py), and they echo the markers checked below. The
+# "firstActiveDraw" count now counts those echoes, printed a few frames in.
+AUTOEXEC_DELAY_MSEC = 1000
+GAMEPLAY_ACTIVE_MARKER = "OPENPR06_WAYLAND_SP_GAMEPLAY_ACTIVE"
+GAME_MAP_SHUTDOWN_MARKER = "--------- Game Map Shutdown ----------"
+GAME_MAP_INIT_SAVEGAME_MARKER = "------- Game Map Init SaveGame -------"
+GAME_SHUTDOWN_MARKER = "------------ Game Shutdown -----------"
 
 FATAL_PATTERNS = {
     "error": re.compile(r"^(?:\^[0-9])?ERROR:", re.MULTILINE),
@@ -248,21 +259,29 @@ def validate_nontrivial_tga(path: Path | None) -> dict[str, Any]:
     return result
 
 
+def config_executed_marker(cfg_rel: str) -> str:
+    return f"execing {cfg_rel} from fs_savepath"
+
+
 def write_autoexec_configs(home: Path, save_slot: str, settle_frames: int) -> None:
     first_payload = "\n".join(
         (
+            "wait 2",
+            f"echo {GAMEPLAY_ACTIVE_MARKER}",
             "echo OPENPR06_WAYLAND_SP_SAVE_REQUEST",
             f"saveGame {save_slot}",
             "echo OPENPR06_WAYLAND_SP_SAVE_RETURNED",
-            f"set g_autoExecAfterMapLoad {RESTORED_CFG_REL}",
-            "set g_autoExecAfterMapLoadDelayMs 1000",
             "echo OPENPR06_WAYLAND_SP_LOAD_REQUEST",
             f"loadGame {save_slot}",
+            f"waitMsec {AUTOEXEC_DELAY_MSEC}",
+            f"exec_savepath {RESTORED_CFG_REL}",
             "",
         )
     )
     restored_payload = "\n".join(
         (
+            "wait 2",
+            f"echo {GAMEPLAY_ACTIVE_MARKER}",
             "echo OPENPR06_WAYLAND_SP_RESTORE_ACTIVE",
             f"wait {max(1, settle_frames)}",
             "gfxInfo",
@@ -577,11 +596,11 @@ def main(argv: list[str]) -> int:
         ("com_loadingContinueAutoAdvance", "1"),
         ("g_autoSkipCinematics", "1"),
         ("s_noSound", "0"),
-        ("g_autoExecAfterMapLoad", FIRST_CFG_REL),
-        ("g_autoExecAfterMapLoadDelayMs", "1000"),
     ):
         append_set(command, name, value)
     append_command(command, "map", MAP_NAME)
+    append_command(command, "waitMsec", AUTOEXEC_DELAY_MSEC)
+    append_command(command, "exec_savepath", FIRST_CFG_REL)
 
     environment = os.environ.copy()
     environment.update(
@@ -674,19 +693,19 @@ def main(argv: list[str]) -> int:
         "sound enabled": re.search(r"\bset s_noSound 0\b", log_text) is not None,
         "initial map entered": f"Map: {MAP_NAME}" in log_text,
         "initial player spawned": re.search(r"SpawnPlayer:\s*\d+", log_text) is not None,
-        "initial gameplay config executed": f"AutoExecAfterMapLoad: executed {FIRST_CFG_REL}" in log_text,
+        "initial gameplay config executed": config_executed_marker(FIRST_CFG_REL) in log_text,
         "save completed": f"Saved '{args.save_slot}'" in log_text,
         "save load began": re.search(r"loading a v\d+ savegame", log_text) is not None,
-        "save restore initialized": "---------- Game Map Init SaveGame -----------" in log_text,
-        "second gameplay config executed": f"AutoExecAfterMapLoad: executed {RESTORED_CFG_REL}" in log_text,
+        "save restore initialized": GAME_MAP_INIT_SAVEGAME_MARKER in log_text,
+        "second gameplay config executed": config_executed_marker(RESTORED_CFG_REL) in log_text,
         "post-restore active marker": "OPENPR06_WAYLAND_SP_RESTORE_ACTIVE" in log_text,
         "post-restore screenshot write": f"Wrote {SCREENSHOT_REL}" in log_text,
-        "clean game shutdown": "--------------- Game Shutdown ---------------" in log_text,
+        "clean game shutdown": GAME_SHUTDOWN_MARKER in log_text,
     }
     lifecycle_counts = {
         "mapInitialization": log_text.count(f"Map: {MAP_NAME}"),
-        "firstActiveDraw": log_text.count("AutoExecAfterMapLoad: first active draw observed"),
-        "gameMapShutdown": log_text.count("------------ Game Map Shutdown --------------"),
+        "firstActiveDraw": log_text.count(GAMEPLAY_ACTIVE_MARKER),
+        "gameMapShutdown": log_text.count(GAME_MAP_SHUTDOWN_MARKER),
     }
     second_lifecycle = (
         lifecycle_counts["mapInitialization"] >= 2
@@ -703,19 +722,19 @@ def main(argv: list[str]) -> int:
             ("packaged unified module selected", re.compile(re.escape(expected_module))),
             ("initial map load", re.compile(re.escape(f"Map: {MAP_NAME}"))),
             ("initial player spawn", re.compile(r"SpawnPlayer:\s*\d+")),
-            ("initial active draw", re.compile(re.escape("AutoExecAfterMapLoad: first active draw observed"))),
-            ("save/load config executed", re.compile(re.escape(f"AutoExecAfterMapLoad: executed {FIRST_CFG_REL}"))),
+            ("save/load config executed", re.compile(re.escape(config_executed_marker(FIRST_CFG_REL)))),
+            ("initial active draw", re.compile(re.escape(GAMEPLAY_ACTIVE_MARKER))),
             ("save requested", re.compile(re.escape("OPENPR06_WAYLAND_SP_SAVE_REQUEST"))),
             ("save completed", re.compile(re.escape(f"Saved '{args.save_slot}'"))),
             ("load requested", re.compile(re.escape("OPENPR06_WAYLAND_SP_LOAD_REQUEST"))),
             ("savegame stream opened", re.compile(r"loading a v\d+ savegame")),
-            ("old map shut down", re.compile(re.escape("------------ Game Map Shutdown --------------"))),
+            ("old map shut down", re.compile(re.escape(GAME_MAP_SHUTDOWN_MARKER))),
             ("restored map load", re.compile(re.escape(f"Map: {MAP_NAME}"))),
-            ("savegame map initialized", re.compile(re.escape("---------- Game Map Init SaveGame -----------"))),
-            ("restored config executed", re.compile(re.escape(f"AutoExecAfterMapLoad: executed {RESTORED_CFG_REL}"))),
+            ("savegame map initialized", re.compile(re.escape(GAME_MAP_INIT_SAVEGAME_MARKER))),
+            ("restored config executed", re.compile(re.escape(config_executed_marker(RESTORED_CFG_REL)))),
             ("restored gameplay active", re.compile(re.escape("OPENPR06_WAYLAND_SP_RESTORE_ACTIVE"))),
             ("post-restore capture", re.compile(re.escape(f"Wrote {SCREENSHOT_REL}"))),
-            ("clean game shutdown", re.compile(re.escape("--------------- Game Shutdown ---------------"))),
+            ("clean game shutdown", re.compile(re.escape(GAME_SHUTDOWN_MARKER))),
         ),
     )
 
