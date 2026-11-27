@@ -21,7 +21,14 @@ template<int N> struct VectorStub {
 	float &operator[]( int i ) { return values[i]; }
 	float operator[]( int i ) const { return values[i]; }
 };
-class idVec3 : public VectorStub<3> {};
+// openPR06: Prey's BitMsg.h adds WriteVec3/ReadVec3, which use x, y and z.
+class idVec3 {
+public:
+	float x, y, z;
+	int GetDimension() const { return 3; }
+	float &operator[]( int i ) { return ( &x )[i]; }
+	float operator[]( int i ) const { return ( &x )[i]; }
+};
 struct idVec4 : VectorStub<4> {};
 struct idQuat : VectorStub<4> {};
 struct idMat3 {
