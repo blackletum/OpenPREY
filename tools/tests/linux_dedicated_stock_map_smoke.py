@@ -36,6 +36,14 @@ REPORT_SCHEMA_VERSION = 1
 REPORT_TYPE = "linux-wayland-stock-dedicated"
 MAP_NAME = "game/dmroadhouse"
 SCREENSHOT_REL = "screenshots/linux-stock-dedicated/client.tga"
+# openPR06: g_autoExecAfterMapLoad and its "AutoExecAfterMapLoad:" log lines are
+# openQ4 game-library cvars that PREY's game library does not have. The client
+# runs its capture config with the engine's waitMsec/exec_savepath after the
+# connect (as renderer_gameplay_benchmark.py does after a map), and the config
+# echoes its own markers. "client first active draw" now means the config's
+# echo after --settle-frames frames, not a game-library observation.
+CLIENT_ACTIVE_MARKER = "OPENPR06_STOCK_DEDICATED_CLIENT_ACTIVE"
+GAME_SHUTDOWN_MARKER = "------------ Game Shutdown -----------"
 SERVER_LOG_NAME = "linux-stock-dedicated-server.log"
 CLIENT_LOG_NAME = "linux-stock-dedicated-client.log"
 SERVER_VIDEO_DRIVER_CANARY = "openpr06-dedicated-must-not-init-video"
@@ -243,11 +251,16 @@ def stop_process(process: subprocess.Popen[str], timeout: float, console_quit: b
     return process.returncode, False
 
 
+def config_executed_marker(cfg_rel: str) -> str:
+    return f"execing {cfg_rel} from fs_savepath"
+
+
 def write_client_autoexec(savepath: Path, settle_frames: int, sample_msec: int) -> str:
     cfg_rel = "linux-stock-dedicated/client.cfg"
     payload = "\n".join(
         (
             f"wait {max(1, settle_frames)}",
+            f"echo {CLIENT_ACTIVE_MARKER}",
             "framePacingReset",
             "r_rendererMetrics 1",
             "r_rendererGpuTimers 0",
@@ -431,6 +444,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--settle-frames", type=int, default=120, help="Active gameplay frames before the client capture window.")
     parser.add_argument("--sample-msec", type=int, default=2000, help="Real milliseconds sampled before client diagnostics/capture.")
     parser.add_argument(
+        "--connect-settle-msec",
+        type=int,
+        default=8000,
+        help="Real milliseconds after the connect command before the capture config runs (commands wait while the map loads).",
+    )
+    parser.add_argument(
         "--physical-hardware",
         action="store_true",
         help=(
@@ -451,6 +470,8 @@ def main(argv: list[str]) -> int:
         raise RuntimeError("all timeouts must be greater than zero")
     if args.settle_frames <= 0 or args.sample_msec <= 0:
         raise RuntimeError("--settle-frames and --sample-msec must be greater than zero")
+    if args.connect_settle_msec <= 0:
+        raise RuntimeError("--connect-settle-msec must be greater than zero")
 
     native_arch = host_arch_tag()
     arch = args.arch or native_arch
@@ -589,11 +610,11 @@ def main(argv: list[str]) -> int:
         ("ui_autoJoin", "1"),
         ("ui_name", "DedicatedStockMapClient"),
         ("s_noSound", "1"),
-        ("g_autoExecAfterMapLoad", cfg_rel),
-        ("g_autoExecAfterMapLoadDelayMs", "1000"),
     ):
         append_set(client_command, name, value)
     append_command(client_command, "connect", f"127.0.0.1:{args.port}")
+    append_command(client_command, "waitMsec", args.connect_settle_msec)
+    append_command(client_command, "exec_savepath", cfg_rel)
 
     base_environment = os.environ.copy()
     server_environment = base_environment.copy()
@@ -732,7 +753,7 @@ def main(argv: list[str]) -> int:
     server_after_markers = {
         "dedicated client connected": re.search(r"client \d+ connected\.", server_text) is not None,
         "dedicated SpawnPlayer": re.search(r"SpawnPlayer:\s*\d+", server_text) is not None,
-        "dedicated clean game shutdown": "--------------- Game Shutdown ---------------" in server_text,
+        "dedicated clean game shutdown": GAME_SHUTDOWN_MARKER in server_text,
     }
     client_markers = {
         "native Wayland active": "SDL3: native Wayland active" in client_text,
@@ -741,14 +762,14 @@ def main(argv: list[str]) -> int:
         "client received connect response": "received connect response from" in client_text,
         "client entered game/dmroadhouse": f"Map: {MAP_NAME}" in client_text,
         "client SpawnPlayer": re.search(r"SpawnPlayer:\s*\d+", client_text) is not None,
-        "client first active draw": "AutoExecAfterMapLoad: first active draw observed" in client_text,
-        "client capture cfg executed": f"AutoExecAfterMapLoad: executed {cfg_rel}" in client_text,
+        "client first active draw": CLIENT_ACTIVE_MARKER in client_text,
+        "client capture cfg executed": config_executed_marker(cfg_rel) in client_text,
         "client frame pacing snapshot": "Frame pacing snapshot (MP):" in client_text,
         "client selected renderer tier": "Selected renderer tier:" in client_text,
         "client renderer tier contract": tier_contract_passes(client_text),
         "client renderer benchmark samples": benchmark_capture_has_samples(client_text),
         "client screenshot write marker": f"Wrote {SCREENSHOT_REL}" in client_text,
-        "client clean game shutdown": "--------------- Game Shutdown ---------------" in client_text,
+        "client clean game shutdown": GAME_SHUTDOWN_MARKER in client_text,
     }
     missing.extend(name for name, passed in server_after_markers.items() if not passed)
     missing.extend(name for name, passed in client_markers.items() if not passed)
@@ -763,7 +784,7 @@ def main(argv: list[str]) -> int:
             ("server map became ready", re.compile(re.escape(f"Dedicated map ready: {MAP_NAME}"))),
             ("server accepted client", re.compile(r"client \d+ connected\.")),
             ("server spawned player", re.compile(r"SpawnPlayer:\s*\d+")),
-            ("server shut game down", re.compile(re.escape("--------------- Game Shutdown ---------------"))),
+            ("server shut game down", re.compile(re.escape(GAME_SHUTDOWN_MARKER))),
         ),
     )
     client_sequence_failures = ordered_pattern_failures(
@@ -774,11 +795,11 @@ def main(argv: list[str]) -> int:
             ("client connect response in order", re.compile(re.escape("received connect response from"))),
             ("client map load in order", re.compile(re.escape(f"Map: {MAP_NAME}"))),
             ("client player spawn in order", re.compile(r"SpawnPlayer:\s*\d+")),
-            ("client first active draw in order", re.compile(re.escape("AutoExecAfterMapLoad: first active draw observed"))),
-            ("client capture config in order", re.compile(re.escape(f"AutoExecAfterMapLoad: executed {cfg_rel}"))),
+            ("client capture config in order", re.compile(re.escape(config_executed_marker(cfg_rel)))),
+            ("client first active draw in order", re.compile(re.escape(CLIENT_ACTIVE_MARKER))),
             ("client benchmark capture in order", re.compile(re.escape("rendererBenchmark capture("))),
             ("client screenshot in order", re.compile(re.escape(f"Wrote {SCREENSHOT_REL}"))),
-            ("client game shutdown in order", re.compile(re.escape("--------------- Game Shutdown ---------------"))),
+            ("client game shutdown in order", re.compile(re.escape(GAME_SHUTDOWN_MARKER))),
         ),
     )
     missing.extend(f"ordered lifecycle: {label}" for label in server_sequence_failures)

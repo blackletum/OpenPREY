@@ -221,6 +221,15 @@ def main() -> None:
         "g_autoExecAfterMapLoadDelayMs",
     )
 
+    # The Linux stock smokes run their configs the same way (#75).
+    for smoke_path in (
+        "tools/tests/linux_wayland_stock_sp_smoke.py",
+        "tools/tests/linux_dedicated_stock_map_smoke.py",
+    ):
+        smoke = source(smoke_path)
+        require(smoke_path, smoke, '"exec_savepath"', '"waitMsec"')
+        forbid(smoke_path, smoke, '("g_autoExecAfterMapLoad"', '("g_autoExecAfterMapLoadDelayMs"')
+
     for language in ("english", "french", "italian", "spanish"):
         strings_path = f"content/basepr/pak0/strings/{language}_openpr06.lang"
         require(
