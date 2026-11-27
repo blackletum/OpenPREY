@@ -89,5 +89,74 @@
       "ui_text_owner": 1800,
       "windows_text_store": 3600
     }
+  },
+  "requires": {
+    "about": "Scripts that need a JDK, a Python module, a command or a host platform that a checkout may not have. The runner checks these before it starts a script and reports one whose prerequisites are missing as skipped, naming what to install, rather than as a failure. They are run, and must pass, wherever the prerequisites are present. jdk: javac on PATH or under JAVA_HOME. modules: importable by the Python running the suite. commands: on PATH, for every platform or keyed by sys.platform prefix. platforms: sys.platform prefixes the script can run on.",
+    "tests": {
+      "android_document_export": {
+        "jdk": true
+      },
+      "android_document_source": {
+        "jdk": true
+      },
+      "android_host_storage": {
+        "jdk": true
+      },
+      "android_interface_setup": {
+        "jdk": true
+      },
+      "android_private_export": {
+        "jdk": true
+      },
+      "android_retail_data": {
+        "jdk": true
+      },
+      "android_retail_import": {
+        "jdk": true
+      },
+      "android_setup_flow": {
+        "jdk": true
+      },
+      "android_setup_task": {
+        "jdk": true
+      },
+      "android_touch_layout": {
+        "jdk": true
+      },
+      "android_touch_setup": {
+        "jdk": true
+      },
+      "audio_streaming": {
+        "modules": [
+          "imageio_ffmpeg"
+        ]
+      },
+      "bc7_reference": {
+        "modules": [
+          "texture2ddecoder"
+        ]
+      },
+      "endpoint_loopback": {
+        "modules": [
+          "numpy"
+        ],
+        "commands": {
+          "linux": [
+            "pactl",
+            "parec"
+          ]
+        }
+      },
+      "pbr_reference": {
+        "modules": [
+          "numpy"
+        ]
+      },
+      "windows_text_store": {
+        "platforms": [
+          "win32"
+        ]
+      }
+    }
   }
 }

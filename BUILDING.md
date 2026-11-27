@@ -177,6 +177,8 @@ Run it from a Visual Studio developer environment on Windows so the C++ harness 
 - `needs-arguments`: Meson build helpers and harness drivers that take arguments.
 - `needs-runtime`: checks that need a staged build, retail assets, a device or another platform.
 
+Some scripts need something a checkout may not have: a JDK for the Android harnesses (`javac` on `PATH` or `JAVA_HOME`), the Python modules `numpy`, `imageio-ffmpeg` or `texture2ddecoder`, `pactl` and `parec` for the Linux endpoint loopback, or Windows itself. `suite_status.json` lists them under `requires`. The runner reports a script whose prerequisites are missing as skipped for missing prerequisites, naming what to install, and runs it wherever they are present. On Linux, `python -m pip install --user numpy imageio-ffmpeg texture2ddecoder` and a JDK cover all but the loopback.
+
 It also gives a handful of slow mutation tests a longer limit than the default 600 seconds. When you port a listed script, take it off the list (the runner names listed scripts that pass); `tools/tests/suite_status_contract.py` checks that every entry still exists. Run scripts without `python -I`: many import their siblings. Tests that read Quake 4 game code, Quake 4 content or openQ4-only workflows are deleted rather than listed (issue #62).
 
 ### IPv4 Networking Self-Test

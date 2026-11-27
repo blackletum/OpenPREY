@@ -2,8 +2,8 @@
 """Keep tools/tests/suite_status.json honest.
 
 Every listed script must exist and sit in one group, the groups must say why
-they are listed, and the full-suite runner and BUILDING.md must describe the
-same list. A stale entry hides nothing; it just makes the next full run fail
+they are listed, prerequisites must name only what the runner can check, and
+the full-suite runner and BUILDING.md must describe the same list. A stale entry hides nothing; it just makes the next full run fail
 to tell new drift from old.
 """
 
@@ -36,7 +36,24 @@ def main() -> int:
         raise AssertionError(f"cannot load {RUNNER}")
     runner = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(runner)
-    listed, timeouts = runner.load_status()  # raises on missing or duplicated scripts
+    listed, timeouts, requires = runner.load_status_with_requirements()  # raises on missing or duplicated scripts
+    if len(data.get("requires", {}).get("about", "")) < 40:
+        raise AssertionError("requires needs an about")
+    if list(requires) != sorted(requires):
+        raise AssertionError("requires must list its scripts in sorted order")
+    for name, needs in requires.items():
+        if not needs:
+            raise AssertionError(f"requires lists {name} with nothing required")
+    required_and_skipped = sorted(set(requires) & set(listed))
+    if required_and_skipped:
+        raise AssertionError(f"skipped scripts need no prerequisites listed: {required_and_skipped}")
+    # the check itself: a platform this host is not, a module and a command that cannot exist
+    if not runner.missing_prerequisites({"platforms": ["no-such-platform"]}):
+        raise AssertionError("an unmet platform must be reported")
+    if not runner.missing_prerequisites({"modules": ["no_such_module_for_suite_status"], "commands": ["no-such-command-for-suite-status"]}):
+        raise AssertionError("an unmet module or command must be reported")
+    if runner.missing_prerequisites({"modules": ["json"], "commands": {"no-such-platform": ["no-such-command"]}}):
+        raise AssertionError("a met module and another platform's command must not be reported")
     if Path(__file__).stem in listed:
         raise AssertionError("this contract must not list itself")
     slow_and_skipped = sorted(set(listed) & set(timeouts))
@@ -44,11 +61,11 @@ def main() -> int:
         raise AssertionError(f"skipped scripts need no slow limit: {slow_and_skipped}")
 
     building = (ROOT / "BUILDING.md").read_text(encoding="utf-8")
-    for needle in ("tools/validation/run_test_suite.py", "tools/tests/suite_status.json"):
+    for needle in ("tools/validation/run_test_suite.py", "tools/tests/suite_status.json", "skipped for missing prerequisites"):
         if needle not in building:
             raise AssertionError(f"BUILDING.md must describe the full-suite run ({needle})")
 
-    print(f"suite_status_contract: ok ({len(listed)} listed, {len(timeouts)} slow)")
+    print(f"suite_status_contract: ok ({len(listed)} listed, {len(timeouts)} slow, {len(requires)} with prerequisites)")
     return 0
 
 

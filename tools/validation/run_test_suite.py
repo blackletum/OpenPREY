@@ -3,9 +3,12 @@
 
 tools/tests/suite_status.json lists the scripts a bare run cannot judge
 (deferred openQ4 release-lane fixtures, helpers that need arguments, runtime
-checks that need a build or device) and the slow scripts that need a longer
-limit. Listed groups are skipped unless named with --include; everything else
-must pass, so the exit status is 1 only for drift outside the list.
+checks that need a build or device), the slow scripts that need a longer
+limit, and the prerequisites (a JDK, Python modules, commands, a platform) some
+scripts need. Listed groups are skipped unless named with --include, and a
+script whose prerequisites are missing is reported as skipped with what to
+install; everything else must pass, so the exit status is 1 only for drift
+outside the list.
 
 Run from anywhere:
 
@@ -22,8 +25,10 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import importlib.util
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -35,6 +40,11 @@ STATUS = TESTS / "suite_status.json"
 
 
 def load_status() -> tuple[dict[str, str], dict[str, int]]:
+    groups, timeouts, _ = load_status_with_requirements()
+    return groups, timeouts
+
+
+def load_status_with_requirements() -> tuple[dict[str, str], dict[str, int], dict[str, dict]]:
     data = json.loads(STATUS.read_text(encoding="utf-8"))
     if data.get("schema") != 1:
         raise SystemExit(f"{STATUS}: unsupported schema {data.get('schema')!r}")
@@ -45,10 +55,39 @@ def load_status() -> tuple[dict[str, str], dict[str, int]]:
                 raise SystemExit(f"{STATUS}: {name} is listed in both {groups[name]} and {group}")
             groups[name] = group
     timeouts = {name: int(seconds) for name, seconds in data["slow"]["timeouts"].items()}
-    stale = sorted(name for name in [*groups, *timeouts] if not (TESTS / f"{name}.py").is_file())
+    requires = data.get("requires", {}).get("tests", {})
+    for name, needs in requires.items():
+        unknown = sorted(set(needs) - {"jdk", "modules", "commands", "platforms"})
+        if unknown:
+            raise SystemExit(f"{STATUS}: {name} has unknown prerequisites: {', '.join(unknown)}")
+    stale = sorted(name for name in [*groups, *timeouts, *requires] if not (TESTS / f"{name}.py").is_file())
     if stale:
         raise SystemExit(f"{STATUS}: listed scripts do not exist: {', '.join(stale)}")
-    return groups, timeouts
+    return groups, timeouts, requires
+
+
+def missing_prerequisites(needs: dict) -> list[str]:
+    """What a script listed under "requires" lacks on this machine, if anything."""
+    missing: list[str] = []
+    platforms = needs.get("platforms")
+    if platforms and not any(sys.platform.startswith(prefix) for prefix in platforms):
+        missing.append("platform " + " or ".join(platforms))
+        return missing
+    if needs.get("jdk"):
+        java_home = os.environ.get("JAVA_HOME")
+        javac = "javac.exe" if os.name == "nt" else "javac"
+        if not shutil.which("javac") and not (java_home and (Path(java_home) / "bin" / javac).is_file()):
+            missing.append("a JDK (javac on PATH or JAVA_HOME)")
+    for module in needs.get("modules", []):
+        if importlib.util.find_spec(module) is None:
+            missing.append(f"Python module {module}")
+    commands = needs.get("commands", [])
+    if isinstance(commands, dict):
+        commands = [command for prefix, listed in commands.items() if sys.platform.startswith(prefix) for command in listed]
+    for command in commands:
+        if not shutil.which(command):
+            missing.append(f"command {command}")
+    return missing
 
 
 def first_error(text: str) -> str:
@@ -82,7 +121,7 @@ def run_script(name: str, timeout: int, log_dir: Path, env: dict[str, str]) -> t
 
 
 def main() -> int:
-    groups, timeouts = load_status()
+    groups, timeouts, requires = load_status_with_requirements()
     known_groups = sorted(set(groups.values()))
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("names", nargs="*", help="run only these scripts (names without .py)")
@@ -102,6 +141,10 @@ def main() -> int:
     else:
         selected = [name for name in all_names if groups.get(name) is None or groups[name] in args.include]
     skipped = [] if args.names else [name for name in all_names if name not in selected]
+    unmet = {name: missing for name in selected if (missing := missing_prerequisites(requires.get(name, {})))}
+    selected = [name for name in selected if name not in unmet]
+    for name, missing in sorted(unmet.items()):
+        print(f"{'skip':<16} {0.0:7.1f}s  {name}  needs {', '.join(missing)}", flush=True)
 
     args.log_dir.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ)
@@ -129,7 +172,8 @@ def main() -> int:
     print()
     print(f"{len(results)} run, {len(results) - len(new_failures) - len(known_failures)} passed, "
           f"{len(new_failures)} new failures, {len(known_failures)} known failures, {len(skipped)} listed scripts skipped"
-          + (f" (groups: {', '.join(g for g in known_groups if g not in args.include)})" if skipped else ""))
+          + (f" (groups: {', '.join(g for g in known_groups if g not in args.include)})" if skipped else "")
+          + (f", {len(unmet)} skipped for missing prerequisites" if unmet else ""))
     if now_passing:
         print("Listed in suite_status.json but passing now (take them off the list): " + ", ".join(now_passing))
     for name, status, _, error in new_failures:

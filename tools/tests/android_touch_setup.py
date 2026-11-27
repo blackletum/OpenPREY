@@ -206,9 +206,13 @@ int main(){
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--javac', default=shutil.which('javac') or str(Path(os.environ.get('JAVA_HOME', ''))/'bin/javac.exe'))
+    java_home = os.environ.get('JAVA_HOME')
+    parser.add_argument('--javac', default=shutil.which('javac') or
+                        (str(Path(java_home) / 'bin' / ('javac.exe' if os.name == 'nt' else 'javac')) if java_home else None))
     parser.add_argument('--cxx', default=os.environ.get('CXX') or shutil.which('clang++') or shutil.which('g++'))
     args = parser.parse_args()
+    if not args.javac:
+        parser.error("a JDK is required (--javac or JAVA_HOME)")
     out = ROOT/'.tmp/android-touch-setup'
     out.mkdir(parents=True, exist_ok=True)
     production = ROOT/'mobile/android/app/src/main/java/com/darkmatter/openq4'
