@@ -3,14 +3,11 @@
 
 from __future__ import annotations
 
-import hashlib
 import importlib.util
-import json
 import os
 import random
 import shutil
 import string
-import subprocess
 import sys
 import uuid
 from pathlib import Path
@@ -19,8 +16,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 WORK_BASE = ROOT / ".tmp" / "linux-metadata-fuzz"
 WORK = WORK_BASE / f"{os.getpid()}-{uuid.uuid4().hex}"
-STAGE_SCRIPT = ROOT / "tools" / "build" / "stage_gamelibs.py"
-MANIFEST_NAME = "openpr06_gamelibs_stage_manifest.json"
 
 
 def load_module(module_name: str, path: Path):
@@ -42,12 +37,6 @@ SHARED_METADATA = load_module("linux_metadata_under_test", ROOT / "tools" / "bui
 def write_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
-
-
-def sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    digest.update(path.read_bytes())
-    return digest.hexdigest()
 
 
 def staged_exec_line(content: str) -> str:
@@ -140,65 +129,6 @@ def validate_desktop_parser_fuzz() -> None:
             raise AssertionError(f"desktop parser command mismatch for fuzz payload {payload!r}: {results}")
 
 
-def random_component(rng: random.Random) -> str:
-    alphabet = string.ascii_lowercase + string.digits + " _.-+@,()[]"
-    middle = "".join(rng.choice(alphabet) for _ in range(rng.randint(1, 18))).strip(" .")
-    if not middle:
-        middle = "x"
-    return "q" + middle + "4"
-
-
-def validate_stage_manifest_fuzz() -> None:
-    rng = random.Random(0x514A6E)
-    project_root = WORK / "stage" / "openPR06"
-    gamelibs_root = WORK / "stage" / "OpenPrey-game"
-    stage_root = project_root / "builddir" / ".tmp" / "openpr06_gamelibs_stage"
-
-    write_text(gamelibs_root / "src" / "game" / "Game_local.cpp", "// canonical game\n")
-    write_text(gamelibs_root / "src" / "Prey" / "prey_game.cpp", "// canonical Prey game\n")
-    write_text(gamelibs_root / "src" / "preyengine" / "prey_engine.cpp", "// canonical Prey engine support\n")
-    write_text(project_root / "src" / "idlib" / "idlib_public.h", "// idlib\n")
-    write_text(project_root / "src" / "renderer" / "RenderWorld.h", "// renderer\n")
-
-    for index in range(60):
-        depth = rng.randint(1, 4)
-        parts = [random_component(rng) for _ in range(depth)]
-        suffix = ".cpp" if index % 3 else ".h"
-        path = gamelibs_root / "src" / "game" / Path(*parts).with_suffix(suffix)
-        write_text(path, f"// fuzz source {index}\n")
-
-    result = subprocess.run(
-        [sys.executable, str(STAGE_SCRIPT), str(project_root), str(gamelibs_root), str(stage_root)],
-        check=False,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
-    if result.returncode != 0:
-        raise AssertionError(f"stage_gamelibs.py failed fuzz staging: {result.stderr}")
-
-    manifest_path = stage_root / MANIFEST_NAME
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    files = manifest.get("files")
-    if not isinstance(files, list) or manifest.get("fileCount") != len(files):
-        raise AssertionError("fuzz stage manifest has an inconsistent file count")
-
-    paths = [entry.get("path") for entry in files]
-    if len(paths) != len(set(paths)):
-        raise AssertionError("fuzz stage manifest contains duplicate paths")
-
-    for entry in files:
-        rel = entry.get("path")
-        expected_hash = entry.get("sha256")
-        if not isinstance(rel, str) or rel.startswith("/") or ".." in Path(rel).parts:
-            raise AssertionError(f"fuzz stage manifest contains unsafe path: {rel!r}")
-        staged_file = stage_root / rel
-        if not staged_file.is_file():
-            raise AssertionError(f"fuzz stage manifest references missing file: {rel!r}")
-        if expected_hash != sha256(staged_file):
-            raise AssertionError(f"fuzz stage manifest hash mismatch: {rel!r}")
-
-
 def validate_source_contracts() -> None:
     validator = (ROOT / "tools" / "validation" / "openq4_validate.py").read_text(encoding="utf-8")
     packager = (ROOT / "tools" / "build" / "package_nightly.py").read_text(encoding="utf-8")
@@ -228,28 +158,16 @@ def validate_source_contracts() -> None:
         if "shlex.split(exec_line, posix=True)" in source:
             raise AssertionError(f"{context} still carries a local desktop Exec parser")
 
-    for token in (
-        "linux_metadata_fuzz.py",
-        "tools/tests/linux_metadata_fuzz.py",
-        "python tools/tests/linux_metadata_fuzz.py",
-    ):
-        if token not in validation_runner and token not in read_workflows():
-            raise AssertionError(f"missing fuzz wiring token: {token}")
+    # openPR06: no push-verification/commit-validation workflows; openq4_validate.py is the runner.
+    if "linux_metadata_fuzz.py" not in validation_runner:
+        raise AssertionError("missing fuzz wiring token: linux_metadata_fuzz.py")
 
     for token in (
-        "Canonical companion game sources now stage directly from `OpenPrey-game`",
+        "configure-time companion staging and its helper scripts removed",
         "`src/game`, `src/Prey`, and `src/preyengine`",
     ):
         if token not in release_notes:
             raise AssertionError(f"release completion notes do not document {token!r}")
-
-
-def read_workflows() -> str:
-    return (
-        (ROOT / ".github" / "workflows" / "commit-validation.yml").read_text(encoding="utf-8")
-        + "\n"
-        + (ROOT / ".github" / "workflows" / "push-verification.yml").read_text(encoding="utf-8")
-    )
 
 
 def main() -> None:
@@ -257,7 +175,7 @@ def main() -> None:
     try:
         validate_desktop_parser_cases()
         validate_desktop_parser_fuzz()
-        validate_stage_manifest_fuzz()
+        # openPR06: the game library builds in place, so there is no stage_gamelibs.py staging manifest to fuzz.
         validate_source_contracts()
     finally:
         shutil.rmtree(WORK, ignore_errors=True)

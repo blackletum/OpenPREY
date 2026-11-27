@@ -148,8 +148,6 @@ LEGACY_RETAIL_GAME_MODULE_NAMES = frozenset(
 # openPR06 push/PR checks until rebuilt around basepr and game_<arch>.
 DEFERRED_RELEASE_LANE_TESTS = frozenset(
     (
-        "linux_arm64_ci_coverage.py",
-        "linux_arm64_release_evidence.py",
         # These tests validate the inherited linux-sanitizer/linux-wayland
         # workflow jobs themselves. Both jobs are unconditionally
         # OPENPR06-GATED because they still encode OpenQ4 lane identities and

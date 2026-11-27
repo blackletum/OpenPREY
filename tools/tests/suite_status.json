@@ -3,13 +3,8 @@
   "about": "Scripts in tools/tests/ that a plain full run cannot judge. tools/validation/run_test_suite.py skips the listed groups by default and reports them apart, so a failure outside them is new drift. Remove a script from a group as soon as it is ported, or delete it if it has no openPR06 subject. Every other script must pass when run bare from the repository root.",
   "groups": {
     "deferred-release-lane": {
-      "reason": "Inherited openQ4 macOS, Linux ARM64, packaging and release-lane fixtures. They pin the DISABLED openQ4 workflows, openQ4 package names, split game-sp/game-mp modules or openQ4 evidence documents. They are kept for the lane rebuild tracked as TODO-RELEASE-LANES in docs/dev/prey-rebase/status-ledger.md, and are not openPR06 checks until then.",
+      "reason": "Inherited openQ4 macOS, packaging and release-lane fixtures. They pin the DISABLED openQ4 workflows, openQ4 package names, split game-sp/game-mp modules or openQ4 evidence documents. They are kept for the lane rebuild tracked as TODO-RELEASE-LANES in docs/dev/prey-rebase/status-ledger.md, and are not openPR06 checks until then.",
       "tests": [
-        "linux_arm64_ci_coverage",
-        "linux_arm64_release_evidence",
-        "linux_dedicated_server_smoke_contract",
-        "linux_metadata_fuzz",
-        "linux_packaging_guidance",
         "macos_apple_gl21_arb2_corridor",
         "macos_dedicated_server_smoke_contract",
         "macos_evidence_plumbing",

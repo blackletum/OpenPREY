@@ -173,7 +173,7 @@ python tools/validation/run_test_suite.py
 
 Run it from a Visual Studio developer environment on Windows so the C++ harness tests find a compiler; a full run takes about half an hour. Pass script names to run only those. `suite_status.json` lists the scripts a bare run cannot judge, in groups that are skipped unless named with `--include`:
 
-- `deferred-release-lane`: inherited openQ4 macOS, Linux ARM64, packaging and release-lane fixtures kept for the lane rebuild (`TODO-RELEASE-LANES` in `docs/dev/prey-rebase/status-ledger.md`).
+- `deferred-release-lane`: inherited openQ4 macOS, packaging and release-lane fixtures kept for the lane rebuild (`TODO-RELEASE-LANES` in `docs/dev/prey-rebase/status-ledger.md`).
 - `needs-arguments`: Meson build helpers and harness drivers that take arguments.
 - `needs-runtime`: checks that need a staged build, retail assets, a device or another platform.
 

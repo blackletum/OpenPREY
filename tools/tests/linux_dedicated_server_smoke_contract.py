@@ -29,8 +29,7 @@ def require_count(haystack: str, needle: str, expected: int, context: str) -> No
 
 def main() -> None:
     runner = read("tools/tests/linux_dedicated_server_smoke.py")
-    commit = read(".github/workflows/commit-validation.yml")
-    push = read(".github/workflows/push-verification.yml")
+    workflow = read(".github/workflows/openpr06-validation.yml")
     release_completion = read("docs/dev/release-completion.md")
     session = read("src/framework/Session.cpp")
     renderer = read("src/renderer/RenderSystem_init.cpp")
@@ -51,7 +50,8 @@ def main() -> None:
         '"s_noSound", "1"',
         '"net_serverDedicated", "1"',
         'IPV4_SELF_TEST_MARKER = "IPv4 network self-test: passed"',
-        'CANONICAL_GAMETYPE_MARKER = \'"si_gameType" is:"DM"\'',
+        # openPR06: Prey's canonical deathmatch game type is "deathmatch" (si_gameTypeArgs).
+        'CANONICAL_GAMETYPE_MARKER = \'"si_gameType" is:"deathmatch"\'',
         "IPV4_SELF_TEST_MARKER,",
         "CANONICAL_GAMETYPE_MARKER,",
         '"+netIPv4SelfTest"',
@@ -69,7 +69,7 @@ def main() -> None:
         require(runner, token, "Linux dedicated-server smoke runner")
     command = runner[runner.index("    command = [") : runner.index("\n    ]", runner.index("    command = ["))]
     if not (
-        command.index('"si_gameType", "dm"')
+        command.index('"si_gameType", "deathmatch"')
         < command.index('"+netIPv4SelfTest"')
         < command.index('"+si_gameType"')
         < command.index('"+echo", READY_MARKER')
@@ -197,18 +197,16 @@ def main() -> None:
         "LINUX_DEDICATED_FORBIDDEN_NEEDED_PREFIXES",
         "legacy fail-open Linux dedicated dependency blacklist",
     )
-    # TODO-RELEASE-LANES keeps inherited ARM64/release evidence manual-only;
-    # the active contract requires the native Linux x64 path.
-    require(commit, "python tools/tests/linux_dedicated_server_smoke.py", "commit validation native x64 smoke wiring")
-    require(commit, "commit-linux-x64-dedicated-smoke", "commit validation x64 smoke artifact")
-    require(commit, "python tools/tests/linux_dedicated_server_smoke_contract.py", "commit validation static contract")
-    require(commit, "tools/tests/linux_dedicated_server_smoke.py", "commit validation smoke syntax check")
-
-    require_count(push, "python tools/tests/linux_dedicated_server_smoke.py", 1, "push validation Linux matrix smoke wiring")
-    require(push, "if: startsWith(matrix.os, 'ubuntu-')", "push validation Linux-only smoke gate")
-    require(push, "push-${{ matrix.artifact_name }}-dedicated-smoke", "push validation smoke artifact")
-    require(push, "python tools/tests/linux_dedicated_server_smoke_contract.py", "push validation static contract")
-    require(push, "tools/tests/linux_dedicated_server_smoke.py", "push validation smoke syntax check")
+    # openPR06: no push-verification/commit-validation workflows, and no lane runs
+    # the dedicated smoke, which needs a staged runtime. openpr06-validation.yml
+    # builds and stages the dedicated server on Linux x64 and ARM64, and
+    # openq4_validate.py runs this contract.
+    for platform, dedicated in (("Linux x64", "openPR06-ded_x64"), ("Linux ARM64", "openPR06-ded_arm64")):
+        entry = workflow[workflow.index(f"          - platform: {platform}\n") :]
+        entry = entry[: entry.index("\n          - platform:", 1)]
+        require(entry, f"dedicated: {dedicated}\n", f"{platform} unified-gamelib lane")
+    require(workflow, 'test -f ".install/${{ matrix.dedicated }}"', "staged dedicated server check")
+    require(validator, "linux_dedicated_server_smoke_contract.py", "validation runner")
 
     require(
         release_completion,
