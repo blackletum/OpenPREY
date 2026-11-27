@@ -1226,6 +1226,16 @@ Posix_EarlyInit
 ===============
 */
 void Posix_EarlyInit( void ) {
+#if defined( __GLIBC__ )
+	// glibc gives every thread that allocates a malloc arena of its own. The
+	// job workers allocate during level loads and the main thread frees, so
+	// each arena keeps its pages and RSS climbs from map to map even after
+	// Sys_ReleaseFreeHeapMemory. Two arenas keep that in check; set
+	// MALLOC_ARENA_MAX to choose another number.
+	if ( getenv( "MALLOC_ARENA_MAX" ) == NULL ) {
+		mallopt( M_ARENA_MAX, 2 );
+	}
+#endif
 	posix_mainThread = pthread_self();
 	posix_mainThreadRecorded = true;
 	memset( &asyncThread, 0, sizeof( asyncThread ) );
