@@ -197,8 +197,10 @@ engine `screenshot` command. The exact stock map/view/camera and isolation
 settings are retained by each harness report; no custom map, material, or shader
 was added.
 
-The gameplay harness registers the controlled stock `sp-mv2-ambient` case on
-`maps/tools/mv2`. Use its exact validation-matrix command:
+The gameplay harness registered the controlled stock `sp-mv2-ambient` case on
+Quake 4's `maps/tools/mv2`. openPR06 has no Prey counterpart for it yet, so
+`renderer_gameplay_benchmark.py` no longer offers the `world-ambient` profile
+and the validation matrix no longer lists it. The inherited command was:
 
 ```powershell
 python tools\tests\renderer_gameplay_benchmark.py --profile world-ambient --pacing-only --no-gpu-timers

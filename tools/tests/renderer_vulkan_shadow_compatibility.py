@@ -616,98 +616,81 @@ def validate_shared_interaction_shadow_profile_contract() -> None:
     )
 
     # openPR06: the Q4 interaction/interaction-shadow-stock benchmark profiles (mv2, airdefense,
-    # storage2, medlabs) have no Prey scenes; INTERACTION_SCENES and INTERACTION_SHADOW_SCENES are empty.
+    # storage2, medlabs) have no Prey scenes; INTERACTION_SCENES and INTERACTION_SHADOW_SCENES are empty,
+    # the benchmark no longer offers those profiles, and the matrix no longer registers them.
+    # Instead, every matrix harness command must name a profile the benchmark offers and parse
+    # with the benchmark's own arguments, so the two cannot drift apart again.
     matrix = load_test_module(
         "tools/tests/renderer_validation_matrix.py",
         "openq4_renderer_validation_shadow_profile_contract",
     )
-    expected_matrix_keys = {
-        (profile, backend)
-        for profile in ("interaction", "interaction-shadow-stock")
-        for backend in ("gl", "vk")
-    }
+    if gameplay.INTERACTION_SCENES or gameplay.INTERACTION_SHADOW_SCENES:
+        raise AssertionError(
+            "Prey interaction scenes exist again; register the interaction profiles in the renderer validation matrix"
+        )
 
-    def interaction_matrix_failures(entries: list[dict[str, object]]) -> list[str]:
-        indexed: dict[tuple[object, object], dict[str, object]] = {}
+    def harness_failures(entries: list[dict[str, object]]) -> list[str]:
         failures: list[str] = []
         for entry in entries:
-            profile = entry.get("profile")
-            if profile not in ("interaction", "interaction-shadow-stock"):
+            profile = str(entry.get("profile"))
+            command = str(entry.get("command", ""))
+            prefix = "python tools\\tests\\renderer_gameplay_benchmark.py "
+            if not command.startswith(prefix):
+                failures.append(f"{profile}: command does not start with {prefix!r}")
                 continue
-            key = (profile, entry.get("renderApi"))
-            if key in indexed:
-                failures.append(f"duplicate {key[0]}/{key[1]}")
+            if profile not in gameplay.PROFILE_DEFAULTS:
+                failures.append(f"{profile}: renderer_gameplay_benchmark.py has no such profile")
                 continue
-            indexed[key] = entry
-
-        for profile, backend in sorted(expected_matrix_keys - set(indexed)):
-            failures.append(f"missing {profile}/{backend}")
-        for profile, backend in sorted(
-            set(indexed) - expected_matrix_keys,
-            key=lambda item: (str(item[0]), str(item[1])),
-        ):
-            failures.append(f"unexpected {profile}/{backend}")
-
-        for profile, backend in sorted(expected_matrix_keys & set(indexed)):
-            command = str(indexed[(profile, backend)].get("command", ""))
-            for required_option in (
-                f"--render-api {backend}",
-                "--reference-dir",
-                "--require-references",
-                "--image-rms-threshold 0",
-                "--image-max-threshold 0",
-                "--difference-reference-dir",
-            ):
-                if required_option not in command:
-                    failures.append(
-                        f"{profile}/{backend} missing option {required_option}"
-                    )
-            if (
-                f"{profile}\\{backend}\\classic\\savepaths" not in command
-                or f"{profile}\\{backend}\\shadows-off\\savepaths"
-                not in command
-            ):
-                failures.append(
-                    f"{profile}/{backend} references are not backend-scoped savepaths"
-                )
+            argv = command[len(prefix) :].split()
+            try:
+                with contextlib.redirect_stderr(io.StringIO()):
+                    parsed = gameplay.parse_args(argv)
+            except SystemExit:
+                failures.append(f"{profile}: renderer_gameplay_benchmark.py rejects {command[len(prefix):]!r}")
+                continue
+            if parsed.profile != profile:
+                failures.append(f"{profile}: command runs profile {parsed.profile}")
+            render_api = entry.get("renderApi")
+            if render_api is not None and parsed.render_api != render_api:
+                failures.append(f"{profile}: command runs --render-api {parsed.render_api}, entry says {render_api}")
         return failures
 
     matrix_entries = list(matrix.GAMEPLAY_BENCHMARK_HARNESS)
-    matrix_failures = interaction_matrix_failures(matrix_entries)
+    if not matrix_entries:
+        raise AssertionError("Renderer validation matrix registers no gameplay benchmark profiles")
+    matrix_failures = harness_failures(matrix_entries)
     if matrix_failures:
         raise AssertionError(
-            "Renderer validation matrix must register exactly one GL and Vulkan "
-            "gate for each interaction profile: " + "; ".join(matrix_failures)
+            "Renderer validation matrix names benchmark runs the benchmark does not accept: "
+            + "; ".join(matrix_failures)
         )
 
-    missing_fixture = [
-        entry
-        for entry in matrix_entries
-        if (entry.get("profile"), entry.get("renderApi"))
-        != ("interaction", "gl")
+    stale_fixture = matrix_entries + [
+        {
+            "profile": "interaction",
+            "renderApi": "gl",
+            "command": "python tools\\tests\\renderer_gameplay_benchmark.py --profile interaction --render-api gl",
+        }
     ]
-    if "missing interaction/gl" not in interaction_matrix_failures(missing_fixture):
-        raise AssertionError(
-            "Interaction matrix guard must reject a missing profile/backend pair"
-        )
-
-    duplicate_fixture = list(matrix_entries)
-    duplicate_fixture.append(
-        dict(
-            next(
-                entry
-                for entry in matrix_entries
-                if (entry.get("profile"), entry.get("renderApi"))
-                == ("interaction", "gl")
-            )
-        )
-    )
-    if "duplicate interaction/gl" not in interaction_matrix_failures(
-        duplicate_fixture
-    ):
-        raise AssertionError(
-            "Interaction matrix guard must reject a duplicate profile/backend pair"
-        )
+    if not any("interaction: renderer_gameplay_benchmark.py has no such profile" in item for item in harness_failures(stale_fixture)):
+        raise AssertionError("Benchmark harness guard must reject a profile the benchmark does not offer")
+    escaped_fixture = [
+        {
+            "profile": "presentation",
+            "command": "python tools\tests\renderer_gameplay_benchmark.py --profile presentation --pacing-only",
+        }
+    ]
+    if not harness_failures(escaped_fixture):
+        raise AssertionError("Benchmark harness guard must reject a command whose backslashes became escapes")
+    backend_fixture = [
+        {
+            "profile": "smoke",
+            "renderApi": "vk",
+            "command": "python tools\\tests\\renderer_gameplay_benchmark.py --profile smoke --render-api gl",
+        }
+    ]
+    if not harness_failures(backend_fixture):
+        raise AssertionError("Benchmark harness guard must reject a command whose backend disagrees with its entry")
 
     foundation = next(
         case

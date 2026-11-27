@@ -759,8 +759,8 @@ def validate_controls_diagnostics_and_tooling() -> None:
         raise AssertionError("Foundation and Vulkan safe cases must run the deform self-test")
     if matrix.count("RendererClassicDeformDomain self-test passed") < 2:
         raise AssertionError("Foundation and Vulkan safe cases must check the deform marker")
-    # openPR06: the sp-mv2-deform manual case is a Quake 4 mv2 map with no Prey counterpart.
-    require(matrix, '"profile": "deform"', "deform gameplay harness entry")
+    # openPR06: the sp-mv2-deform manual case and the deform benchmark profile ran the Quake 4
+    # mv2 map, which has no Prey counterpart, so the matrix registers no deform harness entry.
     require_count(
         registry,
         '"renderer_classic_deform_domain.py"',
