@@ -281,6 +281,8 @@ powershell -ExecutionPolicy Bypass -File tools/validation/validate_pr.ps1
 bash tools/validation/validate_pr.sh
 ```
 
+The Meson test step runs asset generators in `--check` mode that need the Python packages `numpy`, `pillow`, `scipy` and `fonttools`. Without them, `openpr06-menu-scene`, `openpr06-retained-initialization`, `openpr06-retained-screens`, `openpr06-loading-notch`, `openpr06-pad-tip-plates`, `openpr06-weapon-wheel` and `openpr06-obituary-icons` fail with `ModuleNotFoundError`. Install them with `python -m pip install numpy pillow scipy fonttools` (in a virtual environment where the system Python is marked externally managed), or on Debian and Ubuntu with `sudo apt install python3-numpy python3-pil python3-scipy python3-fonttools`.
+
 Useful options:
 
 - Add `--runtime` to run the safe renderer startup validation matrix (`tools/tests/renderer_validation_matrix.py`) after the staged install. Pass `--runtime-basepath <path>` to point it at a Prey (2006) install.
